@@ -1,0 +1,13 @@
+# Dependencias (Son muy pesadas, se instalan con npm install)
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Archivos de entorno (Tienen tus claves secretas)
+.env
+server/.env
+
+# Archivos de sistema
+.DS_Store
+dist/
+build/
