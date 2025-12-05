@@ -5,7 +5,8 @@ import { User, Lock, Mail, Sword, Skull, CheckCircle } from 'lucide-react';
 import loginBg from '../assets/backgrounds/fondo_login_1.png';
 import registerBg from '../assets/backgrounds/fondo_registro_1.png'; 
 
-const Auth = () => {
+// 1. Recibimos la prop 'onLoginSuccess' desde App.jsx
+const Auth = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
@@ -35,11 +36,20 @@ const Auth = () => {
         throw new Error(data.message || 'Error desconocido');
       }
 
+      // Guardamos en LocalStorage
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       
+      // Mostramos el modal de éxito
       setUserData(data.user);
       setShowSuccessModal(true);
+
+      // --- CAMBIO AQUÍ (Lo que pediste) ---
+      // Esperamos 2 segundos para que vea el modal y luego cambiamos de pantalla automáticamente
+      setTimeout(() => {
+         if(onLoginSuccess) onLoginSuccess(data.user);
+      }, 2000);
+      // ------------------------------------
 
     } catch (err) {
       console.error(err);
@@ -47,18 +57,18 @@ const Auth = () => {
     }
   };
 
+  // Esta función se ejecuta si el usuario hace clic en "Comenzar Aventura" en el modal
   const handleEnterGame = () => {
     setShowSuccessModal(false);
     console.log("Viajando a la selección de raza...");
+    
+    // --- CAMBIO AQUÍ TAMBIÉN ---
+    // Si el usuario es rápido y le da clic al botón antes de los 2 segundos, entramos directo
+    if(onLoginSuccess && userData) onLoginSuccess(userData);
   };
 
   return (
     <div className="min-h-screen relative flex items-center justify-center overflow-hidden bg-black">
-      
-      {/* --- EL TRUCO DEL CROSS-FADE --- 
-          Renderizamos AMBAS imágenes. Usamos 'opacity-100' o 'opacity-0' para mostrar una u otra.
-          'duration-1000' hace que el cambio tarde 1 segundo, creando el efecto suave.
-      */}
       
       {/* IMAGEN DE REGISTRO (Fondo) */}
       <img 
@@ -74,11 +84,20 @@ const Auth = () => {
         className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-1000 ease-in-out ${isLogin ? 'opacity-100' : 'opacity-0'}`}
       />
 
-      {/* --- CAPA 2: OSCURECIMIENTO (Overlay) --- */}
+      {/* Overlay Oscuro */}
       <div className="absolute inset-0 bg-black/30 transition-colors duration-700 pointer-events-none" />
 
-      {/* --- CAPA 3: CONTENIDO --- */}
-      <div className={`relative z-10 w-full max-w-md bg-slate-900/60 backdrop-blur-md border-2 border-amber-700/50 p-8 rounded-lg shadow-[0_0_50px_rgba(180,83,9,0.2)] transition-all duration-500 ${showSuccessModal ? 'blur-sm scale-95' : ''}`}>
+      {/* Cuadro Flotante del Formulario */}
+      <div className={`
+          relative z-10 w-full max-w-md 
+          bg-slate-900/60 backdrop-blur-md 
+          border-2 border-amber-500/50 
+          p-8 rounded-lg 
+          shadow-[0_0_60px_rgba(180,83,9,0.3)] 
+          transition-all duration-500 
+          animate-float  
+          ${showSuccessModal ? 'blur-sm scale-95' : ''}
+      `}>
         
         <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-amber-500 tracking-widest uppercase font-serif mb-2 drop-shadow-md">
@@ -101,7 +120,7 @@ const Auth = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* El campo Nombre tiene una animación para aparecer/desaparecer suavemente también */}
+          {/* Animación de entrada para el nombre */}
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${!isLogin ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
              <div className="relative group">
                 <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-amber-500 transition-colors" size={20} />
@@ -110,7 +129,7 @@ const Auth = () => {
                   name="username"
                   placeholder="Nombre del Guerrero" 
                   onChange={handleChange}
-                  className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors placeholder:text-slate-500"
+                  className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-500"
                 />
               </div>
           </div>
@@ -122,7 +141,7 @@ const Auth = () => {
               name="email"
               placeholder="Correo Electrónico" 
               onChange={handleChange}
-              className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors placeholder:text-slate-500"
+              className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-500"
             />
           </div>
 
@@ -133,13 +152,13 @@ const Auth = () => {
               name="password"
               placeholder="Palabra Secreta" 
               onChange={handleChange}
-              className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors placeholder:text-slate-500"
+              className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-500"
             />
           </div>
 
           <button 
             type="submit" 
-            className="w-full bg-gradient-to-r from-amber-700/90 to-amber-600/90 hover:from-amber-600 hover:to-amber-500 text-white font-bold py-3 rounded border border-amber-500/50 transition-all transform hover:scale-[1.02] shadow-lg uppercase tracking-widest text-sm"
+            className="w-full bg-gradient-to-r from-amber-700/90 to-amber-600/90 hover:from-amber-600 hover:to-amber-500 text-white font-bold py-3 rounded border border-amber-500/50 transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg uppercase tracking-widest text-sm"
           >
             {isLogin ? 'Entrar al Valhalla' : 'Forjar Destino'}
           </button>
@@ -159,7 +178,7 @@ const Auth = () => {
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-slate-900/90 border-2 border-amber-500 rounded-lg p-6 shadow-[0_0_60px_rgba(245,158,11,0.4)] transform animate-[fadeIn_0.3s_ease-out]">
             <div className="flex justify-center mb-4">
-              <div className="bg-amber-500/20 p-3 rounded-full border border-amber-500">
+              <div className="bg-amber-500/20 p-3 rounded-full border border-amber-500 animate-pulse">
                 <CheckCircle className="text-amber-500 w-12 h-12" />
               </div>
             </div>
@@ -171,7 +190,7 @@ const Auth = () => {
             </p>
             <button 
               onClick={handleEnterGame}
-              className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded uppercase tracking-widest transition-colors shadow-lg border border-amber-400"
+              className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded uppercase tracking-widest transition-colors shadow-lg border border-amber-400 hover:shadow-amber-500/50"
             >
               Comenzar Aventura
             </button>
