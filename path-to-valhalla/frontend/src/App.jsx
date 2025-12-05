@@ -1,54 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import RaceSelection from './components/RaceSelection';
+import Dashboard from './components/Dashboard';
 
 function App() {
   const [user, setUser] = useState(null);
-  const [hasRace, setHasRace] = useState(false);
+  const [view, setView] = useState('auth'); // 'auth', 'race', 'game'
 
-  // Al cargar, revisamos si hay sesión guardada
   useEffect(() => {
+    // Al cargar, revisar si hay sesión
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
-      // Aquí validamos si el usuario ya tiene raza (por ahora simulamos que NO para ver la pantalla)
-      // En el futuro, el backend nos dirá: parsedUser.race_selected = true/false
-      if (parsedUser.race && parsedUser.race !== 'human') { 
-         // NOTA: Como la DB pone 'human' por defecto, necesitaremos una flag extra 
-         // o asumir que si es nivel 1 y exp 0, debe confirmar raza.
-         // Por ahora, lo forzamos a false para que veas tu nueva pantalla.
-         setHasRace(false); 
-      }
+      // Si ya tiene sesión, asumimos que va al juego (o validamos raza si queremos ser estrictos)
+      // Por simplicidad del flujo pedido: Login existente -> Juego
+      setView('game'); 
     }
   }, []);
 
-  const handleLoginSuccess = (userData) => {
+  // Función que se llama desde Auth.jsx cuando el usuario se loguea/registra
+  const handleAuthSuccess = (userData, isRegistration) => {
     setUser(userData);
-    setHasRace(false); // Al loguear, vamos a selección de raza
+    
+    if (isRegistration) {
+      // FLUJO 1: Si se acaba de registrar -> Escoger Raza
+      setView('race');
+    } else {
+      // FLUJO 2: Si es login normal -> Juego directo + Alerta
+      alert(`¡Bienvenido de vuelta, guerrero ${userData.username}!`);
+      setView('game');
+    }
   };
 
-  const handleRaceSelect = (raceData) => {
-    console.log("Raza guardada:", raceData);
-    setHasRace(true); // ¡Listo! Iríamos al juego principal
-    // Aquí haríamos un fetch al backend para guardar la raza en la DB
+  // Función que se llama desde RaceSelection.jsx cuando termina la bienvenida
+  const handleRaceSelected = (updatedUserData) => {
+    // Actualizamos los datos del usuario (ahora tiene raza)
+    setUser(updatedUserData); 
+    setView('game');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setView('auth');
   };
 
   return (
     <div className="w-full h-full font-sans text-slate-100">
-      {!user ? (
-        // Si no hay usuario, mostramos Login
-        // Pasamos una función para saber cuando logueó exitosamente
-        <Auth onLoginSuccess={handleLoginSuccess} /> 
-      ) : !hasRace ? (
-        // Si hay usuario pero no ha confirmado raza, mostramos Selección
-        <RaceSelection onRaceSelect={handleRaceSelect} />
-      ) : (
-        // Si ya tiene todo, mostramos el JUEGO (Dashboard)
-        <div className="flex items-center justify-center h-screen bg-slate-900">
-          <h1 className="text-4xl text-amber-500">BIENVENIDO AL JUEGO {user.username}</h1>
-        </div>
+      
+      {view === 'auth' && (
+        <Auth onLoginSuccess={handleAuthSuccess} />
       )}
+
+      {view === 'race' && (
+        <RaceSelection onRaceSelect={handleRaceSelected} />
+      )}
+
+      {view === 'game' && user && (
+        <Dashboard user={user} onLogout={handleLogout} />
+      )}
+
     </div>
   );
 }

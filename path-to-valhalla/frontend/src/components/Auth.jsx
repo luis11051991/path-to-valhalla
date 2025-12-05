@@ -5,7 +5,7 @@ import { User, Lock, Mail, Sword, Skull, CheckCircle } from 'lucide-react';
 import loginBg from '../assets/backgrounds/fondo_login_1.png';
 import registerBg from '../assets/backgrounds/fondo_registro_1.png'; 
 
-// 1. Recibimos la prop 'onLoginSuccess' desde App.jsx
+// Recibimos la prop 'onLoginSuccess' desde App.jsx para notificar el éxito
 const Auth = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
@@ -40,16 +40,16 @@ const Auth = ({ onLoginSuccess }) => {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       
-      // Mostramos el modal de éxito
+      // Guardamos datos para el modal
       setUserData(data.user);
       setShowSuccessModal(true);
 
-      // --- CAMBIO AQUÍ (Lo que pediste) ---
-      // Esperamos 2 segundos para que vea el modal y luego cambiamos de pantalla automáticamente
+      // --- AQUÍ ESTÁ LA MAGIA DEL FLUJO ---
+      // Esperamos 2 segundos y notificamos a App.jsx
+      // El segundo parámetro (!isLogin) le dice a App si fue un REGISTRO (true) o LOGIN (false)
       setTimeout(() => {
-         if(onLoginSuccess) onLoginSuccess(data.user);
+         if(onLoginSuccess) onLoginSuccess(data.user, !isLogin);
       }, 2000);
-      // ------------------------------------
 
     } catch (err) {
       console.error(err);
@@ -57,14 +57,11 @@ const Auth = ({ onLoginSuccess }) => {
     }
   };
 
-  // Esta función se ejecuta si el usuario hace clic en "Comenzar Aventura" en el modal
+  // Esta función permite saltar la espera si el usuario hace clic en el botón del modal
   const handleEnterGame = () => {
     setShowSuccessModal(false);
-    console.log("Viajando a la selección de raza...");
-    
-    // --- CAMBIO AQUÍ TAMBIÉN ---
-    // Si el usuario es rápido y le da clic al botón antes de los 2 segundos, entramos directo
-    if(onLoginSuccess && userData) onLoginSuccess(userData);
+    // Pasamos los mismos datos: usuario y si fue registro (!isLogin)
+    if(onLoginSuccess && userData) onLoginSuccess(userData, !isLogin);
   };
 
   return (
@@ -120,7 +117,7 @@ const Auth = ({ onLoginSuccess }) => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Animación de entrada para el nombre */}
+          {/* Animación de entrada para el nombre (Solo en registro) */}
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${!isLogin ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
              <div className="relative group">
                 <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-amber-500 transition-colors" size={20} />

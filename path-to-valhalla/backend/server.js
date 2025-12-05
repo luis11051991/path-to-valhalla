@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const authController = require('./src/controllers/authController');
+const playerController = require('./src/controllers/playerController'); // <--- Importar arriba
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.use(express.json());
 // Aquí definimos a dónde tiene que llamar el Frontend
 app.post('/api/register', authController.register);
 app.post('/api/login', authController.login);
+app.post('/api/choose-race', playerController.chooseRace); // <--- Nueva ruta
 
 // --- ARRANQUE ---
 const PORT = 3000;
