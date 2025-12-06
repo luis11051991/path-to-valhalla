@@ -13,7 +13,8 @@ app.use(express.json());
 // Aquí definimos a dónde tiene que llamar el Frontend
 app.post('/api/register', authController.register);
 app.post('/api/login', authController.login);
-app.post('/api/choose-race', playerController.chooseRace); // <--- Nueva ruta
+app.post('/api/choose-race', playerController.chooseRace);
+app.post('/api/train-stats', playerController.trainStats);
 
 // --- ARRANQUE ---
 const PORT = 3000;

@@ -23,11 +23,19 @@ const Auth = ({ onLoginSuccess }) => {
     e.preventDefault();
     const endpoint = isLogin ? 'http://localhost:3000/api/login' : 'http://localhost:3000/api/register';
     
+    // --- AQUÍ ESTÁ EL CAMBIO DE SEGURIDAD ---
+    // Creamos un objeto 'payload' donde forzamos el email a minúsculas.
+    // La contraseña NO se toca para mantener la seguridad estricta.
+    const payload = {
+        ...formData,
+        email: formData.email.toLowerCase() 
+    };
+
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload) // Enviamos 'payload' en vez de 'formData'
       });
       
       const data = await response.json();
@@ -44,9 +52,7 @@ const Auth = ({ onLoginSuccess }) => {
       setUserData(data.user);
       setShowSuccessModal(true);
 
-      // --- AQUÍ ESTÁ LA MAGIA DEL FLUJO ---
       // Esperamos 2 segundos y notificamos a App.jsx
-      // El segundo parámetro (!isLogin) le dice a App si fue un REGISTRO (true) o LOGIN (false)
       setTimeout(() => {
          if(onLoginSuccess) onLoginSuccess(data.user, !isLogin);
       }, 2000);

@@ -1,27 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle, Crown } from 'lucide-react';
 import { RACES } from '../constants/races';
 
 const RaceSelection = ({ onRaceSelect }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [direction, setDirection] = useState('next');
+  const [direction, setDirection] = useState('next'); 
   
   const [showWelcome, setShowWelcome] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  const [updatedUser, setUpdatedUser] = useState(null); 
 
   const currentRace = RACES[currentIndex];
-
-  // --- EFECTO: TEMPORIZADOR DE BIENVENIDA ---
-  useEffect(() => {
-    if (showWelcome) {
-      // Esperamos 4 segundos y entramos al juego automáticamente
-      const timer = setTimeout(() => {
-        if (onRaceSelect) onRaceSelect(currentRace);
-      }, 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [showWelcome, currentRace, onRaceSelect]);
 
   const changeRace = (newIndex, dir) => {
     if (isAnimating || showWelcome) return;
@@ -55,18 +46,29 @@ const RaceSelection = ({ onRaceSelect }) => {
 
       if (response.ok) {
         const data = await response.json();
-        // Guardamos el usuario actualizado (con raza) en local
         localStorage.setItem('user', JSON.stringify(data.user));
-        setShowWelcome(true); // <--- ESTO ACTIVA EL TEMPORIZADOR DEL USEEFFECT ARRIBA
+        setUpdatedUser(data.user); 
+        setShowWelcome(true);
       } else {
         alert("Error al confirmar linaje.");
+        setIsLoading(false);
       }
     } catch (error) {
       console.error(error);
-    } finally {
       setIsLoading(false);
     }
   };
+
+  if (showWelcome) {
+    return (
+        <WelcomeScreenDisplay 
+            race={currentRace} 
+            onFinish={() => { 
+                if(onRaceSelect && updatedUser) onRaceSelect(updatedUser); 
+            }} 
+        />
+    );
+  }
 
   const getAnimationClass = () => {
     if (isAnimating) {
@@ -77,43 +79,32 @@ const RaceSelection = ({ onRaceSelect }) => {
     return 'opacity-100 translate-x-0 scale-100 blur-0';
   };
 
-  // --- PANTALLA DE BIENVENIDA (AUTOMÁTICA) ---
-  if (showWelcome) {
-    return (
-      <div className="min-h-screen relative flex items-center justify-center bg-black overflow-hidden animate-[fadeIn_1s_ease-out]">
-        <div className="absolute inset-0 z-0">
-            <img src={currentRace.bgImage} className="w-full h-full object-cover opacity-40 blur-sm scale-110" />
-            <div className="absolute inset-0 bg-black/60" />
-        </div>
-        <div className="relative z-10 text-center max-w-2xl p-8 border-y-2 border-amber-500/30 bg-slate-900/80 backdrop-blur-md">
-            <Crown size={64} className="text-amber-500 mx-auto mb-6 animate-pulse" />
-            <h1 className="text-4xl md:text-6xl font-serif text-slate-100 mb-2 uppercase tracking-widest">Bienvenido</h1>
-            <h2 className="text-2xl text-amber-500 font-bold uppercase mb-8 tracking-[0.2em]">{currentRace.name}</h2>
-            <p className="text-slate-300 text-lg italic mb-2 leading-relaxed">"Tu destino ha sido sellado."</p>
-            {/* Barra de carga decorativa */}
-            <div className="w-full h-1 bg-slate-700 rounded-full mt-6 overflow-hidden">
-                <div className="h-full bg-amber-500 animate-[width_4s_linear_forwards]" style={{ width: '0%' }}></div>
-            </div>
-            <p className="text-xs text-slate-500 mt-2">Entrando al mundo...</p>
-        </div>
-        {/* Estilo para la animación de la barra */}
-        <style>{`@keyframes width { to { width: 100%; } }`}</style>
-      </div>
-    );
-  }
-
-  // --- PANTALLA DE SELECCIÓN ---
   const EvolutionPath = ({ title, steps }) => (
-    <div className="mb-5">
-      <h4 className="text-amber-500/80 text-[10px] uppercase tracking-widest mb-3 border-b border-amber-900/30 pb-1 font-bold">{title}</h4>
-      <div className="grid grid-cols-3 w-full">
-        {steps.map((evo, index) => (
-          <div key={evo.name} className={`flex flex-col group cursor-help relative ${index === 0 ? 'items-start' : index === 2 ? 'items-end' : 'items-center'}`}>
-            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-full border-2 bg-slate-900 overflow-hidden relative ${evo.lv === 100 ? 'border-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'border-slate-700'}`}>
-              <img src={currentRace.image} className="w-full h-full object-cover brightness-0 grayscale opacity-60" />
-              <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[7px] text-center text-slate-300 py-0.5">LV {evo.lv}</div>
+    <div className="mb-4">
+      <h4 className="text-amber-500/80 text-xs uppercase tracking-[0.2em] mb-3 border-b border-amber-900/30 pb-1 font-bold">
+        {title}
+      </h4>
+      <div className="flex justify-between gap-4">
+        {steps.map((evo) => (
+          <div key={evo.name} className="flex flex-col items-center group cursor-help relative">
+            <div className={`
+              w-16 h-16 xl:w-20 xl:h-20 rounded-full border-2 bg-slate-900 overflow-hidden relative transition-all duration-500
+              ${evo.lv === 100 ? 'border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'border-slate-700 group-hover:border-slate-500'}
+            `}>
+              <img 
+                src={currentRace.image} 
+                alt="Evolucion"
+                className={`w-full h-full object-cover brightness-0 grayscale opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500
+                  ${evo.lv === 100 ? 'drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]' : ''}
+                `}
+              />
+              <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-center text-slate-300 py-0.5">
+                LV {evo.lv}
+              </div>
             </div>
-            <span className={`mt-2 text-[9px] w-20 leading-tight font-bold ${evo.aura} ${index === 0 ? 'text-left' : index === 2 ? 'text-right' : 'text-center'}`}>{evo.name}</span>
+            <span className={`mt-2 text-[10px] text-center w-20 leading-tight font-bold ${evo.aura}`}>
+              {evo.name}
+            </span>
           </div>
         ))}
       </div>
@@ -121,47 +112,134 @@ const RaceSelection = ({ onRaceSelect }) => {
   );
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col items-center justify-center p-4 overflow-hidden bg-slate-950">
+    <div className="h-screen w-full relative flex flex-col items-center justify-center overflow-hidden bg-slate-950">
+      
+      {/* FONDO */}
       <div className="absolute inset-0 z-0">
-        <img key={currentRace.id} src={currentRace.bgImage} className="w-full h-full object-cover opacity-60 blur-sm scale-105 animate-[pulse_10s_ease-in-out_infinite] transition-opacity duration-1000" />
+        <img 
+          key={currentRace.id} 
+          src={currentRace.bgImage} 
+          alt="Background Class"
+          className="w-full h-full object-cover opacity-60 blur-sm scale-105 animate-[pulse_10s_ease-in-out_infinite] transition-opacity duration-1000"
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black/90" />
       </div>
-      <div className="relative z-10 w-full max-w-7xl flex flex-col items-center">
-        <h2 className="text-3xl md:text-5xl font-serif text-amber-500 mb-6 tracking-widest uppercase drop-shadow-[0_2px_10px_rgba(245,158,11,0.5)]">Elige tu Linaje</h2>
-        <div className="flex items-center gap-2 w-full">
-          <button onClick={handlePrev} className="p-2 md:p-3 rounded-full border border-slate-700 hover:border-amber-500 transition-all bg-slate-900/80"><ChevronLeft size={24} /></button>
-          <div className={`flex-1 flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-16 min-h-[500px] transition-all duration-500 ease-out transform ${getAnimationClass()}`}>
-            <div className="relative group">
-               <div className="absolute -inset-2 border border-slate-800 rotate-2 transition-transform" />
-               <div className="w-64 h-[400px] lg:w-80 lg:h-[550px] bg-slate-900 overflow-hidden shadow-lg relative rounded-sm border-2 border-slate-800">
-                  <img src={currentRace.image} className="w-full h-full object-cover" />
-                  <div className="absolute bottom-0 inset-x-0 h-48 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col justify-end p-6">
-                    <h3 className="text-3xl font-bold text-white uppercase">{currentRace.name}</h3>
-                    <p className="text-amber-500 text-sm font-mono mt-2 tracking-widest pt-2 border-t border-amber-500/30 inline-block">{currentRace.id.toUpperCase()}</p>
-                  </div>
-               </div>
-            </div>
-            <div className="flex-1 max-w-xl space-y-6">
-                <div className="bg-slate-900/60 p-5 rounded border-l-2 border-amber-600 backdrop-blur-md shadow-lg"><p className="text-base text-slate-200 italic">"{currentRace.description}"</p></div>
-                <div className="grid grid-cols-6 gap-2">
-                    {Object.entries(currentRace.stats).map(([stat, val]) => (
-                        <div key={stat} className="flex flex-col items-center bg-slate-800/60 p-2 rounded border border-slate-700/50"><span className="text-[10px] text-slate-500 font-bold">{stat}</span><span className="text-lg text-amber-500 font-mono">{val}</span></div>
-                    ))}
+
+      {/* Título Grande */}
+      <div className="absolute top-8 left-0 right-0 text-center z-20">
+        <h2 className="text-4xl md:text-6xl font-serif text-amber-500 tracking-[0.15em] uppercase drop-shadow-[0_4px_15px_rgba(0,0,0,0.8)]">
+          Elige tu Linaje
+        </h2>
+      </div>
+
+      <div className="relative z-10 w-full max-w-[90%] 2xl:max-w-[1600px] flex items-center justify-between px-4 h-full pt-20">
+        
+        {/* BOTÓN ANTERIOR (Grande y Lateral) */}
+        <button onClick={handlePrev} className="p-4 rounded-full border-2 border-slate-700 hover:border-amber-500 hover:text-amber-500 transition-all bg-slate-900/50 backdrop-blur-md shadow-2xl group hover:scale-110">
+          <ChevronLeft size={40} className="group-hover:-translate-x-1 transition-transform" />
+        </button>
+
+        {/* --- CONTENEDOR PRINCIPAL --- */}
+        <div 
+          className={`flex flex-col lg:flex-row items-center justify-center gap-12 xl:gap-24 transition-all duration-500 ease-out transform ${getAnimationClass()}`}
+        >
+          
+          {/* --- IMAGEN (Izquierda - GIGANTE) --- */}
+          <div className="relative group shrink-0">
+             <div className="absolute -inset-3 border-2 border-slate-800 rotate-2 group-hover:rotate-3 transition-transform duration-700" />
+             {/* Aumentamos tamaño: w-[400px] h-[600px] en pantallas grandes */}
+             <div className="w-[300px] h-[450px] xl:w-[450px] xl:h-[650px] bg-slate-900 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.6)] relative rounded border-2 border-slate-700">
+                <img 
+                  src={currentRace.image} 
+                  alt={currentRace.name}
+                  className="w-full h-full object-contain bg-black/20 transition-transform duration-700 group-hover:scale-105"
+                />
+                
+                {/* Nombre Superpuesto */}
+                <div className="absolute bottom-0 inset-x-0 h-48 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-8">
+                  <h3 className="text-4xl xl:text-5xl font-bold text-white uppercase leading-none drop-shadow-xl">{currentRace.name}</h3>
+                  <p className="text-amber-500 text-sm xl:text-base font-mono mt-2 tracking-[0.3em] border-t border-amber-500/50 pt-2 inline-block">
+                    {currentRace.id.toUpperCase()}
+                  </p>
                 </div>
-                <div className="bg-slate-900/60 p-5 rounded border border-slate-800/80 backdrop-blur-sm">
-                    <EvolutionPath title="Senda 1 (Fuerza)" steps={currentRace.evolutions.path1} />
-                    <EvolutionPath title="Senda 2 (Estrategia)" steps={currentRace.evolutions.path2} />
-                </div>
-                <button onClick={handleConfirm} disabled={isLoading} className="w-full bg-gradient-to-r from-amber-800 to-amber-700 text-white font-bold py-3.5 rounded border border-amber-500/40 uppercase tracking-[0.2em] transition-all hover:scale-[1.02] flex items-center justify-center gap-3 mt-2 disabled:opacity-50">
-                    {isLoading ? 'Forjando...' : <><CheckCircle size={20} className="text-amber-300" />Confirmar Linaje</>}
-                </button>
-            </div>
+             </div>
           </div>
-          <button onClick={handleNext} className="p-2 md:p-3 rounded-full border border-slate-700 hover:border-amber-500 transition-all bg-slate-900/80"><ChevronRight size={24} /></button>
+
+          {/* --- DATOS (Derecha - GIGANTE) --- */}
+          <div className="flex-1 max-w-2xl space-y-6 xl:space-y-8">
+            
+            {/* Descripción */}
+            <div className="bg-slate-900/70 p-6 rounded border-l-4 border-amber-600 backdrop-blur-md shadow-xl">
+              <p className="text-lg xl:text-xl text-slate-200 italic font-light leading-relaxed">"{currentRace.description}"</p>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-6 gap-3">
+              {Object.entries(currentRace.stats).map(([stat, val]) => (
+                <div key={stat} className="flex flex-col items-center bg-slate-800/60 p-3 rounded border border-slate-700/50 hover:border-amber-500/50 transition-colors">
+                  <span className="text-[10px] xl:text-xs text-slate-400 font-bold uppercase">{stat}</span>
+                  <span className="text-2xl xl:text-3xl text-amber-500 font-mono leading-none mt-1">{val}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Sendas Evolutivas */}
+            <div className="bg-slate-900/50 p-6 rounded border border-slate-700/80 backdrop-blur-sm">
+              <EvolutionPath title="Senda 1 (Fuerza)" steps={currentRace.evolutions.path1} />
+              <div className="h-px bg-white/5 my-4"></div>
+              <EvolutionPath title="Senda 2 (Estrategia)" steps={currentRace.evolutions.path2} />
+            </div>
+
+            {/* Botón */}
+            <button 
+              onClick={handleConfirm}
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-bold py-5 rounded border border-amber-400 shadow-[0_0_40px_rgba(180,83,9,0.3)] uppercase tracking-[0.3em] text-lg transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-wait"
+            >
+              {isLoading ? 'Forjando Destino...' : (
+                  <>
+                      <CheckCircle size={24} className="text-amber-200" />
+                      Confirmar Linaje
+                  </>
+              )}
+            </button>
+
+          </div>
         </div>
+
+        {/* BOTÓN SIGUIENTE (Grande y Lateral) */}
+        <button onClick={handleNext} className="p-4 rounded-full border-2 border-slate-700 hover:border-amber-500 hover:text-amber-500 transition-all bg-slate-900/50 backdrop-blur-md shadow-2xl group hover:scale-110">
+          <ChevronRight size={40} className="group-hover:translate-x-1 transition-transform" />
+        </button>
+
       </div>
     </div>
   );
+};
+
+const WelcomeScreenDisplay = ({ race, onFinish }) => {
+    React.useEffect(() => {
+        const timer = setTimeout(onFinish, 4000);
+        return () => clearTimeout(timer);
+    }, [onFinish]);
+
+    return (
+        <div className="min-h-screen relative flex items-center justify-center bg-black overflow-hidden animate-[fadeIn_1s_ease-out]">
+            <div className="absolute inset-0 z-0">
+                <img src={race.bgImage} className="w-full h-full object-cover opacity-40 blur-sm scale-110" />
+                <div className="absolute inset-0 bg-black/60" />
+            </div>
+            <div className="relative z-10 text-center max-w-4xl p-12 border-y-2 border-amber-500/30 bg-slate-900/80 backdrop-blur-md shadow-2xl">
+                <Crown size={80} className="text-amber-500 mx-auto mb-8 animate-pulse" />
+                <h1 className="text-5xl md:text-7xl font-serif text-slate-100 mb-4 uppercase tracking-widest text-shadow-lg">Bienvenido</h1>
+                <h2 className="text-3xl md:text-4xl text-amber-500 font-bold uppercase mb-10 tracking-[0.3em]">{race.name}</h2>
+                <div className="w-full h-2 bg-slate-700 rounded-full mt-8 overflow-hidden">
+                    <div className="h-full bg-amber-500 animate-[width_4s_linear_forwards]" style={{ width: '0%' }}></div>
+                </div>
+            </div>
+            <style>{`@keyframes width { to { width: 100%; } }`}</style>
+        </div>
+    );
 };
 
 export default RaceSelection;
