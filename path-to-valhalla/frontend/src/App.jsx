@@ -2,32 +2,31 @@ import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import RaceSelection from './components/RaceSelection';
 import Dashboard from './components/Dashboard';
-import WelcomeBack from './components/WelcomeBack'; // <--- 1. Importamos el nuevo componente
-import GameLayout from './components/layout/GameLayout'; // <--- IMPORTAR
+import WelcomeBack from './components/WelcomeBack';
+import GameLayout from './components/layout/GameLayout';
 
 function App() {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('auth'); // 'auth', 'race', 'welcome_back', 'game'
+  const [view, setView] = useState('auth'); 
+
+  // CAMBIO 1: Usamos un booleano (true/false) en lugar de un contador.
+  // "false" asegura que SIEMPRE empiece cerrada al cargar.
+  const [isShopOpen, setIsShopOpen] = useState(false); 
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
-      // Si refresca la página y ya tiene sesión, va directo al juego (sin intro para no molestar)
       setView('game'); 
     }
   }, []);
 
   const handleAuthSuccess = (userData, isRegistration) => {
     setUser(userData);
-    
     if (isRegistration) {
-      // CASO 1: REGISTRO NUEVO -> Va a selección de raza (Flujo que ya tenías)
       setView('race');
     } else {
-      // CASO 2: LOGIN (Usuario existente) -> Va a la nueva pantalla de bienvenida
-      // Eliminamos el alert() feo y ponemos esto:
       setView('welcome_back');
     }
   };
@@ -42,34 +41,32 @@ function App() {
     localStorage.removeItem('user');
     setUser(null);
     setView('auth');
+    setIsShopOpen(false); // Aseguramos que se cierre al salir
   };
+
+  // CAMBIO 2: Funciones directas para abrir y cerrar
+  const openShop = () => setIsShopOpen(true);
+  const closeShop = () => setIsShopOpen(false);
 
   return (
     <div className="w-full h-full font-sans text-slate-100">
       
-      {/* 1. LOGIN / REGISTRO */}
-      {view === 'auth' && (
-        <Auth onLoginSuccess={handleAuthSuccess} />
-      )}
-
-      {/* 2. SELECCIÓN DE RAZA (Solo nuevos) */}
-      {view === 'race' && (
-        <RaceSelection onRaceSelect={handleRaceSelected} />
-      )}
-
-      {/* 3. PANTALLA DE BIENVENIDA (Solo Login) */}
+      {view === 'auth' && <Auth onLoginSuccess={handleAuthSuccess} />}
+      {view === 'race' && <RaceSelection onRaceSelect={handleRaceSelected} />}
+      
       {view === 'welcome_back' && user && (
-        <WelcomeBack 
-            user={user} 
-            onComplete={() => setView('game')} // Cuando termina la barra, va al juego
-        />
+        <WelcomeBack user={user} onComplete={() => setView('game')} />
       )}
 
-     {/* 4. EL JUEGO REAL (Ahora con Layout Estilo Gladiatus) */}
       {view === 'game' && user && (
-        <GameLayout user={user} onLogout={handleLogout}>
-            {/* Aquí adentro va la pantalla actual, por defecto Dashboard */}
-            <Dashboard user={user} />
+        // Pasamos openShop al layout (para el botón de arriba)
+        <GameLayout user={user} onLogout={handleLogout} onOpenShop={openShop}>
+            {/* Pasamos el estado (isShopOpen) y la función de cerrar (closeShop) al Dashboard */}
+            <Dashboard 
+                user={user} 
+                isShopOpen={isShopOpen} 
+                onCloseShop={closeShop} 
+            />
         </GameLayout>
       )}
 

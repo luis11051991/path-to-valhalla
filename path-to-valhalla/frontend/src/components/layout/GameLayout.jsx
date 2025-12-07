@@ -1,29 +1,29 @@
 import React from 'react';
-import TopBar from './TopBar';
-import Sidebar from './Sidebar';
+// IMPORTANTE: Usamos ./ porque están en la misma carpeta 'layout'
+import TopBar from './TopBar'; 
+import Sidebar from './Sidebar'; 
 
-const GameLayout = ({ user, onLogout, children }) => {
+const GameLayout = ({ user, onLogout, onOpenShop, children }) => {
   return (
-    // Contenedor Maestro: Ocupa toda la pantalla, fondo oscuro base
-    <div className="h-screen w-screen flex flex-col bg-black overflow-hidden relative">
+    <div className="flex h-screen bg-slate-950 overflow-hidden text-slate-100 font-sans">
       
-      {/* 1. Cabecera (Fija arriba, Z-Index alto) */}
-      <div className="shrink-0 relative z-50">
-        <TopBar user={user} onLogout={onLogout} />
-      </div>
+      {/* 1. BARRA LATERAL (Izquierda) */}
+      {/* Al ponerlo primero en un contenedor flex, aparece a la izquierda */}
+      <Sidebar />
 
-      {/* 2. Cuerpo del Juego */}
-      <div className="flex flex-1 overflow-hidden relative z-0">
+      {/* 2. CONTENEDOR PRINCIPAL (Derecha) */}
+      <div className="flex-1 flex flex-col relative min-w-0">
         
-        {/* Columna Izquierda (Sidebar) - Fija */}
-        <div className="shrink-0 h-full relative z-40">
-            <Sidebar />
-        </div>
-
-        {/* Área Principal (Scrollable) */}
-        <main className="flex-1 relative overflow-y-auto overflow-x-hidden bg-slate-900">
-            {/* Aquí es donde se muestra el Dashboard */}
-            {children}
+        {/* BARRA SUPERIOR (Con el botón de tienda conectado) */}
+        <TopBar 
+            user={user} 
+            onLogout={onLogout} 
+            onOpenShop={onOpenShop} 
+        />
+        
+        {/* CONTENIDO DEL JUEGO (Dashboard, Inventario, etc.) */}
+        <main className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-amber-900 scrollbar-track-slate-900 relative z-0">
+           {children}
         </main>
 
       </div>

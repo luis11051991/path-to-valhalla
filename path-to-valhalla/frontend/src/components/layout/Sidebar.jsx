@@ -1,64 +1,108 @@
 import React from 'react';
-import { Home, Backpack, Swords, Map, Hammer, FlaskConical, ScrollText } from 'lucide-react';
+import { 
+    User, BookOpen, Trophy, BarChart2, Mail, // Héroe
+    Map, Skull, ArrowUpCircle, Scroll, // Aventura
+    Swords, // Combate
+    Hammer, Landmark, Gavel, Shield, // Ciudad
+    Users, Calendar, // Social
+    Crown // Premium
+} from 'lucide-react';
 
 const Sidebar = () => {
   
-  const MenuLink = ({ icon: Icon, label, active }) => (
+  // Componente para los Títulos de Sección
+  const SectionHeader = ({ title }) => (
+    <div className="px-6 pt-4 pb-2 mt-2">
+        <h3 className="text-[10px] font-bold text-amber-600 uppercase tracking-widest border-b border-amber-900/30 pb-1">
+            {title}
+        </h3>
+    </div>
+  );
+
+  // Componente para los Enlaces
+  const MenuLink = ({ icon: Icon, label, active, disabled }) => (
     <button 
+        disabled={disabled}
         className={`
-            w-full flex items-center gap-3 px-4 py-3 mb-1
-            transition-all border-y border-transparent
+            w-full flex items-center gap-3 px-6 py-2.5
+            transition-all border-l-[3px]
             ${active 
-                ? 'bg-gradient-to-r from-amber-900/80 to-transparent text-amber-200 border-l-4 border-l-amber-500 shadow-inner' 
-                : 'text-slate-400 hover:text-amber-100 hover:bg-white/5 hover:border-b-white/5 hover:pl-5'}
+                ? 'bg-gradient-to-r from-amber-900/40 to-transparent border-amber-500 text-amber-100' 
+                : 'border-transparent text-slate-400 hover:text-amber-100 hover:bg-white/5'}
+            ${disabled ? 'opacity-40 cursor-not-allowed grayscale' : 'cursor-pointer'}
         `}
     >
-        {/* Icono con brillo si está activo */}
-        <div className={`p-1.5 rounded ${active ? 'bg-amber-950/50 shadow-sm' : ''}`}>
-            <Icon size={18} className={active ? 'text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]' : 'text-slate-500 group-hover:text-amber-200'} />
-        </div>
-        <span className={`font-serif tracking-wider text-sm uppercase ${active ? 'font-bold text-shadow-sm' : ''}`}>
+        <Icon size={18} className={active ? 'text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]' : disabled ? 'text-slate-600' : 'text-slate-500 group-hover:text-amber-200'} />
+        <span className={`font-sans text-xs uppercase tracking-wide ${active ? 'font-bold' : 'font-medium'}`}>
             {label}
         </span>
     </button>
   );
 
   return (
-    <aside className="w-64 h-full flex flex-col relative z-20">
+    <aside className="w-64 h-full flex flex-col bg-slate-950 border-r border-amber-900/30 shadow-[5px_0_30px_rgba(0,0,0,0.5)] relative z-30 overflow-hidden">
         
-        {/* Fondo con textura simulada (Degradado complejo) */}
-        <div className="absolute inset-0 bg-slate-950 bg-[radial-gradient(ellipse_at_left,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black z-0 border-r-2 border-amber-800/60 shadow-[5px_0_30px_rgba(0,0,0,0.8)]"></div>
+        {/* ENCABEZADO "MENÚ" 
+            CORRECCIÓN: Cambiado de h-24 a h-20 para alinear con el TopBar 
+        */}
+        <div className="h-20 flex flex-col items-center justify-center border-b border-amber-900/30 bg-black/20 shrink-0 relative">
+            {/* Línea superior decorativa */}
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-900/50 to-transparent"></div>
+            
+            <h1 className="text-amber-500 font-serif font-bold tracking-[0.3em] text-sm drop-shadow-md">
+                + MENÚ +
+            </h1>
 
-        {/* Decoración Superior (Cabeza de Columna) */}
-        <div className="relative z-10 p-5 text-center border-b-2 border-amber-900/50 bg-black/20">
-            <h3 className="text-amber-600 text-xs font-bold uppercase tracking-[0.3em] drop-shadow-md">
-                Menú
-            </h3>
-            <div className="mt-2 w-16 h-1 bg-gradient-to-r from-transparent via-amber-800 to-transparent mx-auto"></div>
+            {/* Pequeña luz debajo */}
+            <div className="w-10 h-0.5 bg-amber-700/50 rounded-full mt-1 shadow-[0_0_8px_rgba(245,158,11,0.4)]"></div>
         </div>
 
-        {/* Lista de Navegación */}
-        <nav className="relative z-10 flex-1 py-4 overflow-y-auto space-y-1">
-            <MenuLink icon={Home} label="Visión General" active />
-            <MenuLink icon={Backpack} label="Inventario" />
-            <MenuLink icon={Swords} label="Coliseo" />
-            <MenuLink icon={Map} label="Expedición" />
+        {/* NAVEGACIÓN CON SCROLL */}
+        <nav className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-900/50 scrollbar-track-transparent py-2">
             
-            {/* Separador Decorativo */}
-            <div className="py-4 flex items-center justify-center opacity-50">
-                <div className="h-px w-10 bg-amber-900"></div>
-                <div className="w-2 h-2 rotate-45 border border-amber-800 mx-2"></div>
-                <div className="h-px w-10 bg-amber-900"></div>
-            </div>
+            {/* SECCIÓN: HÉROE */}
+            <SectionHeader title="Héroe" />
+            <MenuLink icon={User} label="Visión General" active />
+            <MenuLink icon={BookOpen} label="Bestiario" />
+            <MenuLink icon={Trophy} label="Logros" />
+            <MenuLink icon={BarChart2} label="Estadísticas" />
+            <MenuLink icon={Mail} label="Mensajería" />
 
-            <MenuLink icon={Hammer} label="Herrería" />
-            <MenuLink icon={FlaskConical} label="Alquimia" />
-            <MenuLink icon={ScrollText} label="Misiones" />
+            {/* SECCIÓN: AVENTURA */}
+            <SectionHeader title="Aventura" />
+            <MenuLink icon={Map} label="Expediciones" />
+            <MenuLink icon={Skull} label="Mazmorras" />
+            <MenuLink icon={ArrowUpCircle} label="Torre Infinita" disabled />
+            <MenuLink icon={Scroll} label="Salón de Valhallus" />
+
+            {/* SECCIÓN: COMBATE */}
+            <SectionHeader title="Combate" />
+            <MenuLink icon={Swords} label="Coliseo" />
+
+            {/* SECCIÓN: CIUDAD */}
+            <SectionHeader title="Ciudad" />
+            <MenuLink icon={Hammer} label="Taller" />
+            <MenuLink icon={Landmark} label="Banco" />
+            <MenuLink icon={Gavel} label="Mercado" />
+            <MenuLink icon={Shield} label="Armero" />
+
+            {/* SECCIÓN: SOCIAL */}
+            <SectionHeader title="Social" />
+            <MenuLink icon={Users} label="Alianza" />
+            <MenuLink icon={Calendar} label="Agenda" />
+
+            {/* SECCIÓN: PREMIUM */}
+            <SectionHeader title="Premium" />
+            <MenuLink icon={Crown} label="Tienda VIP" />
+
+            <div className="h-10"></div>
         </nav>
 
-        {/* Pie de Columna */}
-        <div className="relative z-10 p-4 text-center border-t border-amber-900/30 bg-black/40">
-            <p className="text-[10px] text-slate-600 font-mono">v0.1.0 Alpha</p>
+        {/* PIE DE PÁGINA */}
+        <div className="p-3 text-center border-t border-amber-900/30 bg-black/40 shrink-0">
+            <p className="text-[9px] text-slate-600 font-mono uppercase tracking-widest">
+                Valhalla v0.1.0 Alpha
+            </p>
         </div>
     </aside>
   );

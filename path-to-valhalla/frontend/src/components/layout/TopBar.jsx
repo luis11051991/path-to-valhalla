@@ -1,16 +1,21 @@
 import React, { useMemo } from 'react';
-import { Heart, Shield, Zap, Coins, Gem, LogOut } from 'lucide-react'; // Usamos iconos de lucide
+import { Heart, Shield, Zap, Coins, Gem, LogOut, Store } from 'lucide-react'; 
 import { RACES } from '../../constants/races';
 
-const TopBar = ({ user, onLogout }) => {
+const TopBar = ({ user, onLogout, onOpenShop }) => {
   
   const raceData = useMemo(() => RACES.find(r => r.id === user.race) || RACES[0], [user.race]);
   
-  // Cálculo de HP (Simulado por ahora basado en constitución)
+  // --- CÁLCULOS DE BARRAS ---
   const maxHp = (user.stats?.constitution || 10) * 20;
-  const currentHp = maxHp; 
+  const currentHp = maxHp; // Aquí conectarás la vida real más adelante
 
-  // Componente de Barra
+  // Fórmula de XP (Provisional: Nivel * 1000)
+  // Si tu backend ya manda user.experience, úsalo. Si no, usa 0.
+  const currentXp = user.experience || 0;
+  const maxXp = user.level * 1000;
+
+  // Componente de Barra Reutilizable
   const StatBar = ({ colorClass, value, max, label }) => (
     <div className="flex flex-col w-24 lg:w-32 relative group">
       <div className="flex justify-between px-1 mb-0.5">
@@ -22,6 +27,7 @@ const TopBar = ({ user, onLogout }) => {
             className={`h-full ${colorClass} transition-all duration-500 shadow-[0_0_10px_currentColor]`} 
             style={{ width: `${Math.min((value / max) * 100, 100)}%` }}
         />
+        {/* Brillo superior para efecto cristal */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/20"></div>
       </div>
     </div>
@@ -53,50 +59,56 @@ const TopBar = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* --- CENTRO: BARRAS (Solo visible en pantallas medianas+) --- */}
+      {/* --- CENTRO IZQUIERDA: BARRAS DE ESTADO --- */}
       <div className="relative z-10 hidden xl:flex items-center gap-6 bg-black/30 px-6 py-2 rounded border border-white/5 shadow-inner mx-4">
+        
+        {/* 1. BARRA DE EXPERIENCIA (NUEVA) */}
+        <StatBar value={currentXp} max={maxXp} label="Exp" colorClass="bg-yellow-500" />
+        
+        {/* 2. RESTO DE BARRAS */}
         <StatBar value={currentHp} max={maxHp} label="Vida" colorClass="bg-red-600" />
         <StatBar value={user.energy} max={100} label="Energía" colorClass="bg-blue-600" />
         <StatBar value={user.valor} max={5} label="Valor" colorClass="bg-orange-500" />
       </div>
 
-      {/* --- DERECHA: ECONOMÍA (EL CAMBIO QUE PEDISTE) --- */}
+      {/* --- CENTRO DERECHA: BOTÓN TIENDA --- */}
+      <button 
+        onClick={onOpenShop}
+        className="relative z-20 flex items-center gap-2 bg-gradient-to-r from-purple-900/80 to-slate-900 border border-purple-500/50 px-4 py-1.5 rounded-full hover:scale-105 transition-transform group shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-pulse hover:animate-none cursor-pointer mx-auto md:mx-4"
+      >
+        <div className="relative">
+            <Gem size={14} className="text-purple-400 group-hover:text-white transition-colors" />
+            <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+            </span>
+        </div>
+        <span className="text-xs font-bold text-purple-200 group-hover:text-white uppercase tracking-wider hidden md:inline">
+            Tienda Ónix
+        </span>
+      </button>
+
+      {/* --- DERECHA: ECONOMÍA --- */}
       <div className="relative z-10 flex items-center gap-4 ml-auto bg-black/40 px-4 py-2 rounded border border-white/5 shadow-inner">
-        
-        {/* ORO */}
         <div className="flex items-center gap-1.5" title="Oro">
             <Coins size={14} className="text-amber-400 fill-amber-400/20" />
             <span className="text-amber-400 font-bold text-sm">{user.gold}</span>
-            <span className="text-[10px] text-amber-600 font-bold uppercase hidden md:inline">Oro</span>
         </div>
-
-        {/* PLATA */}
         <div className="flex items-center gap-1.5" title="Plata">
             <div className="w-3 h-3 rounded-full bg-slate-400 border border-slate-300 shadow-[0_0_5px_white]"></div>
             <span className="text-slate-300 font-bold text-sm">{user.silver}</span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase hidden md:inline">Plata</span>
         </div>
-
-        {/* COBRE */}
         <div className="flex items-center gap-1.5" title="Cobre">
             <div className="w-3 h-3 rounded-full bg-orange-700 border border-orange-500 shadow-[0_0_5px_orange]"></div>
             <span className="text-orange-500 font-bold text-sm">{user.copper}</span>
-            <span className="text-[10px] text-orange-700 font-bold uppercase hidden md:inline">Cobre</span>
         </div>
-
-        {/* Separador */}
         <div className="h-4 w-px bg-white/10 mx-1"></div>
-
-        {/* ONIX */}
         <div className="flex items-center gap-1.5" title="Onix">
             <Gem size={14} className="text-purple-400" />
             <span className="text-purple-300 font-bold text-sm">{user.onix || 0}</span>
-            <span className="text-[10px] text-purple-500 font-bold uppercase hidden md:inline">Onix</span>
         </div>
-
       </div>
 
-      {/* Botón Salir */}
       <button onClick={onLogout} className="relative z-10 ml-4 p-2 text-slate-500 hover:text-red-400 transition-colors" title="Cerrar Sesión">
         <LogOut size={18} />
       </button>
