@@ -19,25 +19,24 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
     };
 
     const raceData = useMemo(() => RACES.find(r => r.id === user.race) || RACES[0], [user.race]);
-    const getAvatarImage = () => raceData.image;
+    const getAvatarImage = () => raceData.image; // PNG Transparente
+    
+    // URL del fondo (segura) desde la DB
+    const getBackgroundImage = () => user.active_background_url || "https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=2544&auto=format&fit=crop";
 
     const currentXp = user.experience || 0;
     const maxXp = user.level * 1000; 
     const xpPercent = Math.min((currentXp / maxXp) * 100, 100);
     const maxHp = (user.stats?.constitution || 10) * 20;
 
-    // --- LÓGICA DE BOLSAS (CORREGIDA) ---
     const isBagUnlocked = (bagNumber) => {
-        if (bagNumber <= 2) return true; // Bolsa 1 y 2 siempre abiertas
-        if (bagNumber === 3) return user.level >= 20; // Bolsa 3 requiere nivel 20
-        return false; // Bolsas 4, 5, 6 son VIP (Bloqueadas por defecto)
+        if (bagNumber <= 2) return true;
+        if (bagNumber === 3) return user.level >= 20;
+        return false;
     };
 
     const getEquippedItem = (slotName) => user.real_inventory?.find(i => i.is_equipped && i.equipped_slot === slotName);
-    
-    // Buscar item en la mochila CORRECTAMENTE
     const getBagItem = (slotIndex) => {
-        // Calculamos el índice real en la base de datos (0-39 para bolsa 1, 40-79 para bolsa 2...)
         const realIndex = ((activeBag - 1) * 40) + slotIndex;
         return user.real_inventory?.find(i => !i.is_equipped && i.bag_slot === realIndex);
     };
@@ -117,18 +116,8 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
         );
     };
 
-    const ONYX_PACKAGES = [
-        { id: 1, amount: 100, price: "0.99", bonus: 0 },
-        { id: 2, amount: 500, price: "4.99", bonus: 50, popular: true },
-        { id: 3, amount: 1200, price: "9.99", bonus: 200 },
-        { id: 4, amount: 3000, price: "24.99", bonus: 600 },
-    ];
-    const FREE_REWARDS = [
-        { id: 1, title: "Ver Anuncio Místico", reward: "2 Ónix", icon: PlayCircle, desc: "Disponible: 5/5", action: "Ver Video" },
-        { id: 2, title: "Invitar a un Guerrero", reward: "50 Ónix", icon: Users, desc: "Por cada amigo nivel 10", action: "Copiar Link" },
-        { id: 3, title: "Unirse a Discord", reward: "20 Ónix", icon: MessageCircle, desc: "Recompensa única", action: "Unirse" },
-        { id: 4, title: "Bono Diario", reward: "5 Ónix", icon: Gift, desc: "Vuelve mañana", action: "Reclamar", completed: true },
-    ];
+    const ONYX_PACKAGES = [{id:1, price:"0.99", amount:100}, {id:2, price:"4.99", amount:500}];
+    const FREE_REWARDS = [{id:1, title:"Ver Anuncio", reward:"2 Ónix", icon:PlayCircle, desc:"5/5"}, {id:2, title:"Invitar Amigo", reward:"50 Ónix", icon:Users, desc:"Nivel 10"}];
 
     return (
         <div className="min-h-full relative font-sans p-4 flex flex-col gap-4">
@@ -146,7 +135,13 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
                 <div className="lg:col-span-3 space-y-4">
                     <div className="bg-black/50 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 flex items-center gap-4 shadow-lg">
                         <div className="relative group cursor-zoom-in w-16 h-16 shrink-0" onClick={() => setShowAvatarModal(true)}>
-                            <div className="w-full h-full rounded border-2 border-amber-600 bg-slate-900 overflow-hidden relative z-10"><img src={getAvatarImage()} className="w-full h-full object-cover object-top" /></div>
+                            {/* --- SANDWICH VISUAL EN MINIATURA --- */}
+                            <div className="w-full h-full rounded border-2 border-amber-600 bg-slate-900 overflow-hidden relative z-10">
+                                {/* Capa 1: Fondo desde DB */}
+                                <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-80" alt="BG" />
+                                {/* Capa 2: Personaje */}
+                                <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-top z-10" alt="Avatar" />
+                            </div>
                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 rounded"><Maximize2 size={16} className="text-white" /></div>
                         </div>
                         <div className="flex-1">
@@ -168,12 +163,13 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
                     </div>
                 </div>
 
-                {/* COLUMNA 2: PAPERDOLL */}
+                {/* COLUMNA 2: PAPERDOLL (SIN FONDO, SOLO PNG) */}
                 <div className="lg:col-span-5">
                     <div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 h-[700px] relative shadow-2xl flex flex-col items-center">
                         <h3 className="text-amber-500 font-serif uppercase tracking-widest text-sm mb-4 border-b border-amber-500/20 w-full text-center pb-2">Equipamiento</h3>
                         <div className="relative w-full h-full max-w-[420px]">
                             <div className="absolute inset-x-0 top-12 bottom-12 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none">
+                                {/* AQUÍ SOLO EL PERSONAJE */}
                                 <img src={getAvatarImage()} className="h-full w-auto object-contain drop-shadow-[0_0_15px_rgba(0,0,0,1)]" />
                             </div>
                             <div className="absolute top-4 left-0">{renderEquipmentSlot(Sparkles, "head_accessory")}</div>
@@ -191,67 +187,31 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
                     </div>
                 </div>
 
-                {/* COLUMNA 3: MOCHILA (CORREGIDA) */}
+                {/* COLUMNA 3: MOCHILA */}
                 <div className="lg:col-span-4">
                     <div className="bg-slate-900 border-2 border-amber-900/50 rounded-lg p-1 h-[700px] flex flex-col shadow-2xl relative">
-                        
-                        {/* Pestañas de Bolsa (1 a 6) */}
                         <div className="flex gap-1 mb-1 px-1 overflow-x-auto">
-                            {[1, 2, 3, 4, 5, 6].map((num) => {
-                                const locked = !isBagUnlocked(num);
-                                return (
-                                    <button 
-                                        key={num} 
-                                        onClick={() => setActiveBag(num)} 
-                                        className={`
-                                            flex-1 py-1.5 text-[10px] font-bold uppercase border-t-2 transition-colors relative
-                                            ${activeBag === num 
-                                                ? 'bg-amber-900/80 text-amber-100 border-amber-500' 
-                                                : 'bg-slate-800 text-slate-500 border-transparent hover:bg-slate-700'}
-                                            ${locked ? 'opacity-70' : ''}
-                                        `}
-                                    >
-                                        {locked && <Lock size={10} className="absolute top-0.5 right-0.5 text-red-400" />}
-                                        {num >= 4 ? <span className="text-purple-400">VIP</span> : `BOLSA ${num}`}
-                                    </button>
-                                );
-                            })}
+                            {[1, 2, 3, 4, 5, 6].map((num) => (
+                                <button key={num} onClick={() => setActiveBag(num)} className={`flex-1 py-1.5 text-[10px] font-bold uppercase border-t-2 ${activeBag === num ? 'bg-amber-900/80 text-amber-100 border-amber-500' : 'bg-slate-800 text-slate-500 border-transparent'} ${!isBagUnlocked(num) ? 'opacity-70' : ''}`}>
+                                    {!isBagUnlocked(num) && <Lock size={10} className="absolute top-0.5 right-0.5 text-red-400" />}
+                                    {num >= 4 ? <span className="text-purple-400">VIP</span> : `BOLSA ${num}`}
+                                </button>
+                            ))}
                         </div>
-
-                        {/* Grid de Items */}
                         <div className="flex-1 bg-black/60 border border-slate-700 rounded p-2 overflow-y-auto relative">
-                            {/* Si la bolsa activa está bloqueada, mostramos el candado */}
                             {!isBagUnlocked(activeBag) ? (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 z-20">
                                     <Lock size={48} className={activeBag >= 4 ? "text-purple-500 mb-4" : "text-slate-500 mb-4"} />
                                     <h3 className="text-white font-bold mb-2">Mochila Bloqueada</h3>
-                                    {activeBag === 3 ? (
-                                        <p className="text-slate-400 text-xs">Necesitas alcanzar el <span className="text-amber-500">Nivel 20</span>.</p>
-                                    ) : (
-                                        <div>
-                                            <p className="text-slate-400 text-xs mb-4">Esta es una bolsa <span className="text-purple-400 font-bold">Premium</span>.</p>
-                                            <button className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded shadow-lg transition-colors border border-purple-400">
-                                                Alquilar por 7 días
-                                            </button>
-                                        </div>
-                                    )}
+                                    {activeBag === 3 ? (<p className="text-slate-400 text-xs">Necesitas alcanzar el <span className="text-amber-500">Nivel 20</span>.</p>) : (<div><p className="text-slate-400 text-xs mb-4">Esta es una bolsa <span className="text-purple-400 font-bold">Premium</span>.</p><button className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded shadow-lg transition-colors border border-purple-400">Alquilar por 7 días</button></div>)}
                                 </div>
                             ) : (
-                                // Si está desbloqueada, mostramos los items
                                 <div className="grid grid-cols-5 gap-1.5 h-full content-start">
                                     {[...Array(40)].map((_, i) => {
                                         const item = getBagItem(i);
                                         const ItemIcon = item ? ITEM_ICONS[item.icon] : null;
                                         return (
-                                            <div 
-                                                key={i} 
-                                                className={`
-                                                    aspect-square border rounded-sm flex items-center justify-center cursor-pointer shadow-inner relative group
-                                                    ${item ? 'bg-slate-800 border-amber-600/50' : 'bg-slate-800/50 border-slate-700 hover:border-amber-500/30'}
-                                                `}
-                                                onMouseEnter={(e) => handleMouseEnter(item, e, 'left')} 
-                                                onMouseLeave={handleMouseLeave}
-                                            >
+                                            <div key={i} className={`aspect-square border rounded-sm flex items-center justify-center cursor-pointer shadow-inner relative group ${item ? 'bg-slate-800 border-amber-600/50' : 'bg-slate-800/50 border-slate-700 hover:border-amber-500/30'}`} onMouseEnter={(e) => handleMouseEnter(item, e, 'left')} onMouseLeave={handleMouseLeave}>
                                                 {item && ItemIcon && <ItemIcon size={20} className="text-amber-500 drop-shadow-md" />}
                                             </div>
                                         );
@@ -259,8 +219,6 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
                                 </div>
                             )}
                         </div>
-
-                        {/* Pie de Mochila */}
                         <div className="mt-1 flex justify-between items-center px-2 py-1 text-[10px] text-slate-500 bg-slate-950 rounded-b">
                             <span>Libres: {40 - (user.real_inventory?.filter(i => !i.is_equipped && i.bag_slot >= (activeBag-1)*40 && i.bag_slot < activeBag*40).length || 0)}</span>
                             <button className="text-amber-500 hover:underline">Organizar</button>
@@ -309,10 +267,18 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
                 </div>
             )}
             
+            {/* --- MODAL AVATAR (CON SANDWICH VISUAL) --- */}
             {showAvatarModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => setShowAvatarModal(false)}>
-                    <div className="relative max-h-[90vh] max-w-[90vw] flex items-center justify-center p-2" onClick={e => e.stopPropagation()}>
-                        <img src={getAvatarImage()} className="max-h-[85vh] w-auto object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] rounded-lg" alt="Full Character" />
+                    {/* Contenedor relativo que tendrá fondo + imagen */}
+                    <div className="relative max-h-[85vh] h-full aspect-[3/4] bg-black/50 rounded-lg overflow-hidden border-2 border-amber-600 shadow-2xl flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                        
+                        {/* CAPA 1: FONDO COMPLETO (Desde DB) */}
+                        <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="Background" />
+                        
+                        {/* CAPA 2: PERSONAJE TRANSPARENTE */}
+                        <img src={getAvatarImage()} className="relative z-10 max-h-full w-auto object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]" alt="Full Character" />
+                        
                         <button onClick={() => setShowAvatarModal(false)} className="absolute top-4 right-4 p-2 bg-black/60 text-slate-200 hover:text-white hover:bg-red-600/80 rounded-full z-50 border border-white/10 transition-colors"><X size={24}/></button>
                     </div>
                 </div>
