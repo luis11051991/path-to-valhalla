@@ -22,7 +22,11 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop }) => {
     const getAvatarImage = () => raceData.image; // PNG Transparente
     
     // URL del fondo (segura) desde la DB
-    const getBackgroundImage = () => user.active_background_url || "https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=2544&auto=format&fit=crop";
+    // CORRECCIÓN: Si no hay fondo, usamos el humano local, no el de internet.
+    const getBackgroundImage = () => {
+        if (user.active_background_url) return user.active_background_url;
+        return "/backgrounds/background_base_humano.png"; // Fallback local seguro
+    };
 
     const currentXp = user.experience || 0;
     const maxXp = user.level * 1000; 

@@ -4,32 +4,49 @@ const jwt = require('jsonwebtoken');
 
 const SECRET_KEY = 'valhalla_secret_key_odin';
 
+// MAPEO: Nombre de la raza (que viene del frontend) -> ID del Fondo (Base de Datos)
+// Asegúrate de que las claves ('human', 'orc', etc.) coincidan con los IDs de tu archivo races.js
+const RACE_BACKGROUNDS = {
+  'human': 1,
+  'elf': 2,
+  'dwarf': 3,
+  'orc': 4,
+  'feline': 5,
+  'goblin': 6
+};
+
 // --- REGISTRO ---
 exports.register = async (req, res) => {
-  const { username, email, password } = req.body;
+  // Importante: Ahora esperamos recibir 'race' desde el formulario de registro
+  const { username, email, password, race } = req.body; 
   const safeEmail = email.toLowerCase();
 
   try {
     const userCheck = await pool.query('SELECT * FROM players WHERE email = $1 OR username = $2', [safeEmail, username]);
-    if (userCheck.rows.length > 0) return res.status(400).json({ message: 'Usuario ya existe.' });
+    if (userCheck.rows.length > 0) return res.status(400).json({ message: 'Nombre o correo ya existen.' });
 
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
-    // 1. Crear Jugador (Con fondo ID 1 por defecto)
+    // 1. DETERMINAR FONDO INICIAL
+    // Si no llega raza, asignamos Humano (1) por defecto
+    const raceKey = race ? race.toLowerCase() : 'human';
+    const startingBgId = RACE_BACKGROUNDS[raceKey] || 1;
+
+    // 2. CREAR JUGADOR
     const newUser = await pool.query(
-      `INSERT INTO players (username, email, password_hash, silver, copper, current_hp, last_regen_at, active_background_id) 
-       VALUES ($1, $2, $3, 10, 50, 100, NOW(), 1) RETURNING *`, 
-      [username, safeEmail, hash]
+      `INSERT INTO players (username, email, password_hash, race, silver, copper, current_hp, last_regen_at, active_background_id) 
+       VALUES ($1, $2, $3, $4, 10, 50, 100, NOW(), $5) RETURNING *`, 
+      [username, safeEmail, hash, raceKey, startingBgId]
     );
     const user = newUser.rows[0];
 
-    // 2. Darle propiedad del fondo default (Insertar en player_backgrounds)
-    await pool.query('INSERT INTO player_backgrounds (player_id, background_id) VALUES ($1, 1)', [user.id]);
+    // 3. DAR PROPIEDAD DEL FONDO
+    await pool.query('INSERT INTO player_backgrounds (player_id, background_id) VALUES ($1, $2)', [user.id, startingBgId]);
 
-    // 3. Buscar la URL del fondo para enviarla al frontend
-    const bgResult = await pool.query('SELECT image_url FROM backgrounds WHERE id = 1');
-    const bgUrl = bgResult.rows[0].image_url;
+    // 4. OBTENER URL DEL FONDO PARA RESPONDER AL FRONTEND
+    const bgResult = await pool.query('SELECT image_url FROM backgrounds WHERE id = $1', [startingBgId]);
+    const bgUrl = bgResult.rows[0]?.image_url || '';
 
     const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' });
 
@@ -38,9 +55,9 @@ exports.register = async (req, res) => {
       token,
       user: { 
         ...user, 
-        active_background_url: bgUrl, // Enviamos la URL resuelta
+        active_background_url: bgUrl, 
         real_inventory: [] 
-      }
+      } 
     });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Error Server' }); }
 };
@@ -51,15 +68,14 @@ exports.login = async (req, res) => {
   const safeEmail = email.toLowerCase(); 
 
   try {
-    // 1. Buscar Usuario
     const result = await pool.query('SELECT * FROM players WHERE email = $1', [safeEmail]);
-    if (result.rows.length === 0) return res.status(400).json({ message: 'No encontrado.' });
+    if (result.rows.length === 0) return res.status(400).json({ message: 'Guerrero no encontrado.' });
 
     let user = result.rows[0];
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(400).json({ message: 'Credenciales incorrectas.' });
 
-    // 2. Regeneración de Vida
+    // Regeneración de vida
     const now = new Date();
     const lastRegen = user.last_regen_at ? new Date(user.last_regen_at) : new Date();
     const maxHp = (user.stats.constitution || 10) * 20;
@@ -72,17 +88,18 @@ exports.login = async (req, res) => {
         user.current_hp = newHp;
     }
 
-    // 3. Obtener Inventario
+    // Inventario
     const itemsQuery = `
       SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.base_stats, it.description 
       FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1
     `;
     const itemsResult = await pool.query(itemsQuery, [user.id]);
 
-    // 4. OBTENER URL DEL FONDO (JOIN)
-    // Buscamos la URL en la tabla backgrounds usando el ID que tiene el jugador
+    // OBTENER URL DEL FONDO ACTIVO
+    // Si active_background_id es nulo, usamos el 1 por defecto
+    const bgId = user.active_background_id || 1;
     const bgQuery = `SELECT image_url FROM backgrounds WHERE id = $1`;
-    const bgResult = await pool.query(bgQuery, [user.active_background_id || 1]); // Fallback al 1 si es null
+    const bgResult = await pool.query(bgQuery, [bgId]);
     const bgUrl = bgResult.rows.length > 0 ? bgResult.rows[0].image_url : '';
 
     const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' });
@@ -91,20 +108,9 @@ exports.login = async (req, res) => {
       message: 'Regreso glorioso.',
       token, 
       user: { 
-        id: user.id, 
-        username: user.username, 
-        level: user.level,
-        experience: user.experience, 
-        current_hp: user.current_hp,
-        race: user.race, 
-        class_path: user.class_path,
-        gold: user.gold, silver: user.silver, copper: user.copper, onix: user.onix,
-        energy: user.energy, valor: user.valor,
-        stats: user.stats,
-        stat_points: user.stat_points,
-        
+        ...user,
         real_inventory: itemsResult.rows,
-        active_background_url: bgUrl // <--- Aquí va la URL para el Frontend
+        active_background_url: bgUrl // Enviamos la URL correcta (.png)
       } 
     });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Error Server' }); }
