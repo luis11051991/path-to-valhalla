@@ -38,7 +38,7 @@ const TopBar = ({ user, onLogout, onOpenShop }) => {
                 {/* FONDO DINÁMICO DESDE DB */}
                 <img src={bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-80" alt="BG" />
                 {/* PERSONAJE (PNG) */}
-                <img src={raceData.image} className="absolute inset-0 w-full h-full object-cover object-top z-10" alt="Avatar" />
+                <img src={raceData.images[user.gender || 'male']} className="absolute inset-0 w-full h-full object-cover object-top z-10" alt="Avatar" />
             </div>
             <div className="absolute -bottom-1.5 -right-1.5 bg-amber-900 text-amber-100 text-[9px] font-bold px-1.5 py-0.5 border border-amber-500 rounded shadow-md z-20">{user.level}</div>
         </div>
