@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 
-// Elegir Raza (Ya lo tenías, lo mantengo)
+// --- ELEGIR RAZA ---
 exports.chooseRace = async (req, res) => {
   const { userId, race, stats, backgroundId } = req.body;
   try {
@@ -21,7 +21,7 @@ exports.chooseRace = async (req, res) => {
   }
 };
 
-// ENTRENAR STATS (Aquí está el arreglo del BUG)
+// --- ENTRENAR STATS ---
 exports.trainStats = async (req, res) => {
   const { userId, newStats, pointsSpent } = req.body;
 
@@ -38,17 +38,12 @@ exports.trainStats = async (req, res) => {
     const remainingPoints = currentUser.stat_points - pointsSpent;
     
     // 3. Actualizamos en Base de Datos
-    // IMPORTANTE: También actualizamos la Vida Máxima si subió Constitución
-    // Fórmula: Const * 20. Si sube const, sube HP actual proporcionalmente o se mantiene (decisión de diseño).
-    // Por ahora solo actualizamos stats y puntos.
-    
     await pool.query(
       'UPDATE players SET stats = $1, stat_points = $2 WHERE id = $3',
       [newStats, remainingPoints, userId]
     );
 
     // 4. OBTENER EL USUARIO COMPLETO ACTUALIZADO PARA ENVIARLO AL FRONTEND
-    // Hacemos el JOIN para que no se pierda el inventario ni el fondo al actualizar
     const finalUserQuery = `
       SELECT p.*, b.image_url as active_background_url
       FROM players p
@@ -66,6 +61,13 @@ exports.trainStats = async (req, res) => {
     const itemsResult = await pool.query(itemsQuery, [userId]);
     finalUser.real_inventory = itemsResult.rows;
 
+    // Recuperamos las bolsas activas (para que no se pierdan al actualizar stats)
+    const bagsRes = await pool.query(
+      'SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()',
+      [userId]
+    );
+    finalUser.rented_bags = bagsRes.rows;
+
     // 5. RESPONDER CON ÉXITO Y DATOS NUEVOS
     res.json({ success: true, user: finalUser });
 
@@ -75,13 +77,11 @@ exports.trainStats = async (req, res) => {
   }
 };
 
-// ... (Tus funciones anteriores chooseRace y trainStats siguen aquí) ...
-
-// ALQUILAR MOCHILA (NUEVO)
+// ALQUILAR O EXTENDER MOCHILA
 exports.rentBag = async (req, res) => {
   const { userId, bagNumber } = req.body;
-  const COST = 50; // Precio fijo: 50 Ónix
-  const DAYS = 7;  // Duración: 7 Días
+  const COST = 50; 
+  const DAYS = 7; 
 
   try {
     // 1. Verificar saldo
@@ -92,42 +92,69 @@ exports.rentBag = async (req, res) => {
       return res.status(400).json({ message: 'No tienes suficiente Ónix (Necesitas 50).' });
     }
 
-    // 2. Calcular fecha de expiración (Ahora + 7 días)
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + DAYS);
+    // 2. CÁLCULO INTELIGENTE DE FECHA (Stacking)
+    // Verificamos si ya tiene un alquiler activo para esa bolsa
+    const rentalCheck = await pool.query(
+        'SELECT expires_at FROM player_bag_rentals WHERE player_id = $1 AND bag_number = $2',
+        [userId, bagNumber]
+    );
 
-    // 3. TRANSACCIÓN: Cobrar y Dar Bolsa
+    let baseDate = new Date(); // Por defecto, empieza a contar desde hoy
+    
+    if (rentalCheck.rows.length > 0) {
+        const currentExpiry = new Date(rentalCheck.rows[0].expires_at);
+        // Si la fecha de expiración es futura, la usamos como base. Si ya pasó, usamos hoy.
+        if (currentExpiry > baseDate) {
+            baseDate = currentExpiry;
+        }
+    }
+
+    // Sumamos los días a la fecha base
+    const newExpiryDate = new Date(baseDate);
+    newExpiryDate.setDate(newExpiryDate.getDate() + DAYS);
+
+    // 3. TRANSACCIÓN
     await pool.query('BEGIN');
     
-    // Restar dinero
+    // Cobrar
     await pool.query('UPDATE players SET onix = onix - $1 WHERE id = $2', [COST, userId]);
     
-    // Insertar o Actualizar alquiler (Si ya la tenía, extendemos el tiempo)
-    // Usamos ON CONFLICT para hacer un "Upsert"
+    // Guardar fecha nueva (Upsert)
     await pool.query(
       `INSERT INTO player_bag_rentals (player_id, bag_number, expires_at) 
        VALUES ($1, $2, $3)
        ON CONFLICT (player_id, bag_number) 
        DO UPDATE SET expires_at = $3`,
-      [userId, bagNumber, expiryDate]
+      [userId, bagNumber, newExpiryDate]
     );
 
     await pool.query('COMMIT');
 
-    // 4. Devolver datos actualizados (Usuario + Lista de bolsas alquiladas)
-    // Recuperamos el usuario actualizado
-    const finalUserRes = await pool.query('SELECT * FROM players WHERE id = $1', [userId]);
-    const updatedUser = finalUserRes.rows[0];
-
-    // Recuperamos las bolsas activas
-    const bagsRes = await pool.query(
-      'SELECT bag_number FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()',
+    // 4. Devolver datos actualizados
+    const finalUserRes = await pool.query(
+      `SELECT p.*, b.image_url as active_background_url
+       FROM players p
+       LEFT JOIN backgrounds b ON p.active_background_id = b.id
+       WHERE p.id = $1`, 
       [userId]
     );
-    // Convertimos a un array simple de números: [4, 5]
-    updatedUser.rented_bags = bagsRes.rows.map(row => row.bag_number);
+    const updatedUser = finalUserRes.rows[0];
 
-    res.json({ success: true, user: updatedUser, message: `¡Bolsa ${bagNumber} alquilada por 7 días!` });
+    const itemsQuery = `
+      SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.base_stats, it.description 
+      FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1
+    `;
+    const itemsResult = await pool.query(itemsQuery, [userId]);
+    updatedUser.real_inventory = itemsResult.rows;
+
+    // Recuperamos las bolsas con las nuevas fechas
+    const bagsRes = await pool.query(
+      'SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()',
+      [userId]
+    );
+    updatedUser.rented_bags = bagsRes.rows;
+
+    res.json({ success: true, user: updatedUser, message: `¡Bolsa ${bagNumber} extendida exitosamente!` });
 
   } catch (err) {
     await pool.query('ROLLBACK');

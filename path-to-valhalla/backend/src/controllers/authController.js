@@ -100,11 +100,11 @@ exports.login = async (req, res) => {
     const bgResult = await pool.query(bgQuery, [bgId]);
     const bgUrl = bgResult.rows.length > 0 ? bgResult.rows[0].image_url : '';
 
-    // 5. BOLSAS ALQUILADAS (AGREGADO)
-    // Buscamos bolsas activas (que no hayan expirado)
-    const bagsQuery = `SELECT bag_number FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()`;
+    // 5. BOLSAS ALQUILADAS (MODIFICADO PARA TRAER FECHA)
+    const bagsQuery = `SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()`;
     const bagsResult = await pool.query(bagsQuery, [user.id]);
-    const rentedBags = bagsResult.rows.map(row => row.bag_number); // Ejemplo: [4, 5]
+    // Ahora enviamos el objeto completo, no solo el número
+    const rentedBags = bagsResult.rows;
 
     const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' });
 
