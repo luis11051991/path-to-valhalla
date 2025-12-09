@@ -8,9 +8,6 @@ import GameLayout from './components/layout/GameLayout';
 function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('auth'); 
-
-  // CAMBIO 1: Usamos un booleano (true/false) en lugar de un contador.
-  // "false" asegura que SIEMPRE empiece cerrada al cargar.
   const [isShopOpen, setIsShopOpen] = useState(false); 
 
   useEffect(() => {
@@ -24,6 +21,7 @@ function App() {
 
   const handleAuthSuccess = (userData, isRegistration) => {
     setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData)); // Guardar en persistencia
     if (isRegistration) {
       setView('race');
     } else {
@@ -33,7 +31,16 @@ function App() {
 
   const handleRaceSelected = (updatedUserData) => {
     setUser(updatedUserData); 
+    localStorage.setItem('user', JSON.stringify(updatedUserData));
     setView('game');
+  };
+
+  // --- NUEVA FUNCIÓN PARA ACTUALIZAR ESTADO EN TIEMPO REAL ---
+  const handleUserUpdate = (updatedData) => {
+    // Fusionamos los datos viejos con los nuevos para no perder nada
+    const newUserState = { ...user, ...updatedData };
+    setUser(newUserState);
+    localStorage.setItem('user', JSON.stringify(newUserState));
   };
 
   const handleLogout = () => {
@@ -41,10 +48,9 @@ function App() {
     localStorage.removeItem('user');
     setUser(null);
     setView('auth');
-    setIsShopOpen(false); // Aseguramos que se cierre al salir
+    setIsShopOpen(false);
   };
 
-  // CAMBIO 2: Funciones directas para abrir y cerrar
   const openShop = () => setIsShopOpen(true);
   const closeShop = () => setIsShopOpen(false);
 
@@ -59,13 +65,13 @@ function App() {
       )}
 
       {view === 'game' && user && (
-        // Pasamos openShop al layout (para el botón de arriba)
         <GameLayout user={user} onLogout={handleLogout} onOpenShop={openShop}>
-            {/* Pasamos el estado (isShopOpen) y la función de cerrar (closeShop) al Dashboard */}
+            {/* Pasamos handleUserUpdate al Dashboard */}
             <Dashboard 
                 user={user} 
                 isShopOpen={isShopOpen} 
-                onCloseShop={closeShop} 
+                onCloseShop={closeShop}
+                onUpdateUser={handleUserUpdate} // <--- AQUÍ ESTÁ LA CLAVE
             />
         </GameLayout>
       )}
