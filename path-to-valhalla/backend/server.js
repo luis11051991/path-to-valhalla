@@ -2,14 +2,14 @@ const express = require('express');
 const cors = require('cors');
 
 // --- IMPORTACIONES ---
-// Fíjate que todas deben llevar "./src/" al principio
 const authController = require('./src/controllers/authController');
 const playerController = require('./src/controllers/playerController'); 
-const bgController = require('./src/controllers/backgroundController'); // <--- CORREGIDO AQUÍ (Faltaba /src/)
+const bgController = require('./src/controllers/backgroundController'); 
+const inventoryController = require('./src/controllers/inventoryController');
 
 const app = express();
 
-// Middlewares (Configuraciones de seguridad y comunicación)
+// Middlewares
 app.use(cors());
 app.use(express.json());
 
@@ -24,6 +24,13 @@ app.post('/api/rent-bag', playerController.rentBag);
 app.get('/api/backgrounds', bgController.getBackgrounds);
 app.post('/api/equip-background', bgController.equipBackground);
 app.post('/api/buy-background', bgController.buyBackground);
+
+// RUTAS DE INVENTARIO
+app.post('/api/inventory/move', inventoryController.moveItem);
+
+// RUTAS DE ADMIN / DEBUG (Para generar items)
+// CORRECCIÓN AQUÍ: Usamos 'adminGiveItem' que es el nombre real en tu controlador
+app.post('/api/admin/give-item', inventoryController.adminGiveItem);
 
 // --- ARRANQUE ---
 const PORT = 3000;
