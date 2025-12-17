@@ -3,7 +3,6 @@ import { Sword, Shield, Zap, Skull, Trophy, ArrowLeft, Lock, Clock, Heart, Cross
 import { RACES } from '../constants/races'; 
 
 const Expeditions = ({ user, onUpdateUser }) => {
-    // --- ESTADOS ---
     const [view, setView] = useState('MAP'); 
     const [selectedZone, setSelectedZone] = useState(null);
     const [zones, setZones] = useState([]);
@@ -49,7 +48,6 @@ const Expeditions = ({ user, onUpdateUser }) => {
 
     const playerStats = useMemo(() => {
         let bonuses = { strength: 0, dexterity: 0, constitution: 0, luck: 0, armor: 0, damage_min: 0, damage_max: 0 };
-        
         if (user.real_inventory) {
             user.real_inventory.forEach(item => {
                 if (item.is_equipped && item.base_stats) {
@@ -60,12 +58,10 @@ const Expeditions = ({ user, onUpdateUser }) => {
                 }
             });
         }
-
         const totalStr = (user.stats?.strength || 0) + bonuses.strength;
         const totalDex = (user.stats?.dexterity || 0) + bonuses.dexterity;
         const totalCon = (user.stats?.constitution || 0) + bonuses.constitution;
         const totalLuck = (user.stats?.luck || 0) + bonuses.luck;
-
         const strBonus = totalStr * 2;
         
         return {
@@ -245,7 +241,10 @@ const BattleModal = ({ result, onClose, user, playerImage, baseEnemy, playerStat
 
     return (
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 animate-in fade-in duration-300">
-            <div className="h-[45%] bg-[url('/backgrounds/arena_bg.png')] bg-cover bg-center relative flex items-center justify-center border-b-4 border-amber-900 shadow-2xl">
+            {/* CAMBIO CLAVE: Agregué 'pt-16' aquí para empujar el contenido hacia abajo.
+               Esto evita que los marcos de las cartas se corten en el borde superior.
+            */}
+            <div className="h-[55%] bg-[url('/backgrounds/arena_bg.png')] bg-cover bg-center relative flex items-center justify-center border-b-4 border-amber-900 shadow-2xl pt-16">
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
                 <div className="relative z-10 flex items-center gap-4 md:gap-12 w-full max-w-5xl px-4 justify-between">
                     
@@ -260,7 +259,6 @@ const BattleModal = ({ result, onClose, user, playerImage, baseEnemy, playerStat
                         </div>
                         <div className="w-36 md:w-56 bg-slate-900 border-2 border-amber-600 rounded-lg shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
                             <div className="h-40 md:h-56 bg-slate-800 relative">
-                                {/* AQUÍ ESTÁ EL CAMBIO DE IMAGEN: object-contain y object-bottom */}
                                 <img src={playerImage} className="w-full h-full object-contain object-bottom" alt="Hero" />
                                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900 to-transparent h-10" />
                             </div>
@@ -276,7 +274,7 @@ const BattleModal = ({ result, onClose, user, playerImage, baseEnemy, playerStat
 
                     {/* ENEMIGO */}
                     <div className="flex items-center gap-4 animate-in slide-in-from-right duration-500">
-                        <div className="w-36 md:w-56 bg-slate-900 border-2 border-red-600 rounded-lg shadow-[0_0_40px_rgba(220,38,38,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
+                        <div className="w-36 md:w-56 bg-slate-900 border-2 border-red-600 rounded-lg shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
                             <div className="h-40 md:h-56 bg-slate-800 relative">
                                 <img src={result.enemyImage} className="w-full h-full object-cover" alt="Enemy" onError={(e) => e.target.src="https://via.placeholder.com/150?text=Enemy"} />
                                 {baseEnemy?.is_boss && <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded font-bold animate-pulse shadow-lg">BOSS</div>}
@@ -298,7 +296,7 @@ const BattleModal = ({ result, onClose, user, playerImage, baseEnemy, playerStat
                 </div>
             </div>
 
-            <div className="h-[55%] flex flex-col bg-slate-950 relative">
+            <div className="h-[45%] flex flex-col bg-slate-950 relative">
                 <div className="absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
                 <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-2 font-mono text-sm max-w-4xl mx-auto w-full">
                     {visibleLines.map((line, idx) => (<div key={idx} className={`py-2 px-4 rounded ${getLogStyle(line.type)} animate-in slide-in-from-bottom-2`}>{line.msg}</div>))}

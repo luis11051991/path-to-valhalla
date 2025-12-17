@@ -8,6 +8,20 @@ import { RACES } from '../constants/races';
 import StatsPanel from './StatsPanel';
 import EvolutionModal from './EvolutionModal'; 
 
+// --- DICCIONARIO DE ICONOS PARA TOOLTIP ---
+const STAT_ICONS = {
+    strength: '💪',
+    dexterity: '⚡',
+    constitution: '❤️',
+    intelligence: '🧠',
+    wisdom: '✨',
+    charisma: '🎭',
+    luck: '🍀',
+    defense: '🛡️',
+    block: '🚫',
+    crit: '🎯'
+};
+
 const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) => {
 
     const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -45,11 +59,28 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
     const handleOrganizeInventory = async () => { try { const response = await fetch('http://localhost:3000/api/inventory/organize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id }) }); const data = await response.json(); if (data.success) { onUpdateUser({ ...user, real_inventory: data.inventory }); } else { setErrorMsg(data.message || "Error al organizar."); } } catch (error) { console.error("Error al organizar inventario:", error); setErrorMsg("Error de conexión al organizar."); } };
 
     // --- CALCULOS DE STATS ---
-    const itemBonuses = useMemo(() => { let bonuses = { strength: 0, dexterity: 0, constitution: 0, intelligence: 0, charisma: 0, luck: 0, armor: 0, damage_min: 0, damage_max: 0 }; if (user.real_inventory) { user.real_inventory.forEach(item => { if (item.is_equipped && item.base_stats) { Object.entries(item.base_stats).forEach(([key, val]) => { let valueToAdd = Array.isArray(val) ? Math.floor((val[0] + val[1]) / 2) : val; if (bonuses[key] !== undefined) bonuses[key] += valueToAdd; else bonuses[key] = valueToAdd; }); } }); } return bonuses; }, [user.real_inventory]);
+    const itemBonuses = useMemo(() => { 
+        // Inicializamos valores base para que existan, pero se pueden agregar otros dinámicamente
+        let bonuses = { strength: 0, dexterity: 0, constitution: 0, intelligence: 0, charisma: 0, luck: 0, armor: 0, damage_min: 0, damage_max: 0, defense: 0 }; 
+        if (user.real_inventory) { 
+            user.real_inventory.forEach(item => { 
+                if (item.is_equipped && item.base_stats) { 
+                    Object.entries(item.base_stats).forEach(([key, val]) => { 
+                        let valueToAdd = Array.isArray(val) ? Math.floor((val[0] + val[1]) / 2) : val; 
+                        if (bonuses[key] !== undefined) bonuses[key] += valueToAdd; 
+                        else bonuses[key] = valueToAdd; 
+                    }); 
+                } 
+            }); 
+        } 
+        return bonuses; 
+    }, [user.real_inventory]);
+
     const petBonuses = useMemo(() => { const active = myPets.find(p => p.is_active); if (!active || active.current_hunger <= 0) return {}; return active.bonus_stats || {}; }, [myPets]);
+    
     const totalBonuses = useMemo(() => { const combined = { ...itemBonuses }; Object.entries(petBonuses).forEach(([key, val]) => { combined[key] = (combined[key] || 0) + val; }); return combined; }, [itemBonuses, petBonuses]);
     
-    // --- ESTOS SON LOS STATS ACTUALES (PARA EL CUADRO DE ABAJO) ---
+    // --- ESTOS SON LOS STATS ACTUALES (CORREGIDO PARA INCLUIR 'defense') ---
     const derivedStats = useMemo(() => {
         const totalStats = { 
             strength: (user.stats.strength || 0) + (totalBonuses.strength || 0),
@@ -64,7 +95,9 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         const strBonus = totalStats.strength * 2;
         const totalDamageMin = (totalBonuses.damage_min || 0) + strBonus;
         const totalDamageMax = (totalBonuses.damage_max || 0) + strBonus;
-        const defense = (totalBonuses.armor || 0) + Math.floor(totalStats.constitution / 2);
+        
+        // CORRECCIÓN MATEMÁTICA: Sumamos Armor (Items) + Defense (Items) + Constitución
+        const defense = (totalBonuses.armor || 0) + (totalBonuses.defense || 0) + Math.floor(totalStats.constitution / 2);
         
         let critChance = Math.min(totalStats.dexterity * 0.25, 25);
         let blockChance = Math.min(totalStats.luck * 0.25, 25);
@@ -97,7 +130,42 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
     const currentXp = user.experience || 0; const maxXp = user.level * 1000; const xpPercent = Math.min((currentXp / maxXp) * 100, 100);
 
     const renderEquipmentSlot = (DefaultIcon, slotName, className = '', tooltipSide = 'top') => { const item = getEquippedItem(slotName); const ItemIcon = item ? ITEM_ICONS[item.icon] : DefaultIcon; return ( <div key={slotName} className={`w-12 h-12 lg:w-14 lg:h-14 bg-slate-900/80 border-2 rounded flex items-center justify-center relative group shadow-lg z-20 transition-all ${item ? 'border-amber-500 bg-slate-800 cursor-grab active:cursor-grabbing' : 'border-slate-600'} ${className}`} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, { type: 'equipped', slot: slotName })} onMouseEnter={(e) => handleMouseEnter(item, e, tooltipSide)} onMouseLeave={handleMouseLeave} draggable={!!item} onDragStart={(e) => handleDragStart(e, item)} > {item ? ( item.image_url ? ( <img src={item.image_url} alt={item.name} className="w-full h-full object-contain p-1 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" /> ) : ( <ItemIcon className="text-amber-500 drop-shadow-md" size={24} /> ) ) : ( <DefaultIcon className="text-slate-500 opacity-40" size={24} /> )} </div> ); };
-    const GlobalTooltip = () => { if (!tooltipData) return null; const { item, rect, side } = tooltipData; const stats = item.base_stats || {}; const durability = item.durability_current !== undefined ? item.durability_current : 100; const maxDurability = item.durability_max || 100; const isBroken = durability === 0; let style = { position: 'fixed', zIndex: 9999 }; if (side === 'left') { style.right = (window.innerWidth - rect.left) + 10; style.top = rect.top; } else if (side === 'top') { style.left = rect.left + (rect.width / 2) - 100; style.bottom = (window.innerHeight - rect.top) + 10; } else if (side === 'right') { style.left = rect.right + 10; style.top = rect.top; } else if (side === 'bottom') { style.left = rect.left + (rect.width / 2) - 100; style.top = rect.bottom + 10; } return ( <div style={style} className="bg-slate-950 border-2 border-amber-600 p-3 rounded shadow-[0_0_20px_rgba(0,0,0,0.8)] min-w-[200px] pointer-events-none animate-in fade-in zoom-in-95 duration-100"> <p className={`font-bold text-sm ${item.rarity === 'rare' ? 'text-blue-400' : item.rarity === 'epic' ? 'text-purple-400' : 'text-slate-200'}`}>{item.name}</p> <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p> <div className="mb-2 text-[10px] font-bold text-center border-b border-white/5 pb-1"> {item.is_bound ? ( <span className="text-red-500">🔒 VINCULADO (Soulbound)</span> ) : ( <span className="text-green-500">✨ TRADEABLE</span> )} </div> <div className="space-y-1 mb-2"> {stats.damage_min && <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{stats.damage_min} - {stats.damage_max}</span></p>} {stats.armor ? <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>🛡️ Armadura: <span className="text-white">{stats.armor}</span></p> : null} {Object.entries(stats).map(([key, val]) => { if (['damage_min', 'damage_max', 'armor'].includes(key)) return null; if (val <= 0) return null; return <p key={key} className="text-xs text-green-400 capitalize">🍀 {key}: +{val}</p>; })} </div> <div className="mt-2 pt-1 border-t border-white/10"> <div className="flex justify-between text-[10px] mb-0.5"><span className={isBroken ? "text-red-500 font-bold" : "text-slate-400"}>{isBroken ? "ROTO" : "Durabilidad"}</span><span className={durability < 20 ? "text-red-400" : "text-slate-400"}>{durability}/{maxDurability}</span></div> <div className="h-1 bg-slate-800 rounded-full overflow-hidden"><div className={`h-full ${durability < 20 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${(durability / maxDurability) * 100}%` }}></div></div> </div> <div className="text-[10px] mt-2 text-right border-t border-white/10 pt-1 flex justify-between items-center"> <span className="text-slate-500">Valor de venta:</span> {formatCurrency(item.price_copper)} </div> </div> ); };
+    
+    // --- TOOLTIP GLOBAL (CON ICONOS CORREGIDOS) ---
+    const GlobalTooltip = () => { 
+        if (!tooltipData) return null; 
+        const { item, rect, side } = tooltipData; 
+        const stats = item.base_stats || {}; 
+        const durability = item.durability_current !== undefined ? item.durability_current : 100; 
+        const maxDurability = item.durability_max || 100; 
+        const isBroken = durability === 0; 
+        let style = { position: 'fixed', zIndex: 9999 }; 
+        if (side === 'left') { style.right = (window.innerWidth - rect.left) + 10; style.top = rect.top; } else if (side === 'top') { style.left = rect.left + (rect.width / 2) - 100; style.bottom = (window.innerHeight - rect.top) + 10; } else if (side === 'right') { style.left = rect.right + 10; style.top = rect.top; } else if (side === 'bottom') { style.left = rect.left + (rect.width / 2) - 100; style.top = rect.bottom + 10; } 
+        return ( 
+            <div style={style} className="bg-slate-950 border-2 border-amber-600 p-3 rounded shadow-[0_0_20px_rgba(0,0,0,0.8)] min-w-[200px] pointer-events-none animate-in fade-in zoom-in-95 duration-100"> 
+                <p className={`font-bold text-sm ${item.rarity === 'rare' ? 'text-blue-400' : item.rarity === 'epic' ? 'text-purple-400' : 'text-slate-200'}`}>{item.name}</p> 
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p> 
+                <div className="mb-2 text-[10px] font-bold text-center border-b border-white/5 pb-1"> {item.is_bound ? ( <span className="text-red-500">🔒 VINCULADO (Soulbound)</span> ) : ( <span className="text-green-500">✨ TRADEABLE</span> )} </div> 
+                <div className="space-y-1 mb-2"> 
+                    {stats.damage_min && <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{stats.damage_min} - {stats.damage_max}</span></p>} 
+                    {stats.armor ? <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>🛡️ Armadura: <span className="text-white">{stats.armor}</span></p> : null} 
+                    {Object.entries(stats).map(([key, val]) => { 
+                        if (['damage_min', 'damage_max', 'armor'].includes(key)) return null; 
+                        if (val <= 0) return null; 
+                        // --- AQUÍ ESTÁ EL CAMBIO DE ICONO ---
+                        const icon = STAT_ICONS[key] || '🍀';
+                        return <p key={key} className="text-xs text-green-400 capitalize">{icon} {key}: +{val}</p>; 
+                    })} 
+                </div> 
+                <div className="mt-2 pt-1 border-t border-white/10"> 
+                    <div className="flex justify-between text-[10px] mb-0.5"><span className={isBroken ? "text-red-500 font-bold" : "text-slate-400"}>{isBroken ? "ROTO" : "Durabilidad"}</span><span className={durability < 20 ? "text-red-400" : "text-slate-400"}>{durability}/{maxDurability}</span></div> 
+                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden"><div className={`h-full ${durability < 20 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${(durability / maxDurability) * 100}%` }}></div></div> 
+                </div> 
+                <div className="text-[10px] mt-2 text-right border-t border-white/10 pt-1 flex justify-between items-center"> <span className="text-slate-500">Valor de venta:</span> {formatCurrency(item.price_copper)} </div> 
+            </div> 
+        ); 
+    };
+
     const ONYX_PACKAGES = [{ id: 1, amount: 100, price: "0.99" }, { id: 2, amount: 500, price: "4.99", popular: true }, { id: 3, amount: 1200, price: "9.99" }, { id: 4, amount: 3000, price: "24.99" }];
     const FREE_REWARDS = [{ id: 1, title: "Ver Anuncio", reward: "2 Ónix", icon: PlayCircle }, { id: 2, title: "Invitar Amigo", reward: "50 Ónix", icon: Users }, { id: 3, title: "Discord", reward: "20 Ónix", icon: MessageCircle }, { id: 4, title: "Bono Diario", reward: "5 Ónix", icon: Gift, completed: true }];
 
