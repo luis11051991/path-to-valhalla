@@ -23,9 +23,7 @@ const Auth = ({ onLoginSuccess }) => {
     e.preventDefault();
     const endpoint = isLogin ? 'http://localhost:3000/api/login' : 'http://localhost:3000/api/register';
     
-    // --- AQUÍ ESTÁ EL CAMBIO DE SEGURIDAD ---
     // Creamos un objeto 'payload' donde forzamos el email a minúsculas.
-    // La contraseña NO se toca para mantener la seguridad estricta.
     const payload = {
         ...formData,
         email: formData.email.toLowerCase() 
@@ -35,7 +33,7 @@ const Auth = ({ onLoginSuccess }) => {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload) // Enviamos 'payload' en vez de 'formData'
+        body: JSON.stringify(payload)
       });
       
       const data = await response.json();

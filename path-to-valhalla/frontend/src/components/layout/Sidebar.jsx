@@ -8,7 +8,8 @@ import {
     Crown // Premium
 } from 'lucide-react';
 
-const Sidebar = () => {
+// Ahora recibimos 'onNavigate' y 'currentView' desde GameLayout
+const Sidebar = ({ onNavigate, currentView }) => {
   
   // Componente para los Títulos de Sección
   const SectionHeader = ({ title }) => (
@@ -19,10 +20,11 @@ const Sidebar = () => {
     </div>
   );
 
-  // Componente para los Enlaces
-  const MenuLink = ({ icon: Icon, label, active, disabled }) => (
+  // Componente para los Enlaces (Actualizado para aceptar onClick)
+  const MenuLink = ({ icon: Icon, label, active, disabled, onClick }) => (
     <button 
         disabled={disabled}
+        onClick={onClick}
         className={`
             w-full flex items-center gap-3 px-6 py-2.5
             transition-all border-l-[3px]
@@ -42,18 +44,12 @@ const Sidebar = () => {
   return (
     <aside className="w-64 h-full flex flex-col bg-slate-950 border-r border-amber-900/30 shadow-[5px_0_30px_rgba(0,0,0,0.5)] relative z-30 overflow-hidden">
         
-        {/* ENCABEZADO "MENÚ" 
-            CORRECCIÓN: Cambiado de h-24 a h-20 para alinear con el TopBar 
-        */}
+        {/* ENCABEZADO "MENÚ" */}
         <div className="h-20 flex flex-col items-center justify-center border-b border-amber-900/30 bg-black/20 shrink-0 relative">
-            {/* Línea superior decorativa */}
             <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-900/50 to-transparent"></div>
-            
             <h1 className="text-amber-500 font-serif font-bold tracking-[0.3em] text-sm drop-shadow-md">
                 + MENÚ +
             </h1>
-
-            {/* Pequeña luz debajo */}
             <div className="w-10 h-0.5 bg-amber-700/50 rounded-full mt-1 shadow-[0_0_8px_rgba(245,158,11,0.4)]"></div>
         </div>
 
@@ -62,7 +58,15 @@ const Sidebar = () => {
             
             {/* SECCIÓN: HÉROE */}
             <SectionHeader title="Héroe" />
-            <MenuLink icon={User} label="Visión General" active />
+            
+            {/* Botón Visión General (Dashboard) */}
+            <MenuLink 
+                icon={User} 
+                label="Visión General" 
+                active={currentView === 'dashboard'} 
+                onClick={() => onNavigate('dashboard')} 
+            />
+            
             <MenuLink icon={BookOpen} label="Bestiario" />
             <MenuLink icon={Trophy} label="Logros" />
             <MenuLink icon={BarChart2} label="Estadísticas" />
@@ -70,7 +74,15 @@ const Sidebar = () => {
 
             {/* SECCIÓN: AVENTURA */}
             <SectionHeader title="Aventura" />
-            <MenuLink icon={Map} label="Expediciones" />
+            
+            {/* Botón Expediciones */}
+            <MenuLink 
+                icon={Map} 
+                label="Expediciones" 
+                active={currentView === 'expeditions'} 
+                onClick={() => onNavigate('expeditions')} 
+            />
+            
             <MenuLink icon={Skull} label="Mazmorras" />
             <MenuLink icon={ArrowUpCircle} label="Torre Infinita" disabled />
             <MenuLink icon={Scroll} label="Salón de Valhallus" />

@@ -1,141 +1,206 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Shield, Zap, Heart, Sword, Brain, Clover, Check, RefreshCw, ArrowRight } from 'lucide-react';
 
-const StatsPanel = ({ stats, availablePoints = 0, onSave }) => {
-  const safeAvailablePoints = Number(availablePoints) || 0;
-  const [currentStats, setCurrentStats] = useState(stats || {});
-  const [pointsSpent, setPointsSpent] = useState(0);
-
-  useEffect(() => {
-    if (stats) {
-      setCurrentStats(stats);
-      setPointsSpent(0);
-    }
-  }, [stats, availablePoints]);
-
-  const pointsRemaining = safeAvailablePoints - pointsSpent;
-
-  // --- CONFIGURACIÓN DE ATRIBUTOS Y DESCRIPCIONES ---
-  const attributesList = [
-    { 
-        key: 'strength', 
+// --- CONFIGURACIÓN: AQUÍ DEFINIMOS LO QUE HACE CADA STAT ---
+const STAT_CONFIG = {
+    strength: { 
         label: 'Fuerza', 
-        icon: '🗡️',
-        desc: 'Aumenta el Daño físico.\nCada 10 puntos = +1 Daño Mín/Máx.\nNecesario para usar armas pesadas.'
+        icon: Sword, 
+        color: 'text-red-400', 
+        desc: '1 Punto = +2 Daño Físico' 
     },
-    { 
-        key: 'dexterity', 
+    dexterity: { 
         label: 'Destreza', 
-        icon: '⚡',
-        desc: 'Aumenta la probabilidad de golpear.\nReduce la probabilidad de que el enemigo esquive.\nVital para arqueros y asesinos.'
+        icon: Zap, 
+        color: 'text-yellow-400', 
+        desc: '1 Punto = +0.25% Crítico (Max 25%)' 
     },
-    { 
-        key: 'constitution', 
+    constitution: { 
         label: 'Constitución', 
-        icon: '🛡️',
-        desc: 'Aumenta la Vida Máxima y la Regeneración.\n1 Constitución = 20 Puntos de Vida.\nRegeneras más vida por hora.'
+        icon: Shield, 
+        color: 'text-blue-400', 
+        desc: '1 Punto = +20 Vida y +0.5 Defensa' 
     },
-    { 
-        key: 'charisma', 
-        label: 'Carisma', 
-        icon: '👑',
-        desc: 'Reduce el tiempo de espera en Mazmorras.\nMejora los precios en el Mercado.\nAumenta la probabilidad de doble golpe.'
-    },
-    { 
-        key: 'intelligence', 
+    intelligence: { 
         label: 'Inteligencia', 
-        icon: '🧠',
-        desc: 'Aumenta el Daño Mágico y Maná.\nMejora la efectividad de las pociones.\nNecesario para bastones y hechizos.'
+        icon: Brain, 
+        color: 'text-purple-400', 
+        desc: '1 Punto = +0.5% Curación y +0.25% Skill Dmg' 
     },
-    { 
-        key: 'luck', 
+    luck: { 
         label: 'Suerte', 
-        icon: '🍀',
-        desc: 'Aumenta la probabilidad de Golpe Crítico.\nMejora la calidad de los objetos encontrados.\nAumenta el oro ganado en misiones.'
+        icon: Clover, 
+        color: 'text-green-400', 
+        desc: '1 Punto = +0.25% Bloqueo (Max 25%)' 
+    },
+    charisma: { 
+        label: 'Carisma', 
+        icon: Heart, 
+        color: 'text-pink-400', 
+        desc: 'Mejora precios y eventos' 
     }
-  ];
+};
 
-  const handleIncrement = (key) => {
-    if (pointsRemaining > 0) {
-      setCurrentStats(prev => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
-      setPointsSpent(prev => prev + 1);
-    }
-  };
+const StatsPanel = ({ stats, bonuses, availablePoints, onSave }) => {
+    // Estado temporal (lo que estás modificando antes de confirmar)
+    const [pendingStats, setPendingStats] = useState(stats);
+    const [spentPoints, setSpentPoints] = useState(0);
 
-  const handleDecrement = (key) => {
-    if (currentStats[key] > stats[key]) {
-      setCurrentStats(prev => ({ ...prev, [key]: prev[key] - 1 }));
-      setPointsSpent(prev => prev - 1);
-    }
-  };
+    // Reiniciar si el usuario sube de nivel externamente
+    useEffect(() => {
+        setPendingStats(stats);
+        setSpentPoints(0);
+    }, [stats]);
 
-  if (!stats) return <div className="text-gray-500">Cargando atributos...</div>;
+    // --- CÁLCULO DE LA "PREDICCIÓN" (Cuadro Fantasma) ---
+    const preview = useMemo(() => {
+        // Sumamos: Base + Puntos Nuevos + Bonos Verdes
+        const totalStr = pendingStats.strength + (bonuses.strength || 0);
+        const totalDex = pendingStats.dexterity + (bonuses.dexterity || 0);
+        const totalCon = pendingStats.constitution + (bonuses.constitution || 0);
+        const totalInt = pendingStats.intelligence + (bonuses.intelligence || 0);
+        const totalLuk = pendingStats.luck + (bonuses.luck || 0);
 
-  return (
-    <div className="bg-slate-900/80 backdrop-blur-md p-6 rounded-lg border border-amber-900/30 shadow-lg relative">
-      
-      <div className="flex justify-between items-center mb-6 border-b border-amber-900/30 pb-2">
-        <h2 className="text-lg font-serif font-bold text-amber-500 tracking-wider">ATRIBUTOS</h2>
-        <div className="text-xs font-mono">
-          <span className="text-slate-400">Puntos: </span>
-          <span className={`font-bold text-sm ${pointsRemaining > 0 ? "text-green-400 animate-pulse" : "text-slate-500"}`}>
-            {pointsRemaining}
-          </span>
-        </div>
-      </div>
+        // Calculamos resultados
+        const maxHp = 100 + (totalCon * 20);
+        const damageMin = (bonuses.damage_min || 0) + (totalStr * 2);
+        const damageMax = (bonuses.damage_max || 0) + (totalStr * 2);
+        const defense = (bonuses.armor || 0) + Math.floor(totalCon / 2);
+        
+        // Aplicamos Topes (Caps)
+        const critChance = Math.min(totalDex * 0.25, 25);
+        const blockChance = Math.min(totalLuk * 0.25, 25);
+        const healPower = Math.min(totalInt * 0.5, 25);
+        const skillDmg = Math.min(totalInt * 0.25, 25);
 
-      <div className="space-y-3">
-        {attributesList.map(({ key, label, icon, desc }) => {
-          const originalValue = stats[key] || 0;
-          const currentValue = currentStats[key] || 0;
-          const isIncreased = currentValue > originalValue;
+        return { maxHp, damageMin, damageMax, defense, critChance, blockChance, healPower, skillDmg };
+    }, [pendingStats, bonuses]);
 
-          return (
-            <div key={key} className="flex items-center justify-between group h-10 hover:bg-white/5 rounded px-2 transition-colors relative">
-              
-              {/* --- TOOLTIP DE ESTADÍSTICAS --- */}
-              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-black/95 border border-amber-500/50 p-3 rounded shadow-xl z-50 pointer-events-none">
-                  <h4 className="text-amber-500 font-bold text-xs mb-1">{label}</h4>
-                  <p className="text-[10px] text-slate-300 whitespace-pre-line leading-relaxed">{desc}</p>
-                  {/* Flechita decorativa del tooltip */}
-                  <div className="absolute top-full left-4 -mt-1 border-4 border-transparent border-t-amber-500/50"></div>
-              </div>
+    // Botones + y -
+    const handleIncrease = (key) => {
+        if (availablePoints - spentPoints > 0) {
+            setPendingStats(prev => ({ ...prev, [key]: prev[key] + 1 }));
+            setSpentPoints(prev => prev + 1);
+        }
+    };
 
-              <div className="flex items-center gap-3 w-32 cursor-help">
-                <span className="opacity-60 grayscale group-hover:grayscale-0 transition-all">{icon}</span>
-                <span className="text-slate-300 font-medium text-sm group-hover:text-amber-200 transition-colors">{label}</span>
-              </div>
+    const handleDecrease = (key) => {
+        if (pendingStats[key] > stats[key]) {
+            setPendingStats(prev => ({ ...prev, [key]: prev[key] - 1 }));
+            setSpentPoints(prev => prev - 1);
+        }
+    };
 
-              <div className="flex items-center gap-2 bg-slate-950/50 rounded border border-slate-800 px-1 py-0.5">
-                <span className={`w-8 text-center font-bold font-mono ${isIncreased ? 'text-green-400' : 'text-slate-200'}`}>
-                  {currentValue}
-                </span>
-                <div className="flex flex-col gap-[1px]">
-                  <button 
-                    onClick={() => handleIncrement(key)}
-                    disabled={pointsRemaining <= 0}
-                    className={`w-5 h-3 flex items-center justify-center text-[8px] rounded-sm transition-colors ${pointsRemaining > 0 ? 'bg-slate-700 hover:bg-green-600 text-white' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
-                  >▲</button>
-                  <button 
-                    onClick={() => handleDecrement(key)}
-                    disabled={!isIncreased}
-                    className={`w-5 h-3 flex items-center justify-center text-[8px] rounded-sm transition-colors ${isIncreased ? 'bg-slate-700 hover:bg-red-600 text-white' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
-                  >▼</button>
+    const handleReset = () => {
+        setPendingStats(stats);
+        setSpentPoints(0);
+    };
+
+    return (
+        <div className="bg-slate-900/80 border border-slate-700 rounded-lg p-4 mb-4 relative transition-all duration-300">
+            
+            {/* SECCIÓN 1: CABECERA Y PUNTOS DISPONIBLES */}
+            <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                <h3 className="text-amber-500 font-bold uppercase tracking-widest text-sm">Entrenamiento</h3>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Puntos Disponibles:</span>
+                    <span className={`font-mono font-bold text-lg ${availablePoints - spentPoints > 0 ? 'text-green-400 animate-pulse' : 'text-slate-500'}`}>
+                        {availablePoints - spentPoints}
+                    </span>
                 </div>
-              </div>
             </div>
-          );
-        })}
-      </div>
 
-      {pointsSpent > 0 && (
-        <div className="mt-6 pt-2 border-t border-amber-900/30">
-          <button onClick={() => onSave(currentStats, pointsSpent)} className="w-full py-2 bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-bold text-xs uppercase tracking-widest rounded shadow-[0_0_15px_rgba(217,119,6,0.4)] transition-all transform hover:scale-[1.02]">
-            Confirmar Entrenamiento
-          </button>
+            {/* SECCIÓN 2: LISTA DE ATRIBUTOS (Aquí está el bucle inteligente) */}
+            <div className="space-y-2 mb-4">
+                {Object.entries(STAT_CONFIG).map(([key, config]) => {
+                    const base = stats[key];
+                    const added = pendingStats[key] - base; // Puntos que estás sumando ahora
+                    const bonus = bonuses[key] || 0;        // Puntos verdes de items
+
+                    return (
+                        <div key={key} className="flex items-center justify-between group h-8">
+                            {/* Nombre e Icono */}
+                            <div className="flex items-center gap-2 w-5/12" title={config.desc}>
+                                <config.icon size={14} className={config.color} />
+                                <span className="text-xs font-bold text-slate-300">{config.label}</span>
+                                {/* Descripción flotante al pasar el mouse */}
+                                <span className="text-[9px] text-slate-500 hidden group-hover:inline opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                                    {config.desc}
+                                </span>
+                            </div>
+
+                            {/* Números: Base + (Agregado) + (Bono Verde) */}
+                            <div className="flex items-center gap-1 font-mono text-xs w-3/12 justify-center">
+                                <span className="text-white">{base}</span>
+                                {added > 0 && <span className="text-amber-400 font-bold animate-pulse">+{added}</span>}
+                                {bonus > 0 && <span className="text-emerald-600 text-[10px]">(+{bonus})</span>}
+                            </div>
+
+                            {/* Controles */}
+                            <div className="flex items-center bg-slate-800 rounded border border-slate-600 overflow-hidden h-6">
+                                <button onClick={() => handleDecrease(key)} disabled={added === 0} className="px-2 hover:bg-slate-700 text-slate-400 disabled:opacity-30">-</button>
+                                <div className="w-px bg-slate-600 h-full"></div>
+                                <button onClick={() => handleIncrease(key)} disabled={availablePoints - spentPoints === 0} className="px-2 hover:bg-green-900/30 text-green-400 disabled:opacity-30">+</button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* SECCIÓN 3: CUADRO FANTASMA DEL MEDIO (SOLO APARECE SI MODIFICAS PUNTOS) */}
+            {spentPoints > 0 && (
+                <div className="animate-in slide-in-from-top-4 fade-in duration-300 mt-4 border-t border-amber-500/30 pt-4">
+                    <div className="bg-gradient-to-r from-slate-900 to-black border border-amber-500 rounded-lg p-3 shadow-[0_0_15px_rgba(245,158,11,0.2)] relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-amber-500 animate-pulse"></div>
+                        
+                        <h4 className="text-amber-500 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <ArrowRight size={12} /> Resultado al Confirmar
+                        </h4>
+                        
+                        {/* Grid de Previsualización */}
+                        <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs mb-4">
+                            <div className="flex justify-between border-b border-white/5 pb-1">
+                                <span className="text-slate-400">Vida Máx</span>
+                                <span className="text-white font-mono">{preview.maxHp} <span className="text-amber-400 text-[10px]">(Nuevo)</span></span>
+                            </div>
+                            <div className="flex justify-between border-b border-white/5 pb-1">
+                                <span className="text-slate-400">Daño</span>
+                                <span className="text-white font-mono">{preview.damageMin} - {preview.damageMax}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-white/5 pb-1">
+                                <span className="text-slate-400">Crítico</span>
+                                <span className={preview.critChance >= 25 ? "text-red-500 font-bold" : "text-white"}>
+                                    {preview.critChance.toFixed(1)}% {preview.critChance >= 25 && "(MAX)"}
+                                </span>
+                            </div>
+                            <div className="flex justify-between border-b border-white/5 pb-1">
+                                <span className="text-slate-400">Bloqueo</span>
+                                <span className={preview.blockChance >= 25 ? "text-red-500 font-bold" : "text-white"}>
+                                    {preview.blockChance.toFixed(1)}% {preview.blockChance >= 25 && "(MAX)"}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Botones de Confirmación */}
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={handleReset}
+                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded text-xs font-bold transition-colors"
+                            >
+                                <RefreshCw size={12} className="inline mr-1" /> CANCELAR
+                            </button>
+                            <button 
+                                onClick={() => onSave(pendingStats, spentPoints)}
+                                className="flex-[2] bg-green-700 hover:bg-green-600 text-white py-2 rounded text-xs font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
+                            >
+                                <Check size={14} /> CONFIRMAR
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default StatsPanel;

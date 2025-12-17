@@ -1,36 +1,61 @@
 const express = require('express');
 const cors = require('cors');
 
-// --- IMPORTACIONES ---
+// --- IMPORTACIONES DE CONTROLADORES ---
 const authController = require('./src/controllers/authController');
 const playerController = require('./src/controllers/playerController'); 
 const bgController = require('./src/controllers/backgroundController'); 
 const inventoryController = require('./src/controllers/inventoryController');
+const petController = require('./src/controllers/petController'); // <--- NUEVO: Controlador de Mascotas
+
+// --- IMPORTACIÓN DE MIDDLEWARES ---
+const authMiddleware = require('./src/middleware/authMiddleware'); 
+
+// --- IMPORTAR GESTORES DE RUTAS (Routers) ---
+const authRoutes = require('./src/routes/authRoutes');
+const evolutionRoutes = require('./src/routes/evolutionRoutes');
+const expeditionRoutes = require('./src/routes/expeditionRoutes'); // <--- AGREGAR ESTO
 
 const app = express();
 
-// Middlewares
+// Middlewares Globales
 app.use(cors());
 app.use(express.json());
 
-// --- RUTAS (Endpoints) ---
+// --- 1. RUTAS NUEVAS (Router) ---
+app.use('/api/auth', authRoutes); 
+app.use('/api/evolution', evolutionRoutes);
+
+// --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);
 app.post('/api/login', authController.login);
+
+// --- 3. RUTAS DE JUGADOR ---
 app.post('/api/choose-race', playerController.chooseRace);
 app.post('/api/train-stats', playerController.trainStats);
 app.post('/api/rent-bag', playerController.rentBag);
 
-// RUTAS DE FONDOS
+// ---> RUTAS DE HABILIDADES <---
+app.get('/api/my-skills', authMiddleware, playerController.getMySkills);
+app.post('/api/equip-skill', authMiddleware, playerController.equipSkill);
+
+// ---> RUTAS DE MASCOTAS (NUEVO) <---
+app.get('/api/my-pets', authMiddleware, petController.getMyPets);
+app.post('/api/equip-pet', authMiddleware, petController.equipPet);
+app.post('/api/feed-pet', authMiddleware, petController.feedPet);
+
+// --- 4. RUTAS DE FONDOS ---
 app.get('/api/backgrounds', bgController.getBackgrounds);
 app.post('/api/equip-background', bgController.equipBackground);
 app.post('/api/buy-background', bgController.buyBackground);
 
-// RUTAS DE INVENTARIO
+// --- 5. RUTAS DE INVENTARIO ---
 app.post('/api/inventory/move', inventoryController.moveItem);
+app.post('/api/inventory/organize', inventoryController.organizeInventory);
 
-// RUTAS DE ADMIN / DEBUG (Para generar items)
-// CORRECCIÓN AQUÍ: Usamos 'adminGiveItem' que es el nombre real en tu controlador
+// --- 6. RUTAS DE ADMIN / DEBUG ---
 app.post('/api/admin/give-item', inventoryController.adminGiveItem);
+app.use('/api/expeditions', expeditionRoutes); // <--- AGREGAR ESTO
 
 // --- ARRANQUE ---
 const PORT = 3000;

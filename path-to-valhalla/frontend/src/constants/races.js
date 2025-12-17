@@ -1,25 +1,6 @@
-// IMPORTACIÓN DE IMÁGENES (Desde src/assets/races)
-// Humanos
-import humanoMale from '../assets/races/humano_base_lv1.png';
-import humanoFemale from '../assets/races/humana_base_lv1.png';
-// Elfos
-import elfoMale from '../assets/races/elfo_base_lv1.png';
-import elfaFemale from '../assets/races/elfa_base_lv1.png';
-// Enanos
-import enanoMale from '../assets/races/enano_base_lv1.png';
-import enanaFemale from '../assets/races/enana_base_lv1.png';
-// Orcos
-import orcoMale from '../assets/races/orco_base_lv1.png';
-import orcaFemale from '../assets/races/orca_base_lv1.png';
-// Felinos
-import felinoMale from '../assets/races/felino_base_lv1.png';
-import felinaFemale from '../assets/races/felina_base_lv1.png';
-// Goblins
-import goblinMale from '../assets/races/goblin_base_lv1.png';
-import goblinaFemale from '../assets/races/goblina_base_lv1.png';
-
-// NOTA: Los fondos siguen usando rutas públicas (strings) porque esos sí están en 'public/backgrounds'
-// Si los fondos también estuvieran en src/assets, tendrías que importarlos igual que los personajes.
+// CONSTANTES DE RAZAS
+// Actualizado para usar el nuevo sistema de imágenes estandarizado (Tier 0)
+// Las imágenes se cargan desde la carpeta 'public/classes/'
 
 export const RACES = [
     {
@@ -27,8 +8,8 @@ export const RACES = [
         name: 'Humano Vikingo',
         description: 'Mercaderes natos y guerreros versátiles. Ganan +5% de Oro.',
         images: {
-            male: humanoMale,
-            female: humanoFemale
+            male: '/classes/human_t0_male.png',
+            female: '/classes/human_t0_female.png'
         },
         bgImage: '/backgrounds/background_base_humano.png',
         stats: { strength: 5, dexterity: 5, constitution: 5, intelligence: 5, charisma: 7, luck: 5 },
@@ -50,8 +31,8 @@ export const RACES = [
         name: 'Elfo',
         description: 'Maestros de los bosques y la magia. +5% Creación de Pociones.',
         images: {
-            male: elfoMale,
-            female: elfaFemale
+            male: '/classes/elf_t0_male.png',
+            female: '/classes/elf_t0_female.png'
         },
         bgImage: '/backgrounds/background_base_elfo.png',
         stats: { strength: 4, dexterity: 7, constitution: 4, intelligence: 6, charisma: 5, luck: 5 },
@@ -73,8 +54,8 @@ export const RACES = [
         name: 'Enano',
         description: 'Robustos y tercos. +5% Creación de Armaduras.',
         images: {
-            male: enanoMale,
-            female: enanaFemale
+            male: '/classes/dwarf_t0_male.png',
+            female: '/classes/dwarf_t0_female.png'
         },
         bgImage: '/backgrounds/background_base_enano.png',
         stats: { strength: 6, dexterity: 3, constitution: 8, intelligence: 4, charisma: 4, luck: 5 },
@@ -96,8 +77,8 @@ export const RACES = [
         name: 'Orco',
         description: 'Fuerza bruta desencadenada. +5% Creación de Armas.',
         images: {
-            male: orcoMale,
-            female: orcaFemale
+            male: '/classes/orc_t0_male.png',
+            female: '/classes/orc_t0_female.png'
         },
         bgImage: '/backgrounds/background_base_orco.png',
         stats: { strength: 9, dexterity: 4, constitution: 6, intelligence: 2, charisma: 3, luck: 3 },
@@ -119,8 +100,8 @@ export const RACES = [
         name: 'Felino',
         description: 'Instinto depredador. +5% Domar Bestias.',
         images: {
-            male: felinoMale,
-            female: felinaFemale
+            male: '/classes/feline_t0_male.png',
+            female: '/classes/feline_t0_female.png'
         },
         bgImage: '/backgrounds/background_base_felino.png',
         stats: { strength: 5, dexterity: 8, constitution: 4, intelligence: 4, charisma: 4, luck: 5 },
@@ -142,8 +123,8 @@ export const RACES = [
         name: 'Duende',
         description: 'Astutos y rápidos. +5% Encontrar Objetos.',
         images: {
-            male: goblinMale,
-            female: goblinaFemale
+            male: '/classes/goblin_t0_male.png',
+            female: '/classes/goblin_t0_female.png'
         },
         bgImage: '/backgrounds/background_base_goblin.png',
         stats: { strength: 3, dexterity: 8, constitution: 3, intelligence: 7, charisma: 3, luck: 8 },
