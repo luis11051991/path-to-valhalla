@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle, Crown, User, Sword, Shield, Zap, Loader2 } from 'lucide-react';
 import { RACES } from '../constants/races';
+import { apiUrl } from '../constants/api';
 
 const RaceSelection = ({ onRaceSelect }) => {
   // Estados de Selección
   const [currentIndex, setCurrentIndex] = useState(0);
   const [gender, setGender] = useState('male');
-  
+
   // Estados de Transición e Interfaz
   const [isTransitioning, setIsTransitioning] = useState(false); // Para bloquear clics rápidos
   const [showWelcome, setShowWelcome] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Usuario actualizado (para mostrar el nombre en la bienvenida)
-  const [updatedUser, setUpdatedUser] = useState(null); 
+  const [updatedUser, setUpdatedUser] = useState(null);
 
   // Referencias a la raza actual
   const currentRace = RACES[currentIndex];
@@ -23,29 +24,29 @@ const RaceSelection = ({ onRaceSelect }) => {
   useEffect(() => {
     const nextIndex = (currentIndex + 1) % RACES.length;
     const prevIndex = (currentIndex - 1 + RACES.length) % RACES.length;
-    
+
     const preloadImages = [
-        RACES[nextIndex].images[gender],
-        RACES[nextIndex].bgImage,
-        RACES[prevIndex].images[gender],
-        RACES[prevIndex].bgImage
+      RACES[nextIndex].images[gender],
+      RACES[nextIndex].bgImage,
+      RACES[prevIndex].images[gender],
+      RACES[prevIndex].bgImage
     ];
 
     preloadImages.forEach(src => {
-        const img = new Image();
-        img.src = src;
+      const img = new Image();
+      img.src = src;
     });
   }, [currentIndex, gender]);
 
   // Manejo de cambio de raza (Animación suave)
   const changeRace = (newIndex) => {
     if (isSaving || showWelcome || isTransitioning) return;
-    
+
     setIsTransitioning(true);
     // Pequeño delay para permitir que la animación CSS de salida ocurra si quisieras ponerla
     // Pero para evitar el negro, cambiamos el índice inmediatamente y dejamos que CSS haga el fade
     setCurrentIndex(newIndex);
-    
+
     // Desbloqueamos la interacción rápidamente
     setTimeout(() => setIsTransitioning(false), 300);
   };
@@ -56,18 +57,18 @@ const RaceSelection = ({ onRaceSelect }) => {
   const handleConfirm = async () => {
     setIsSaving(true);
     const storedUser = JSON.parse(localStorage.getItem('user'));
-    
+
     if (!storedUser) { alert("Error de sesión."); setIsSaving(false); return; }
 
     try {
-      const response = await fetch('http://localhost:3000/api/choose-race', {
+      const response = await fetch(apiUrl('/api/choose-race'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            userId: storedUser.id, 
-            race: currentRace.id,
-            stats: currentRace.stats,
-            gender: gender
+        body: JSON.stringify({
+          userId: storedUser.id,
+          race: currentRace.id,
+          stats: currentRace.stats,
+          gender: gender
         })
       });
 
@@ -86,12 +87,12 @@ const RaceSelection = ({ onRaceSelect }) => {
   // PANTALLA DE BIENVENIDA (Ahora usa el NICKNAME)
   if (showWelcome && updatedUser) {
     return (
-        <WelcomeScreenDisplay 
-            raceName={currentRace.name}
-            username={updatedUser.username} // Pasamos el nombre del usuario
-            bgImage={currentRace.bgImage}
-            onFinish={() => { if(onRaceSelect) onRaceSelect(updatedUser); }} 
-        />
+      <WelcomeScreenDisplay
+        raceName={currentRace.name}
+        username={updatedUser.username} // Pasamos el nombre del usuario
+        bgImage={currentRace.bgImage}
+        onFinish={() => { if (onRaceSelect) onRaceSelect(updatedUser); }}
+      />
     );
   }
 
@@ -115,12 +116,12 @@ const RaceSelection = ({ onRaceSelect }) => {
 
   return (
     <div className="h-screen w-full relative flex flex-col items-center justify-center overflow-hidden bg-slate-950 font-sans">
-      
+
       {/* FONDO (Con Key para forzar re-render suave, pero sin ocultar el contenedor padre) */}
       <div className="absolute inset-0 z-0 bg-black">
-        <img 
+        <img
           key={currentRace.id} // El key ayuda a React a entender que la imagen cambió
-          src={currentRace.bgImage} 
+          src={currentRace.bgImage}
           alt="Background Class"
           className="w-full h-full object-cover opacity-40 blur-sm scale-105 animate-[fadeIn_1s_ease-out]"
         />
@@ -132,42 +133,42 @@ const RaceSelection = ({ onRaceSelect }) => {
       </div>
 
       <div className="relative z-10 w-full max-w-[90%] 2xl:max-w-[1600px] flex items-center justify-between px-4 h-full pt-20">
-        
+
         <button onClick={handlePrev} disabled={isTransitioning} className="p-4 rounded-full border-2 border-slate-700 hover:border-amber-500 hover:text-amber-500 transition-all bg-slate-900/50 backdrop-blur-md shadow-2xl group hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
           <ChevronLeft size={40} className="group-hover:-translate-x-1 transition-transform" />
         </button>
 
         {/* CONTENEDOR PRINCIPAL */}
         <div className="flex flex-col lg:flex-row items-center justify-center gap-12 xl:gap-24 animate-[fadeIn_0.5s_ease-out]">
-          
+
           {/* --- IMAGEN Y GÉNERO --- */}
           <div className="flex flex-col items-center gap-6">
-              <div className="relative group shrink-0">
-                  <div className="absolute -inset-3 border-2 border-slate-800 rotate-2 group-hover:rotate-3 transition-transform duration-700" />
-                  <div className="w-[300px] h-[450px] xl:w-[450px] xl:h-[650px] bg-slate-900 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.6)] relative rounded border-2 border-slate-700">
-                    {/* IMAGEN PRINCIPAL */}
-                    <img 
-                        key={`${currentRace.id}-${gender}`} // Key única para forzar fade-in al cambiar
-                        src={currentRace.images[gender]} 
-                        alt={currentRace.name}
-                        className="w-full h-full object-contain bg-black/20 transition-transform duration-700 group-hover:scale-105 animate-[fadeIn_0.5s_ease-out]"
-                    />
-                    
-                    <div className="absolute bottom-0 inset-x-0 h-48 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-8">
-                      <h3 className="text-4xl xl:text-5xl font-bold text-white uppercase leading-none drop-shadow-xl">{currentRace.name}</h3>
-                      <p className="text-amber-500 text-sm xl:text-base font-mono mt-2 tracking-[0.3em] border-t border-amber-500/50 pt-2 inline-block">{currentRace.id.toUpperCase()}</p>
-                    </div>
-                  </div>
-              </div>
+            <div className="relative group shrink-0">
+              <div className="absolute -inset-3 border-2 border-slate-800 rotate-2 group-hover:rotate-3 transition-transform duration-700" />
+              <div className="w-[300px] h-[450px] xl:w-[450px] xl:h-[650px] bg-slate-900 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.6)] relative rounded border-2 border-slate-700">
+                {/* IMAGEN PRINCIPAL */}
+                <img
+                  key={`${currentRace.id}-${gender}`} // Key única para forzar fade-in al cambiar
+                  src={currentRace.images[gender]}
+                  alt={currentRace.name}
+                  className="w-full h-full object-contain bg-black/20 transition-transform duration-700 group-hover:scale-105 animate-[fadeIn_0.5s_ease-out]"
+                />
 
-              {/* SELECTOR DE GÉNERO */}
-              <div className="flex gap-4 bg-black/60 p-2 rounded-full border border-slate-700 backdrop-blur-md shadow-lg pointer-events-auto">
-                <button onClick={() => setGender('male')} className={`px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${gender === 'male' ? 'bg-blue-900/80 text-blue-200 border border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
-                    <User size={16} /> Masculino
-                </button>
-                <button onClick={() => setGender('female')} className={`px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${gender === 'female' ? 'bg-pink-900/80 text-pink-200 border border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
-                    <User size={16} /> Femenino
-                </button>
+                <div className="absolute bottom-0 inset-x-0 h-48 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-8">
+                  <h3 className="text-4xl xl:text-5xl font-bold text-white uppercase leading-none drop-shadow-xl">{currentRace.name}</h3>
+                  <p className="text-amber-500 text-sm xl:text-base font-mono mt-2 tracking-[0.3em] border-t border-amber-500/50 pt-2 inline-block">{currentRace.id.toUpperCase()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* SELECTOR DE GÉNERO */}
+            <div className="flex gap-4 bg-black/60 p-2 rounded-full border border-slate-700 backdrop-blur-md shadow-lg pointer-events-auto">
+              <button onClick={() => setGender('male')} className={`px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${gender === 'male' ? 'bg-blue-900/80 text-blue-200 border border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
+                <User size={16} /> Masculino
+              </button>
+              <button onClick={() => setGender('female')} className={`px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${gender === 'female' ? 'bg-pink-900/80 text-pink-200 border border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
+                <User size={16} /> Femenino
+              </button>
             </div>
           </div>
 
@@ -180,7 +181,7 @@ const RaceSelection = ({ onRaceSelect }) => {
             <div className="grid grid-cols-6 gap-3">
               {Object.entries(currentRace.stats).map(([stat, val]) => (
                 <div key={stat} className="flex flex-col items-center bg-slate-800/60 p-3 rounded border border-slate-700/50 hover:border-amber-500/50 transition-colors">
-                  <span className="text-[10px] xl:text-xs text-slate-400 font-bold uppercase">{stat.substring(0,3)}</span>
+                  <span className="text-[10px] xl:text-xs text-slate-400 font-bold uppercase">{stat.substring(0, 3)}</span>
                   <span className="text-2xl xl:text-3xl text-amber-500 font-mono leading-none mt-1">{val}</span>
                 </div>
               ))}
@@ -209,30 +210,30 @@ const RaceSelection = ({ onRaceSelect }) => {
 
 // PANTALLA DE BIENVENIDA ACTUALIZADA
 const WelcomeScreenDisplay = ({ raceName, username, bgImage, onFinish }) => {
-    React.useEffect(() => { const timer = setTimeout(onFinish, 4000); return () => clearTimeout(timer); }, [onFinish]);
-    return (
-        <div className="min-h-screen relative flex items-center justify-center bg-black overflow-hidden animate-[fadeIn_1s_ease-out]">
-            <div className="absolute inset-0 z-0">
-                <img src={bgImage} className="w-full h-full object-cover opacity-40 blur-sm scale-110" />
-                <div className="absolute inset-0 bg-black/60" />
-            </div>
-            <div className="relative z-10 text-center max-w-4xl p-12 border-y-2 border-amber-500/30 bg-slate-900/80 backdrop-blur-md shadow-2xl">
-                <Crown size={80} className="text-amber-500 mx-auto mb-8 animate-pulse" />
-                
-                {/* --- AQUÍ ESTÁ EL CAMBIO DE TEXTO --- */}
-                <h1 className="text-4xl md:text-6xl font-serif text-slate-100 mb-4 uppercase tracking-widest text-shadow-lg">
-                    Bienvenido a la Aventura
-                </h1>
-                <h2 className="text-3xl md:text-5xl text-amber-500 font-bold uppercase mb-10 tracking-[0.2em] drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]">
-                    {username}
-                </h2>
-                {/* ---------------------------------- */}
+  React.useEffect(() => { const timer = setTimeout(onFinish, 4000); return () => clearTimeout(timer); }, [onFinish]);
+  return (
+    <div className="min-h-screen relative flex items-center justify-center bg-black overflow-hidden animate-[fadeIn_1s_ease-out]">
+      <div className="absolute inset-0 z-0">
+        <img src={bgImage} className="w-full h-full object-cover opacity-40 blur-sm scale-110" />
+        <div className="absolute inset-0 bg-black/60" />
+      </div>
+      <div className="relative z-10 text-center max-w-4xl p-12 border-y-2 border-amber-500/30 bg-slate-900/80 backdrop-blur-md shadow-2xl">
+        <Crown size={80} className="text-amber-500 mx-auto mb-8 animate-pulse" />
 
-                <div className="w-full h-2 bg-slate-700 rounded-full mt-8 overflow-hidden"><div className="h-full bg-amber-500 animate-[width_4s_linear_forwards]" style={{ width: '0%' }}></div></div>
-            </div>
-            <style>{`@keyframes width { to { width: 100%; } }`}</style>
-        </div>
-    );
+        {/* --- AQUÍ ESTÁ EL CAMBIO DE TEXTO --- */}
+        <h1 className="text-4xl md:text-6xl font-serif text-slate-100 mb-4 uppercase tracking-widest text-shadow-lg">
+          Bienvenido a la Aventura
+        </h1>
+        <h2 className="text-3xl md:text-5xl text-amber-500 font-bold uppercase mb-10 tracking-[0.2em] drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]">
+          {username}
+        </h2>
+        {/* ---------------------------------- */}
+
+        <div className="w-full h-2 bg-slate-700 rounded-full mt-8 overflow-hidden"><div className="h-full bg-amber-500 animate-[width_4s_linear_forwards]" style={{ width: '0%' }}></div></div>
+      </div>
+      <style>{`@keyframes width { to { width: 100%; } }`}</style>
+    </div>
+  );
 };
 
 export default RaceSelection;

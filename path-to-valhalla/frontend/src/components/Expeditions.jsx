@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Sword, Shield, Zap, Skull, Trophy, ArrowLeft, Lock, Clock, Heart, Crosshair, Ban } from 'lucide-react';
 import { RACES } from '../constants/races';
+import { apiUrl } from '../constants/api';
 
 const Expeditions = ({ user, onUpdateUser }) => {
     // --- ESTADOS ---
@@ -48,7 +49,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
 
     // --- CARGAR MAPA ---
     useEffect(() => {
-        fetch('http://localhost:3000/api/expeditions', {
+        fetch(apiUrl('/api/expeditions'), {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
             .then(res => res.json())
@@ -97,7 +98,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
         if (user.level < zone.level_req) return;
         setSelectedZone(zone);
         setLoading(true);
-        fetch(`http://localhost:3000/api/expeditions/${zone.id}/enemies`, {
+        fetch(apiUrl(`/api/expeditions/${zone.id}/enemies`), {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
             .then(res => res.json())
@@ -120,7 +121,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
         setCurrentEnemy(enemy);
 
         try {
-            const res = await fetch('http://localhost:3000/api/expeditions/start', {
+            const res = await fetch(apiUrl('/api/expeditions/start'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -134,7 +135,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
             if (data.success) {
                 setBattleResult(data.combatResult);
                 setView('BATTLE');
-                fetch('http://localhost:3000/api/auth/profile', {
+                fetch(apiUrl('/api/auth/profile'), {
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                 }).then(r => r.json()).then(d => { if (d.user) onUpdateUser(d.user); });
             } else {

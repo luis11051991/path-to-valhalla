@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { User, Lock, Mail, Sword, Skull, CheckCircle } from 'lucide-react';
+import { apiUrl } from '../constants/api';
 
 // IMÁGENES
 import loginBg from '../assets/backgrounds/fondo_login_1.png';
-import registerBg from '../assets/backgrounds/fondo_registro_1.png'; 
+import registerBg from '../assets/backgrounds/fondo_registro_1.png';
 
 // Recibimos la prop 'onLoginSuccess' desde App.jsx para notificar el éxito
 const Auth = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
-  
+
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [userData, setUserData] = useState(null);
 
@@ -21,12 +22,12 @@ const Auth = ({ onLoginSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const endpoint = isLogin ? 'http://localhost:3000/api/login' : 'http://localhost:3000/api/register';
-    
+    const endpoint = isLogin ? apiUrl('/api/login') : apiUrl('/api/register');
+
     // Creamos un objeto 'payload' donde forzamos el email a minúsculas.
     const payload = {
-        ...formData,
-        email: formData.email.toLowerCase() 
+      ...formData,
+      email: formData.email.toLowerCase()
     };
 
     try {
@@ -35,9 +36,9 @@ const Auth = ({ onLoginSuccess }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Error desconocido');
       }
@@ -45,14 +46,14 @@ const Auth = ({ onLoginSuccess }) => {
       // Guardamos en LocalStorage
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      
+
       // Guardamos datos para el modal
       setUserData(data.user);
       setShowSuccessModal(true);
 
       // Esperamos 2 segundos y notificamos a App.jsx
       setTimeout(() => {
-         if(onLoginSuccess) onLoginSuccess(data.user, !isLogin);
+        if (onLoginSuccess) onLoginSuccess(data.user, !isLogin);
       }, 2000);
 
     } catch (err) {
@@ -65,22 +66,22 @@ const Auth = ({ onLoginSuccess }) => {
   const handleEnterGame = () => {
     setShowSuccessModal(false);
     // Pasamos los mismos datos: usuario y si fue registro (!isLogin)
-    if(onLoginSuccess && userData) onLoginSuccess(userData, !isLogin);
+    if (onLoginSuccess && userData) onLoginSuccess(userData, !isLogin);
   };
 
   return (
     <div className="min-h-screen relative flex items-center justify-center overflow-hidden bg-black">
-      
+
       {/* IMAGEN DE REGISTRO (Fondo) */}
-      <img 
-        src={registerBg} 
+      <img
+        src={registerBg}
         alt="Fondo Registro"
         className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-1000 ease-in-out ${!isLogin ? 'opacity-100' : 'opacity-0'}`}
       />
 
       {/* IMAGEN DE LOGIN (Frente) */}
-      <img 
-        src={loginBg} 
+      <img
+        src={loginBg}
         alt="Fondo Login"
         className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-1000 ease-in-out ${isLogin ? 'opacity-100' : 'opacity-0'}`}
       />
@@ -99,48 +100,48 @@ const Auth = ({ onLoginSuccess }) => {
           animate-float  
           ${showSuccessModal ? 'blur-sm scale-95' : ''}
       `}>
-        
+
         <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-amber-500 tracking-widest uppercase font-serif mb-2 drop-shadow-md">
-                Path to Valhalla
-            </h1>
-            <div className="flex justify-center items-center gap-2 text-slate-300">
-                <Sword size={16} />
-                <span className="text-sm uppercase tracking-wider font-semibold">
-                    {isLogin ? 'Acceso al Reino' : 'Nuevo Juramento'}
-                </span>
-                <Sword size={16} className="scale-x-[-1]" />
-            </div>
+          <h1 className="text-4xl font-bold text-amber-500 tracking-widest uppercase font-serif mb-2 drop-shadow-md">
+            Path to Valhalla
+          </h1>
+          <div className="flex justify-center items-center gap-2 text-slate-300">
+            <Sword size={16} />
+            <span className="text-sm uppercase tracking-wider font-semibold">
+              {isLogin ? 'Acceso al Reino' : 'Nuevo Juramento'}
+            </span>
+            <Sword size={16} className="scale-x-[-1]" />
+          </div>
         </div>
 
         {error && (
-            <div className="mb-4 p-3 bg-red-900/60 border border-red-500 text-red-100 text-sm rounded flex items-center gap-2 animate-pulse">
-                <Skull size={16} />
-                {error}
-            </div>
+          <div className="mb-4 p-3 bg-red-900/60 border border-red-500 text-red-100 text-sm rounded flex items-center gap-2 animate-pulse">
+            <Skull size={16} />
+            {error}
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Animación de entrada para el nombre (Solo en registro) */}
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${!isLogin ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
-             <div className="relative group">
-                <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-amber-500 transition-colors" size={20} />
-                <input 
-                  type="text" 
-                  name="username"
-                  placeholder="Nombre del Guerrero" 
-                  onChange={handleChange}
-                  className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-500"
-                />
-              </div>
+            <div className="relative group">
+              <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-amber-500 transition-colors" size={20} />
+              <input
+                type="text"
+                name="username"
+                placeholder="Nombre del Guerrero"
+                onChange={handleChange}
+                className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-500"
+              />
+            </div>
           </div>
 
           <div className="relative group">
             <Mail className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-amber-500 transition-colors" size={20} />
-            <input 
-              type="email" 
+            <input
+              type="email"
               name="email"
-              placeholder="Correo Electrónico" 
+              placeholder="Correo Electrónico"
               onChange={handleChange}
               className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-500"
             />
@@ -148,17 +149,17 @@ const Auth = ({ onLoginSuccess }) => {
 
           <div className="relative group">
             <Lock className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-amber-500 transition-colors" size={20} />
-            <input 
-              type="password" 
+            <input
+              type="password"
               name="password"
-              placeholder="Palabra Secreta" 
+              placeholder="Palabra Secreta"
               onChange={handleChange}
               className="w-full bg-black/40 border border-slate-600 rounded py-3 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-500"
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="w-full bg-gradient-to-r from-amber-700/90 to-amber-600/90 hover:from-amber-600 hover:to-amber-500 text-white font-bold py-3 rounded border border-amber-500/50 transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg uppercase tracking-widest text-sm"
           >
             {isLogin ? 'Entrar al Valhalla' : 'Forjar Destino'}
@@ -166,7 +167,7 @@ const Auth = ({ onLoginSuccess }) => {
         </form>
 
         <div className="mt-6 text-center text-slate-300 text-sm">
-          <button 
+          <button
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
             className="text-amber-400 hover:text-amber-300 font-semibold hover:underline decoration-amber-500/50 underline-offset-4 transition-all"
           >
@@ -189,7 +190,7 @@ const Auth = ({ onLoginSuccess }) => {
             <p className="text-center text-slate-300 mb-6">
               El Valhalla abre sus puertas, <span className="text-amber-400 font-bold">{userData.username}</span>.
             </p>
-            <button 
+            <button
               onClick={handleEnterGame}
               className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded uppercase tracking-widest transition-colors shadow-lg border border-amber-400 hover:shadow-amber-500/50"
             >

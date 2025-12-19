@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, ChevronRight, Award, ShieldAlert, Sword, Shield, Zap, Heart, Crosshair } from 'lucide-react';
+import { apiUrl } from '../constants/api';
 
 const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
     const [options, setOptions] = useState([]);
@@ -8,31 +9,31 @@ const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        fetch('http://localhost:3000/api/evolution/options', {
+        fetch(apiUrl('/api/evolution/options'), {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
-        .then(res => res.json())
-        .then(data => {
-            if (data.available) {
-                setOptions(data.options);
-            } else {
-                setError(data.message);
-            }
-            setLoading(false);
-        })
-        .catch(err => {
-            console.error(err);
-            setError("Error conectando con el destino.");
-            setLoading(false);
-        });
+            .then(res => res.json())
+            .then(data => {
+                if (data.available) {
+                    setOptions(data.options);
+                } else {
+                    setError(data.message);
+                }
+                setLoading(false);
+            })
+            .catch(err => {
+                console.error(err);
+                setError("Error conectando con el destino.");
+                setLoading(false);
+            });
     }, []);
 
     const handleConfirm = async () => {
         if (!selectedOption) return;
         try {
-            const res = await fetch('http://localhost:3000/api/evolution/confirm', {
+            const res = await fetch(apiUrl('/api/evolution/confirm'), {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
@@ -57,7 +58,7 @@ const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
         if (lastDotIndex === -1) return dbPath + genderSuffix;
         const path = dbPath.substring(0, lastDotIndex);
         const ext = dbPath.substring(lastDotIndex);
-        return `${path}${genderSuffix}${ext}`; 
+        return `${path}${genderSuffix}${ext}`;
     };
 
     // --- HELPER: ETIQUETAS DE ROL AUTOMÁTICAS ---
@@ -78,7 +79,7 @@ const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-500">
             {/* Contenedor Principal Más Alto */}
             <div className="bg-slate-950 border border-amber-900/50 rounded-lg max-w-6xl w-full h-[90vh] flex flex-col shadow-[0_0_100px_rgba(245,158,11,0.1)] relative overflow-hidden">
-                
+
                 {/* Background Decorativo */}
                 <div className="absolute inset-0 bg-[url('/bg-pattern.png')] opacity-5 pointer-events-none"></div>
 
@@ -112,32 +113,32 @@ const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
                                 const RoleIcon = role.icon;
 
                                 return (
-                                    <div 
+                                    <div
                                         key={opt.id}
                                         onClick={() => setSelectedOption(opt)}
                                         className={`relative group cursor-pointer rounded-xl border-2 transition-all duration-500 h-full flex flex-col overflow-hidden bg-slate-900
-                                        ${isSelected 
-                                            ? 'border-amber-500 shadow-[0_0_40px_rgba(245,158,11,0.2)] scale-[1.01]' 
-                                            : 'border-slate-800 hover:border-slate-600 hover:shadow-xl'}`}
+                                        ${isSelected
+                                                ? 'border-amber-500 shadow-[0_0_40px_rgba(245,158,11,0.2)] scale-[1.01]'
+                                                : 'border-slate-800 hover:border-slate-600 hover:shadow-xl'}`}
                                     >
                                         {/* --- IMAGEN EXPANDIDA (Corrección del problema de recorte) --- */}
                                         <div className="h-[50%] lg:h-[60%] overflow-hidden relative">
                                             {/* Gradiente inferior para mezclar imagen con texto */}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/20 to-transparent z-10"/>
-                                            
+                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/20 to-transparent z-10" />
+
                                             {/* Badge de Rol Flotante */}
                                             <div className={`absolute top-4 left-4 z-20 px-3 py-1 bg-black/80 backdrop-blur rounded border ${role.color} flex items-center gap-2 text-xs font-bold uppercase tracking-widest shadow-lg`}>
                                                 <RoleIcon size={14} /> {role.label}
                                             </div>
 
-                                            <img 
-                                                src={getClassImage(opt.image_url)} 
+                                            <img
+                                                src={getClassImage(opt.image_url)}
                                                 alt={opt.name}
                                                 // KEY FIX: object-top asegura que se vea la cabeza, h-full llena el espacio
                                                 className="w-full h-full object-cover object-top transition-transform duration-1000 group-hover:scale-105"
-                                                onError={(e) => { e.target.src = "https://via.placeholder.com/400x600?text=Arte+Pendiente"; }} 
+                                                onError={(e) => { e.target.src = "https://via.placeholder.com/400x600?text=Arte+Pendiente"; }}
                                             />
-                                            
+
                                             {/* Nombre sobre la imagen */}
                                             <div className="absolute bottom-0 left-0 right-0 p-6 z-20">
                                                 <h3 className={`text-3xl font-black uppercase font-serif tracking-tight drop-shadow-lg ${isSelected ? 'text-amber-400' : 'text-white'}`}>
@@ -154,7 +155,7 @@ const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
                                                     "{opt.description}"
                                                 </p>
                                             </div>
-                                            
+
                                             {/* Stats Grid */}
                                             <div className="mt-auto">
                                                 <div className="flex items-center gap-2 mb-3">
@@ -165,10 +166,10 @@ const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
                                                 <div className="grid grid-cols-3 gap-2">
                                                     {Object.entries(stats).map(([key, val]) => {
                                                         // Solo mostramos stats relevantes (>5) para no saturar
-                                                        if(val < 5) return null;
+                                                        if (val < 5) return null;
                                                         return (
                                                             <div key={key} className="bg-slate-900 px-3 py-2 rounded border border-slate-800 flex flex-col items-center justify-center">
-                                                                <span className="text-[10px] text-slate-500 uppercase tracking-wider">{key.substring(0,3)}</span>
+                                                                <span className="text-[10px] text-slate-500 uppercase tracking-wider">{key.substring(0, 3)}</span>
                                                                 <span className={`text-sm font-bold font-mono ${isSelected ? 'text-green-400' : 'text-slate-300'}`}>+{val}</span>
                                                             </div>
                                                         );
@@ -200,13 +201,13 @@ const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
                             <button onClick={onClose} className="flex-1 md:flex-none px-6 py-3 rounded border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 font-bold uppercase text-xs tracking-widest transition-colors">
                                 Cancelar
                             </button>
-                            <button 
+                            <button
                                 onClick={handleConfirm}
                                 disabled={!selectedOption}
                                 className={`flex-1 md:flex-none px-10 py-3 rounded font-bold uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all
-                                ${selectedOption 
-                                    ? 'bg-gradient-to-r from-amber-600 to-orange-700 text-white shadow-[0_0_30px_rgba(245,158,11,0.3)] hover:shadow-[0_0_50px_rgba(245,158,11,0.5)] hover:scale-105' 
-                                    : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
+                                ${selectedOption
+                                        ? 'bg-gradient-to-r from-amber-600 to-orange-700 text-white shadow-[0_0_30px_rgba(245,158,11,0.3)] hover:shadow-[0_0_50px_rgba(245,158,11,0.5)] hover:scale-105'
+                                        : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
                             >
                                 Confirmar Linaje <ChevronRight size={16} />
                             </button>
