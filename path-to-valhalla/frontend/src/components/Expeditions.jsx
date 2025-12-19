@@ -1,22 +1,30 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Sword, Shield, Zap, Skull, Trophy, ArrowLeft, Lock, Clock, Heart, Crosshair, Ban } from 'lucide-react';
-import { RACES } from '../constants/races'; 
+import { RACES } from '../constants/races';
 
 const Expeditions = ({ user, onUpdateUser }) => {
     // --- ESTADOS ---
-    const [view, setView] = useState('MAP'); 
+    const [view, setView] = useState('MAP');
     const [selectedZone, setSelectedZone] = useState(null);
     const [zones, setZones] = useState([]);
     const [enemies, setEnemies] = useState([]);
     const [loading, setLoading] = useState(true);
-    
+
     // Estado de Batalla
     const [battleResult, setBattleResult] = useState(null);
-    const [currentEnemy, setCurrentEnemy] = useState(null); 
+    const [currentEnemy, setCurrentEnemy] = useState(null);
     const [isBattling, setIsBattling] = useState(false);
 
     // --- COOLDOWN ---
     const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+    const formatCooldown = (seconds) => {
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        const pad = (v) => String(v).padStart(2, '0');
+        return `${pad(hrs)}h ${pad(mins)}m ${pad(secs)}s`;
+    };
 
     useEffect(() => {
         if (!user.last_expedition_at) return;
@@ -43,18 +51,18 @@ const Expeditions = ({ user, onUpdateUser }) => {
         fetch('http://localhost:3000/api/expeditions', {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) setZones(data.expeditions);
-            setLoading(false);
-        })
-        .catch(err => console.error(err));
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) setZones(data.expeditions);
+                setLoading(false);
+            })
+            .catch(err => console.error(err));
     }, []);
 
     // --- CÁLCULO DE STATS REALES ---
     const playerStats = useMemo(() => {
         let bonuses = { strength: 0, dexterity: 0, constitution: 0, luck: 0, armor: 0, damage_min: 0, damage_max: 0 };
-        
+
         if (user.real_inventory) {
             user.real_inventory.forEach(item => {
                 if (item.is_equipped && item.base_stats) {
@@ -73,7 +81,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
 
         const maxHp = 100 + (totalCon * 20);
         const strBonus = totalStr * 2;
-        
+
         return {
             maxHp,
             damageMin: (bonuses.damage_min || 0) + strBonus,
@@ -92,15 +100,15 @@ const Expeditions = ({ user, onUpdateUser }) => {
         fetch(`http://localhost:3000/api/expeditions/${zone.id}/enemies`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                setEnemies(data.enemies);
-                setView('ENEMIES');
-            }
-            setLoading(false);
-        })
-        .catch(err => { console.error(err); setLoading(false); });
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setEnemies(data.enemies);
+                    setView('ENEMIES');
+                }
+                setLoading(false);
+            })
+            .catch(err => { console.error(err); setLoading(false); });
     };
 
     const handleAttack = async (enemy) => {
@@ -114,7 +122,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
         try {
             const res = await fetch('http://localhost:3000/api/expeditions/start', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
@@ -127,8 +135,8 @@ const Expeditions = ({ user, onUpdateUser }) => {
                 setBattleResult(data.combatResult);
                 setView('BATTLE');
                 fetch('http://localhost:3000/api/auth/profile', {
-                     headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                }).then(r=>r.json()).then(d=> { if(d.user) onUpdateUser(d.user); });
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                }).then(r => r.json()).then(d => { if (d.user) onUpdateUser(d.user); });
             } else {
                 alert(data.message);
             }
@@ -164,16 +172,16 @@ const Expeditions = ({ user, onUpdateUser }) => {
 
     return (
         <div className="h-full relative overflow-hidden flex flex-col">
-            
+
             {cooldownSeconds > 0 && (
                 <div className="bg-red-900/90 text-white text-center py-2 font-bold uppercase tracking-widest text-xs sticky top-0 z-50 flex items-center justify-center gap-2 shadow-lg border-b border-red-500 animate-in slide-in-from-top">
                     <Clock size={16} className="animate-spin-slow" />
-                    Descansando... Próximo ataque en: {cooldownSeconds}s
+                    Descansando... Próximo ataque en: {formatCooldown(cooldownSeconds)}
                 </div>
             )}
 
             <div className="flex-1 overflow-hidden relative">
-                
+
                 {/* VISTA 1: MAPA */}
                 {view === 'MAP' && (
                     <div className="p-6 h-full overflow-y-auto pb-20 custom-scrollbar">
@@ -207,7 +215,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
                             <img src={selectedZone.image_url} className="w-full h-full object-cover opacity-100" />
                             <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/30 to-slate-950/90" />
                         </div>
-                        
+
                         <div className="relative z-10 p-6 flex flex-col h-full overflow-y-auto custom-scrollbar">
                             <button onClick={() => { setView('MAP'); setSelectedZone(null); }} className="self-start mb-4 flex items-center gap-2 text-slate-200 hover:text-white transition-colors bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm hover:bg-black/60">
                                 <ArrowLeft size={20} /> Volver
@@ -217,12 +225,12 @@ const Expeditions = ({ user, onUpdateUser }) => {
                             </h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-4 pb-20">
                                 {enemies.map((enemy) => (
-                                    <EnemyCard 
-                                        key={enemy.id} 
-                                        enemy={enemy} 
-                                        user={user} 
-                                        onAttack={() => handleAttack(enemy)} 
-                                        disabled={isBattling || cooldownSeconds > 0} 
+                                    <EnemyCard
+                                        key={enemy.id}
+                                        enemy={enemy}
+                                        user={user}
+                                        onAttack={() => handleAttack(enemy)}
+                                        disabled={isBattling || cooldownSeconds > 0}
                                     />
                                 ))}
                             </div>
@@ -232,15 +240,15 @@ const Expeditions = ({ user, onUpdateUser }) => {
 
                 {/* VISTA 3: BATALLA */}
                 {view === 'BATTLE' && battleResult && (
-                    <BattleModal 
-                        result={battleResult} 
-                        user={user} 
-                        baseEnemy={currentEnemy} 
-                        playerImage={getAvatarImage()} 
+                    <BattleModal
+                        result={battleResult}
+                        user={user}
+                        baseEnemy={currentEnemy}
+                        playerImage={getAvatarImage()}
                         playerBg={getPlayerBackground()} // NUEVO: Pasamos el fondo del jugador
-                        playerStats={playerStats} 
-                        zoneImage={selectedZone?.image_url} 
-                        onClose={() => { setView('ENEMIES'); setBattleResult(null); setCurrentEnemy(null); }} 
+                        playerStats={playerStats}
+                        zoneImage={selectedZone?.image_url}
+                        onClose={() => { setView('ENEMIES'); setBattleResult(null); setCurrentEnemy(null); }}
                     />
                 )}
             </div>
@@ -259,7 +267,7 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
         <div className={`relative bg-slate-900/90 border transition-all group overflow-hidden flex flex-col backdrop-blur-sm ${enemy.is_boss ? 'border-red-600/60 shadow-[0_0_20px_rgba(220,38,38,0.3)]' : 'border-slate-700 hover:border-amber-500'} rounded-xl`}>
             {enemy.is_boss && <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg z-20 shadow-md">JEFE</div>}
             <div className="h-48 overflow-hidden relative bg-black/50">
-                <img src={enemy.image_url} alt={enemy.name} className={`w-full h-full object-contain p-2 transition-transform duration-500 ${disabled ? 'grayscale opacity-50' : 'group-hover:scale-110'}`} onError={(e) => e.target.src="https://via.placeholder.com/150?text=Monstruo"} />
+                <img src={enemy.image_url} alt={enemy.name} className={`w-full h-full object-contain p-2 transition-transform duration-500 ${disabled ? 'grayscale opacity-50' : 'group-hover:scale-110'}`} onError={(e) => e.target.src = "https://via.placeholder.com/150?text=Monstruo"} />
             </div>
             <div className="p-4 flex-1 flex flex-col bg-slate-900/90">
                 <h3 className={`font-bold text-lg leading-tight mb-1 ${enemy.is_boss ? 'text-red-400' : 'text-slate-200'}`}>{enemy.name}</h3>
@@ -309,36 +317,36 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
 
     return (
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 animate-in fade-in duration-300">
-            
+
             {/* 1. ARENA VISUAL */}
             <div className="h-[55%] relative flex items-center justify-center border-b-4 border-amber-900 shadow-2xl pt-16 overflow-hidden">
                 {/* FONDO DINÁMICO DE LA ZONA */}
                 <div className="absolute inset-0 z-0">
-                    <img 
-                        src={zoneImage || '/backgrounds/arena_bg.png'} 
-                        className="w-full h-full object-cover opacity-100" 
-                        alt="Battle Background" 
+                    <img
+                        src={zoneImage || '/backgrounds/arena_bg.png'}
+                        className="w-full h-full object-cover opacity-100"
+                        alt="Battle Background"
                     />
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
                 </div>
-                
+
                 <div className="relative z-10 flex items-center gap-4 md:gap-12 w-full max-w-5xl px-4 justify-between">
-                    
+
                     {/* LADO JUGADOR */}
                     <div className="flex items-center gap-4 animate-in slide-in-from-left duration-500">
                         <div className="hidden md:flex flex-col gap-2 text-right bg-black/60 p-3 rounded-lg border-r-2 border-amber-600 backdrop-blur-md shadow-lg">
                             <div className="text-amber-500 font-bold text-xs uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Tus Stats</div>
-                            <StatRow icon={<Sword size={12}/>} label="Daño" value={`${playerStats.damageMin}-${playerStats.damageMax}`} />
-                            <StatRow icon={<Shield size={12}/>} label="Defensa" value={playerStats.defense} />
-                            <StatRow icon={<Crosshair size={12}/>} label="Crítico" value={`${playerStats.critChance}%`} color="text-yellow-400" />
-                            <StatRow icon={<Ban size={12}/>} label="Bloqueo" value={`${playerStats.blockChance}%`} color="text-blue-400" />
+                            <StatRow icon={<Sword size={12} />} label="Daño" value={`${playerStats.damageMin}-${playerStats.damageMax}`} />
+                            <StatRow icon={<Shield size={12} />} label="Defensa" value={playerStats.defense} />
+                            <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${playerStats.critChance}%`} color="text-yellow-400" />
+                            <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${playerStats.blockChance}%`} color="text-blue-400" />
                         </div>
 
                         <div className="w-36 md:w-56 bg-slate-900 border-2 border-amber-600 rounded-lg shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
                             <div className="h-40 md:h-56 bg-slate-800 relative">
                                 {/* AQUÍ ESTÁ EL CAMBIO: FONDO DEL JUGADOR DETRÁS DEL AVATAR */}
                                 {playerBg && <img src={playerBg} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="User Bg" />}
-                                
+
                                 <img src={playerImage} className="relative z-10 w-full h-full object-contain object-bottom" alt="Hero" />
                                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900 to-transparent h-10 z-20" />
                             </div>
@@ -359,7 +367,7 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                     <div className="flex items-center gap-4 animate-in slide-in-from-right duration-500">
                         <div className="w-36 md:w-56 bg-slate-900 border-2 border-red-600 rounded-lg shadow-[0_0_40px_rgba(220,38,38,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
                             <div className="h-40 md:h-56 bg-slate-800 relative">
-                                <img src={result.enemyImage} className="w-full h-full object-cover" alt="Enemy" onError={(e) => e.target.src="https://via.placeholder.com/150?text=Enemy"} />
+                                <img src={result.enemyImage} className="w-full h-full object-cover" alt="Enemy" onError={(e) => e.target.src = "https://via.placeholder.com/150?text=Enemy"} />
                                 {baseEnemy?.is_boss && <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded font-bold animate-pulse shadow-lg">BOSS</div>}
                             </div>
                             <div className="p-2 bg-slate-950 text-center border-t border-slate-800">
@@ -373,10 +381,10 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
 
                         <div className="hidden md:flex flex-col gap-2 text-left bg-black/60 p-3 rounded-lg border-l-2 border-red-600 backdrop-blur-md shadow-lg">
                             <div className="text-red-500 font-bold text-xs uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Enemigo</div>
-                            <StatRow icon={<Sword size={12}/>} label="Daño" value={`${baseEnemy?.damage_min}-${baseEnemy?.damage_max}`} align="left" />
-                            <StatRow icon={<Shield size={12}/>} label="Armadura" value={baseEnemy?.armor} align="left" />
-                            <StatRow icon={<Crosshair size={12}/>} label="Crítico" value={`${baseEnemy?.crit_chance}%`} color="text-yellow-600" align="left" />
-                            <StatRow icon={<Ban size={12}/>} label="Bloqueo" value={`${baseEnemy?.block_chance}%`} color="text-blue-400" align="left" />
+                            <StatRow icon={<Sword size={12} />} label="Daño" value={`${baseEnemy?.damage_min}-${baseEnemy?.damage_max}`} align="left" />
+                            <StatRow icon={<Shield size={12} />} label="Armadura" value={baseEnemy?.armor} align="left" />
+                            <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${baseEnemy?.crit_chance}%`} color="text-yellow-600" align="left" />
+                            <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${baseEnemy?.block_chance}%`} color="text-blue-400" align="left" />
                         </div>
                     </div>
 
@@ -386,14 +394,14 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
             {/* 2. LOG DE BATALLA */}
             <div className="h-[45%] flex flex-col bg-slate-950 relative">
                 <div className="absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
-                
+
                 <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-2 font-mono text-sm max-w-4xl mx-auto w-full">
                     {visibleLines.map((line, idx) => (
                         <div key={idx} className={`py-2 px-4 rounded ${getLogStyle(line.type)} animate-in slide-in-from-bottom-2`}>
                             {line.msg}
                         </div>
                     ))}
-                    
+
                     {isFinished && (
                         <div className="mt-8 p-6 text-center animate-in zoom-in duration-500 bg-slate-900/50 rounded-xl border border-slate-800 shadow-xl max-w-sm mx-auto">
                             {result.isWin ? (

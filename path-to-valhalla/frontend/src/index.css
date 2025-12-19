@@ -4,5 +4,12 @@
 
 /* Estilos base para Path to Valhalla */
 body {
-  @apply bg-slate-900 text-slate-100; /* Fondo oscuro por defecto */
+  @apply bg-slate-900 text-slate-100;
+  /* Fondo oscuro por defecto */
+}
+
+/* Scrollbar global */
+body {
+  scrollbar-width: thin;
+  scrollbar-color: #1b2b4e #0f172a;
 }
