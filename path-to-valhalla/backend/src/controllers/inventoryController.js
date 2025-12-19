@@ -5,19 +5,12 @@ const pool = require('../config/db');
 // ==========================================
 const generateRandomStats = (templateStats) => {
     const finalStats = {};
-    
-    // Recorremos cada atributo (ej: "strength": [2, 5])
+    if (!templateStats) return {};
+
     for (const [key, value] of Object.entries(templateStats)) {
-        // Si es un array [min, max], tiramos dados
         if (Array.isArray(value) && value.length === 2) {
-            const min = value[0];
-            const max = value[1];
-            
-            // Fórmula: Entero aleatorio entre min y max
-            const roll = Math.floor(Math.random() * (max - min + 1)) + min;
-            finalStats[key] = roll;
+            finalStats[key] = Math.floor(Math.random() * (value[1] - value[0] + 1)) + value[0];
         } else {
-            // Si es un número fijo, lo dejamos igual
             finalStats[key] = value;
         }
     }
@@ -58,11 +51,11 @@ exports.adminGiveItem = async (req, res) => {
             return res.status(400).json({ message: '¡Inventario lleno!' });
         }
 
-        // D. Crear el objeto en la base de datos (Tradeable por defecto)
+        // D. Crear el objeto en la base de datos
         await pool.query(
             `INSERT INTO player_items 
-            (player_id, template_id, is_equipped, bag_slot, base_stats, durability_current, durability_max, is_bound) 
-            VALUES ($1, $2, false, $3, $4, 100, 100, false)`,
+            (player_id, template_id, is_equipped, bag_slot, base_stats, durability_current, durability_max, is_bound, quantity) 
+            VALUES ($1, $2, false, $3, $4, 100, 100, false, 1)`,
             [userId, templateId, targetSlot, uniqueStats]
         );
 
@@ -79,106 +72,124 @@ exports.adminGiveItem = async (req, res) => {
 };
 
 // ==========================================
-// 3. MOVER ÍTEM (Equipar / Desequipar / Mover)
+// 3. MOVER ÍTEM (CON STACKING + SWAP)
 // ==========================================
 exports.moveItem = async (req, res) => {
   const { userId, itemId, destination } = req.body;
 
+  const client = await pool.connect();
+
   try {
-    // A. Obtener ítem y su template para validar
+    await client.query('BEGIN');
+
+    // 1. Obtener ítem origen
     const itemQuery = `
-        SELECT pi.*, it.slot as valid_slot_type, it.name 
+        SELECT pi.*, it.slot as valid_slot_type, it.name, it.stackable, it.type as item_type
         FROM player_items pi 
         JOIN items_templates it ON pi.template_id = it.id 
         WHERE pi.id = $1 AND pi.player_id = $2
     `;
-    const itemRes = await pool.query(itemQuery, [itemId, userId]);
+    const itemRes = await client.query(itemQuery, [itemId, userId]);
 
-    if (itemRes.rows.length === 0) return res.status(404).json({ message: 'Ítem no encontrado.' });
+    if (itemRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Ítem no encontrado.' });
+    }
 
-    const item = itemRes.rows[0];
-
-    // Iniciamos transacción para evitar errores de duplicados temporales
-    await pool.query('BEGIN');
+    const sourceItem = itemRes.rows[0];
 
     // --- CASO A: EQUIPAR (Mochila -> Personaje) ---
     if (destination.type === 'equipped') {
-        
-        // 1. Validación estricta de tipos
         let isCompatible = false;
         
-        if (item.valid_slot_type === destination.slot) isCompatible = true;
-        else if (item.valid_slot_type === 'ring' && (destination.slot === 'ring_1' || destination.slot === 'ring_2')) isCompatible = true;
-        else if (item.valid_slot_type === 'earring' && (destination.slot === 'earring_1' || destination.slot === 'earring_2')) isCompatible = true;
+        // Validaciones de slot
+        if (sourceItem.valid_slot_type === destination.slot) isCompatible = true;
+        else if (sourceItem.valid_slot_type === 'ring' && (destination.slot === 'ring_1' || destination.slot === 'ring_2')) isCompatible = true;
+        else if (sourceItem.valid_slot_type === 'earring' && (destination.slot === 'earring_1' || destination.slot === 'earring_2')) isCompatible = true;
 
         if (!isCompatible) {
-             await pool.query('ROLLBACK');
-             return res.status(400).json({ message: `No puedes poner ${item.name} en ${destination.slot}.` });
+             await client.query('ROLLBACK');
+             return res.status(400).json({ message: `No puedes poner ${sourceItem.name} en ${destination.slot}.` });
         }
 
-        // 2. Verificar si ya hay algo puesto en ese slot
-        const existingItemRes = await pool.query(
+        // Swap si hay algo equipado
+        const existingItemRes = await client.query(
             'SELECT * FROM player_items WHERE player_id = $1 AND is_equipped = true AND equipped_slot = $2',
             [userId, destination.slot]
         );
 
-        // 3. Si hay algo, lo desequipamos (Swap)
         if (existingItemRes.rows.length > 0) {
             const existingItem = existingItemRes.rows[0];
-            await pool.query(
+            await client.query(
                 'UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2',
-                [item.bag_slot, existingItem.id] 
+                [sourceItem.bag_slot, existingItem.id] 
             );
         }
 
-        // 4. Equipar el nuevo ítem Y VINCULARLO (BIND ON EQUIP)
-        // Agregamos: is_bound = true
-        await pool.query(
+        // Equipar y vincular
+        await client.query(
             `UPDATE player_items 
-             SET is_equipped = true, 
-                 equipped_slot = $1, 
-                 bag_slot = NULL, 
-                 is_bound = true 
+             SET is_equipped = true, equipped_slot = $1, bag_slot = NULL, is_bound = true 
              WHERE id = $2`,
             [destination.slot, itemId]
         );
     } 
     
-    // --- CASO B: MOVER A MOCHILA (Personaje -> Mochila O Mochila -> Mochila) ---
+    // --- CASO B: MOVER A MOCHILA (Logica de Stacking) ---
     else if (destination.type === 'bag') {
         const targetBagSlot = destination.slot; 
 
-        // 1. Verificar si el hueco destino está ocupado
-        const targetItemRes = await pool.query(
-            'SELECT * FROM player_items WHERE player_id = $1 AND is_equipped = false AND bag_slot = $2',
+        // Buscar qué hay en el destino
+        const targetItemRes = await client.query(
+            'SELECT pi.*, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 AND pi.is_equipped = false AND pi.bag_slot = $2',
             [userId, targetBagSlot]
         );
 
         if (targetItemRes.rows.length > 0) {
             const targetItem = targetItemRes.rows[0];
-            
-            if (item.is_equipped) {
-                 await pool.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [item.bag_slot, targetItem.id]); 
-            } else {
-                await pool.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [item.bag_slot, targetItem.id]);
-            }
-        }
 
-        // 2. Mover el ítem original al destino
-        await pool.query(
-            'UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2',
-            [targetBagSlot, itemId]
-        );
+            // 1. ¿Son iguales y stackeables? -> FUSIONAR
+            if (sourceItem.stackable && targetItem.stackable && sourceItem.template_id === targetItem.template_id && sourceItem.id !== targetItem.id) {
+                const newQuantity = (targetItem.quantity || 1) + (sourceItem.quantity || 1);
+                
+                // Actualizar destino
+                await client.query('UPDATE player_items SET quantity = $1 WHERE id = $2', [newQuantity, targetItem.id]);
+                
+                // Borrar origen
+                await client.query('DELETE FROM player_items WHERE id = $1', [sourceItem.id]);
+            } 
+            // 2. ¿Son diferentes? -> SWAP (Intercambiar lugares)
+            else {
+                if (sourceItem.is_equipped) {
+                     await client.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [sourceItem.bag_slot, targetItem.id]); 
+                } else {
+                    await client.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [sourceItem.bag_slot, targetItem.id]);
+                }
+                
+                // Mover origen al destino
+                await client.query(
+                    'UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2',
+                    [targetBagSlot, itemId]
+                );
+            }
+        } else {
+            // 3. Destino vacío -> MOVER
+            await client.query(
+                'UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2',
+                [targetBagSlot, itemId]
+            );
+        }
     }
 
-    await pool.query('COMMIT');
+    await client.query('COMMIT');
 
-    // C. Devolver inventario actualizado
-    const inventoryRes = await pool.query(`
+    // Devolver inventario actualizado
+    const inventoryRes = await client.query(`
         SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, 
         it.image_url, 
         it.price_copper, 
-        it.description 
+        it.description,
+        it.stackable
         FROM player_items pi 
         JOIN items_templates it ON pi.template_id = it.id 
         WHERE pi.player_id = $1
@@ -188,14 +199,16 @@ exports.moveItem = async (req, res) => {
     res.json({ success: true, inventory: inventoryRes.rows });
 
   } catch (err) {
-    await pool.query('ROLLBACK');
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ message: 'Error de inventario' });
+  } finally {
+      client.release();
   }
 };
 
 // ==========================================
-// 4. ORGANIZAR INVENTARIO (Sort)
+// 4. ORGANIZAR INVENTARIO (Sort Restaurado)
 // ==========================================
 exports.organizeInventory = async (req, res) => {
     const { userId } = req.body;
@@ -213,38 +226,47 @@ exports.organizeInventory = async (req, res) => {
 
         let items = itemsRes.rows;
 
+        // Algoritmo de ordenamiento
         items.sort((a, b) => {
+            // 1. Por Rareza
             const rA = rarityWeight[a.rarity] || 0;
             const rB = rarityWeight[b.rarity] || 0;
             if (rA !== rB) return rB - rA;
 
+            // 2. Por Tipo
             const tA = typeWeight[a.type] || 0;
             const tB = typeWeight[b.type] || 0;
             if (tA !== tB) return tB - tA;
 
+            // 3. Por Nivel
             if (a.min_level !== b.min_level) return b.min_level - a.min_level;
             return 0; 
         });
 
-        await pool.query('BEGIN');
-        for (let i = 0; i < items.length; i++) {
-            await pool.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [i, items[i].id]);
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            // Reasignar slots en orden (0, 1, 2...)
+            for (let i = 0; i < items.length; i++) {
+                await client.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [i, items[i].id]);
+            }
+            await client.query('COMMIT');
+            
+            const inventoryRes = await client.query(`
+                SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, 
+                it.image_url, it.price_copper, 
+                it.description 
+                FROM player_items pi 
+                JOIN items_templates it ON pi.template_id = it.id 
+                WHERE pi.player_id = $1
+            `, [userId]);
+
+            res.json({ success: true, inventory: inventoryRes.rows, message: "Inventario organizado." });
+        } finally {
+            client.release();
         }
-        await pool.query('COMMIT');
-
-        const inventoryRes = await pool.query(`
-            SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, 
-            it.image_url, it.price_copper, 
-            it.description 
-            FROM player_items pi 
-            JOIN items_templates it ON pi.template_id = it.id 
-            WHERE pi.player_id = $1
-        `, [userId]);
-
-        res.json({ success: true, inventory: inventoryRes.rows, message: "Inventario organizado." });
 
     } catch (err) {
-        await pool.query('ROLLBACK');
         console.error(err);
         res.status(500).json({ message: 'Error al organizar.' });
     }
