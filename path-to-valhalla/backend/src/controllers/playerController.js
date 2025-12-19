@@ -112,7 +112,7 @@ exports.trainStats = async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Error al entrenar' }); }
 };
 
-// --- ALQUILAR MOCHILA ---
+// --- ALQUILAR MOCHILA (CORREGIDO) ---
 exports.rentBag = async (req, res) => {
   const { userId, bagNumber } = req.body;
   const COST = 50; const DAYS = 7; 
@@ -129,24 +129,45 @@ exports.rentBag = async (req, res) => {
     const newExpiryDate = new Date(baseDate); newExpiryDate.setDate(newExpiryDate.getDate() + DAYS);
 
     await pool.query('BEGIN');
+    
+    // 1. Cobrar
     await pool.query('UPDATE players SET onix = onix - $1 WHERE id = $2', [COST, userId]);
+    
+    // 2. Registrar Alquiler
     await pool.query(`INSERT INTO player_bag_rentals (player_id, bag_number, expires_at) VALUES ($1, $2, $3) ON CONFLICT (player_id, bag_number) DO UPDATE SET expires_at = $3`, [userId, bagNumber, newExpiryDate]);
+    
     await pool.query('COMMIT');
 
-    const updatedUserRes = await pool.query(`SELECT p.*, b.image_url as active_background_url, c.name as class_name FROM players p LEFT JOIN backgrounds b ON p.active_background_id = b.id WHERE p.id = $1`, [userId]);
+    // 3. Devolver usuario actualizado (AQUÍ ESTABA EL ERROR: FALTABA EL JOIN CON CLASSES 'c')
+    const updatedUserRes = await pool.query(`
+        SELECT p.*, b.image_url as active_background_url, c.name as class_name 
+        FROM players p 
+        LEFT JOIN backgrounds b ON p.active_background_id = b.id 
+        LEFT JOIN classes c ON p.class_id = c.id 
+        WHERE p.id = $1
+    `, [userId]);
+    
     const updatedUser = updatedUserRes.rows[0];
 
+    // Cargar inventario y bolsas
     const itemsQuery = `
         SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, 
         it.image_url, it.price_copper,
         it.description 
         FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1`;
     const itemsResult = await pool.query(itemsQuery, [userId]);
+    
     updatedUser.real_inventory = itemsResult.rows;
     updatedUser.rented_bags = (await pool.query('SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()', [userId])).rows;
 
     res.json({ success: true, user: updatedUser, message: `¡Bolsa extendida!` });
-  } catch (err) { await pool.query('ROLLBACK'); console.error(err); res.status(500).json({ message: 'Error al alquilar' }); }
+
+  } catch (err) { 
+      await pool.query('ROLLBACK'); 
+      console.error(err); 
+      // Enviamos el mensaje de error real para depurar si vuelve a pasar algo
+      res.status(500).json({ message: err.message || 'Error al alquilar' }); 
+  }
 };
 
 // --- OBTENER HABILIDADES ---

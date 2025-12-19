@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
     User, BookOpen, Trophy, BarChart2, Mail, // Héroe
+    Package, // <--- NUEVO ICONO IMPORTADO
     Map, Skull, ArrowUpCircle, Scroll, // Aventura
     Swords, // Combate
     Hammer, Landmark, Gavel, Shield, // Ciudad
@@ -129,6 +130,15 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
                         active={currentView === 'dashboard'}
                         onClick={() => handleNavigate('dashboard')}
                     />
+
+                    {/* --- AQUÍ ESTÁ EL NUEVO BOTÓN --- */}
+                    <MenuLink
+                        icon={Package}
+                        label="Paquetes"
+                        active={currentView === 'packages'}
+                        onClick={() => handleNavigate('packages')}
+                    />
+                    {/* ------------------------------- */}
 
                     <MenuLink icon={BookOpen} label="Bestiario" />
                     <MenuLink icon={Trophy} label="Logros" />

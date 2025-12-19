@@ -6,7 +6,7 @@ const authController = require('./src/controllers/authController');
 const playerController = require('./src/controllers/playerController'); 
 const bgController = require('./src/controllers/backgroundController'); 
 const inventoryController = require('./src/controllers/inventoryController');
-const petController = require('./src/controllers/petController'); // <--- NUEVO: Controlador de Mascotas
+const petController = require('./src/controllers/petController');
 
 // --- IMPORTACIÓN DE MIDDLEWARES ---
 const authMiddleware = require('./src/middleware/authMiddleware'); 
@@ -14,7 +14,8 @@ const authMiddleware = require('./src/middleware/authMiddleware');
 // --- IMPORTAR GESTORES DE RUTAS (Routers) ---
 const authRoutes = require('./src/routes/authRoutes');
 const evolutionRoutes = require('./src/routes/evolutionRoutes');
-const expeditionRoutes = require('./src/routes/expeditionRoutes'); // <--- AGREGAR ESTO
+const expeditionRoutes = require('./src/routes/expeditionRoutes');
+const packageRoutes = require('./src/routes/packageRoutes'); // <--- NUEVO
 
 const app = express();
 
@@ -25,6 +26,8 @@ app.use(express.json());
 // --- 1. RUTAS NUEVAS (Router) ---
 app.use('/api/auth', authRoutes); 
 app.use('/api/evolution', evolutionRoutes);
+app.use('/api/expeditions', expeditionRoutes);
+app.use('/api/packages', packageRoutes); // <--- NUEVO
 
 // --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);
@@ -39,7 +42,7 @@ app.post('/api/rent-bag', playerController.rentBag);
 app.get('/api/my-skills', authMiddleware, playerController.getMySkills);
 app.post('/api/equip-skill', authMiddleware, playerController.equipSkill);
 
-// ---> RUTAS DE MASCOTAS (NUEVO) <---
+// ---> RUTAS DE MASCOTAS <---
 app.get('/api/my-pets', authMiddleware, petController.getMyPets);
 app.post('/api/equip-pet', authMiddleware, petController.equipPet);
 app.post('/api/feed-pet', authMiddleware, petController.feedPet);
@@ -55,7 +58,7 @@ app.post('/api/inventory/organize', inventoryController.organizeInventory);
 
 // --- 6. RUTAS DE ADMIN / DEBUG ---
 app.post('/api/admin/give-item', inventoryController.adminGiveItem);
-app.use('/api/expeditions', expeditionRoutes); // <--- AGREGAR ESTO
+
 
 // --- ARRANQUE ---
 const PORT = 3000;

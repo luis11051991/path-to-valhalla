@@ -296,12 +296,27 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
     useEffect(() => {
         let idx = 0;
         const log = result.log || [];
+
+        // Aseguramos que las barras empiecen llenas o en su estado inicial correcto
+        // Nota: Asegúrate de haber reiniciado el Backend con el cambio anterior para recibir 'initialEnemyHp'
+        setCurrentHp({
+            player: result.initialPlayerHp || result.finalPlayerHp,
+            enemy: result.initialEnemyHp || 100 // Fallback por si acaso
+        });
+
         const interval = setInterval(() => {
             if (idx < log.length) {
                 const line = log[idx];
                 if (line) {
                     setVisibleLines(prev => [...prev, line]);
-                    if (line.playerHp !== undefined) setCurrentHp({ player: line.playerHp, enemy: line.enemyHp });
+
+                    // --- CORRECCIÓN AQUÍ ---
+                    // Actualizamos el estado basándonos en qué dato trae la línea actual.
+                    // Si la línea no trae dato de HP, mantenemos el valor anterior (prev.player o prev.enemy)
+                    setCurrentHp(prev => ({
+                        player: line.playerHp !== undefined ? line.playerHp : prev.player,
+                        enemy: line.enemyHp !== undefined ? line.enemyHp : prev.enemy
+                    }));
                 }
                 idx++;
                 if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -309,7 +324,8 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                 setIsFinished(true);
                 clearInterval(interval);
             }
-        }, 600);
+        }, 600); // Velocidad de la animación (600ms entre turnos)
+
         return () => clearInterval(interval);
     }, [result]);
 

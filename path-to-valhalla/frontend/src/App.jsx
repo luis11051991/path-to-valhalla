@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import RaceSelection from './components/RaceSelection';
 import Dashboard from './components/Dashboard';
-import Expeditions from './components/Expeditions'; // <--- NUEVO IMPORT
+import Expeditions from './components/Expeditions';
+import Packages from './components/Packages'; // <--- 1. NUEVO IMPORT
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
 import { apiUrl } from './constants/api';
@@ -11,14 +12,13 @@ function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('auth');
 
-  // --- NUEVO ESTADO: Controla qué pantalla se ve DENTRO del juego ---
-  const [gameView, setGameView] = useState('dashboard'); // 'dashboard' o 'expeditions'
+  // Controla qué pantalla se ve DENTRO del juego
+  const [gameView, setGameView] = useState('dashboard'); 
 
   const [isShopOpen, setIsShopOpen] = useState(false);
 
   // --- CARGA INICIAL INTELIGENTE ---
   useEffect(() => {
-    // 1. Intentar cargar rápido desde localStorage
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
 
@@ -27,12 +27,11 @@ function App() {
       setUser(parsedUser);
       setView('game');
 
-      // 2. SILENCIOSAMENTE pedir datos frescos al servidor (Background Fetch)
       fetch(apiUrl('/api/auth/profile'), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'x-auth-token': token // Enviamos el token
+          'x-auth-token': token 
         }
       })
         .then(res => {
@@ -42,7 +41,7 @@ function App() {
         .then(data => {
           if (data.user) {
             console.log("Datos actualizados desde el servidor");
-            handleUserUpdate(data.user); // Actualizamos el estado con lo nuevo de la DB
+            handleUserUpdate(data.user);
           }
         })
         .catch(err => {
@@ -79,10 +78,9 @@ function App() {
     setUser(null);
     setView('auth');
     setIsShopOpen(false);
-    setGameView('dashboard'); // Resetear vista al salir
+    setGameView('dashboard');
   };
 
-  // --- NUEVA FUNCIÓN: Cambiar vista del juego ---
   const handleNavigate = (newView) => {
     setGameView(newView);
   };
@@ -105,10 +103,11 @@ function App() {
           user={user}
           onLogout={handleLogout}
           onOpenShop={openShop}
-          onNavigate={handleNavigate} // Pasamos la función al layout
-          currentView={gameView}      // Pasamos la vista actual
+          onNavigate={handleNavigate} 
+          currentView={gameView}      
         >
-          {/* RENDERIZADO CONDICIONAL: Mostramos Dashboard o Expeditions */}
+          {/* RENDERIZADO CONDICIONAL */}
+          
           {gameView === 'dashboard' && (
             <Dashboard
               user={user}
@@ -122,6 +121,15 @@ function App() {
             <Expeditions
               user={user}
               onUpdateUser={handleUserUpdate}
+            />
+          )}
+
+          {/* --- 2. RENDERIZAR PAQUETES --- */}
+          {gameView === 'packages' && (
+            <Packages 
+                user={user}
+                token={localStorage.getItem('token')} // Pasamos el token para poder reclamar
+                onUpdateUser={handleUserUpdate}
             />
           )}
 
