@@ -121,8 +121,7 @@ const Packages = ({ user, token, onUpdateUser }) => {
             {/* CONTENEDOR PRINCIPAL */}
             <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden">
                 
-                {/* --- IZQUIERDA: PAQUETERÍA (AHORA PEQUEÑA) --- */}
-                {/* w-full lg:w-96 fija el ancho en pantallas grandes */}
+                {/* --- IZQUIERDA: PAQUETERÍA (Menú Lateral) --- */}
                 <div className="w-full lg:w-96 bg-slate-900/90 border border-slate-700 rounded flex flex-col shadow-lg overflow-hidden shrink-0">
                     <div className="px-3 py-2 bg-slate-950 border-b border-slate-700 flex justify-between items-center">
                         <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Envíos Pendientes</span>
@@ -147,7 +146,8 @@ const Packages = ({ user, token, onUpdateUser }) => {
                                 >
                                     {/* Icono Paquete */}
                                     <div className="w-10 h-10 shrink-0 rounded bg-black border border-slate-600 relative overflow-hidden pointer-events-none">
-                                        <img src={pkg.image_url} alt={pkg.name} className="w-full h-full object-cover"/>
+                                        {/* AQUI TAMBIEN AJUSTE UN POCO: object-contain para que se vea el item entero */}
+                                        <img src={pkg.image_url} alt={pkg.name} className="w-full h-full object-contain p-1"/>
                                         <span className="absolute bottom-0 right-0 bg-black/80 text-white text-[9px] px-1 font-bold border-tl border-slate-700">
                                             x{pkg.quantity}
                                         </span>
@@ -181,7 +181,7 @@ const Packages = ({ user, token, onUpdateUser }) => {
                         )}
                     </div>
 
-                    {/* Paginación Paquetes */}
+                    {/* Paginación */}
                     {totalPages > 1 && (
                         <div className="p-1.5 border-t border-slate-700 bg-slate-950 flex justify-center gap-2">
                             <button disabled={page === 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="px-2 py-0.5 bg-slate-800 text-[10px] text-slate-300 rounded disabled:opacity-30">Anterior</button>
@@ -191,7 +191,7 @@ const Packages = ({ user, token, onUpdateUser }) => {
                     )}
                 </div>
 
-                {/* --- DERECHA: MOCHILA (AHORA GRANDE / FLEX-1) --- */}
+                {/* --- DERECHA: MOCHILA (Grid Principal) --- */}
                 <div className="flex-1 bg-slate-900/90 border border-slate-700 rounded flex flex-col shadow-lg overflow-hidden">
                     
                     {/* Header Tabs */}
@@ -248,7 +248,15 @@ const Packages = ({ user, token, onUpdateUser }) => {
                                         >
                                             {item && (
                                                 <>
-                                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover p-0.5 rounded pointer-events-none" />
+                                                    {/* --- CAMBIO AQUÍ: Ajuste Visual --- */}
+                                                    {/* object-contain: Para que no se recorte. */}
+                                                    {/* p-2: Padding interno para que no toque los bordes. */}
+                                                    <img 
+                                                        src={item.image_url} 
+                                                        alt={item.name} 
+                                                        className="w-full h-full object-contain p-2 rounded pointer-events-none" 
+                                                    />
+                                                    
                                                     {item.quantity > 1 && (
                                                         <span className="absolute bottom-0 right-0 bg-black/90 text-[10px] text-white px-1.5 font-mono border-tl border-slate-700 rounded-tl">
                                                             {item.quantity}
