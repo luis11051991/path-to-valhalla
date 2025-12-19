@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Heart, Shield, Zap, Coins, Gem, LogOut } from 'lucide-react'; 
+import { Coins, Gem, LogOut, Menu, PanelLeft, PanelRightClose } from 'lucide-react';
 import { RACES } from '../../constants/races';
 
-const TopBar = ({ user, onLogout, onOpenShop }) => {
+const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, isSidebarCompact }) => {
   // Estado para forzar la actualización del timer cada segundo
   const [, setTick] = useState(0);
 
@@ -36,7 +36,7 @@ const TopBar = ({ user, onLogout, onOpenShop }) => {
 
     // El tiempo restante es el intervalo MENOS el "sobrante" del ciclo actual
     const remaining = interval - (diffSeconds % interval);
-    
+
     if (remaining < 0) return "00:00"; // Prevención visual
 
     const m = Math.floor(remaining / 60);
@@ -46,13 +46,13 @@ const TopBar = ({ user, onLogout, onOpenShop }) => {
 
   const getAvatarImage = () => {
     if (user.class_image) {
-        const dbPath = user.class_image; 
-        const genderSuffix = user.gender === 'female' ? '_female' : '_male';
-        const lastDotIndex = dbPath.lastIndexOf('.');
-        if (lastDotIndex === -1) return dbPath + genderSuffix + ".png"; 
-        const path = dbPath.substring(0, lastDotIndex);
-        const ext = dbPath.substring(lastDotIndex);
-        return `${path}${genderSuffix}${ext}`; 
+      const dbPath = user.class_image;
+      const genderSuffix = user.gender === 'female' ? '_female' : '_male';
+      const lastDotIndex = dbPath.lastIndexOf('.');
+      if (lastDotIndex === -1) return dbPath + genderSuffix + ".png";
+      const path = dbPath.substring(0, lastDotIndex);
+      const ext = dbPath.substring(lastDotIndex);
+      return `${path}${genderSuffix}${ext}`;
     }
     return raceData.images[user.gender || 'male'];
   };
@@ -65,11 +65,11 @@ const TopBar = ({ user, onLogout, onOpenShop }) => {
       <div className="flex flex-col w-24 lg:w-32 relative group">
         <div className="flex justify-between px-1 mb-0.5 items-end">
           <div className="flex gap-1 items-center">
-             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{label}</span>
-             {/* AQUÍ ESTÁ EL TIMER QUE PEDISTE */}
-             {timerText && (
-                <span className="text-[9px] text-amber-400 font-mono animate-pulse">({timerText})</span>
-             )}
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{label}</span>
+            {/* AQUÍ ESTÁ EL TIMER QUE PEDISTE */}
+            {timerText && (
+              <span className="text-[9px] text-amber-400 font-mono animate-pulse">({timerText})</span>
+            )}
           </div>
           <span className="text-[9px] text-white font-mono">{value}/{max}</span>
         </div>
@@ -85,20 +85,35 @@ const TopBar = ({ user, onLogout, onOpenShop }) => {
     <header className="h-20 bg-slate-950 border-b border-amber-700/60 flex items-center justify-between px-4 shadow-[0_5px_20px_black] relative z-50">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-slate-900 to-black opacity-90 z-0"></div>
 
-      {/* SECCIÓN IZQUIERDA: AVATAR Y NIVEL */}
-      <div className="relative z-10 flex items-center gap-4 pl-2 min-w-fit">
+      <div className="relative z-10 flex items-center gap-3 pl-2 min-w-fit">
+        <button
+          onClick={onToggleSidebar}
+          className="md:hidden p-2 rounded text-slate-400 hover:text-amber-300 hover:bg-white/5 transition-colors"
+          aria-label="Abrir menú"
+        >
+          <Menu size={18} />
+        </button>
+
+        <button
+          onClick={onToggleCompact}
+          className="hidden md:flex p-2 rounded text-slate-500 hover:text-amber-300 hover:bg-white/5 transition-colors"
+          aria-label={isSidebarCompact ? 'Expandir menú' : 'Contraer menú'}
+        >
+          {isSidebarCompact ? <PanelLeft size={18} /> : <PanelRightClose size={18} />}
+        </button>
+
         <div className="relative shrink-0">
-            <div className="w-12 h-12 rounded bg-black border-2 border-amber-600 shadow-[0_0_15px_rgba(245,158,11,0.2)] overflow-hidden relative">
-                <img src={bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-80" alt="BG" />
-                <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-top z-10" alt="Avatar" />
-            </div>
-            <div className="absolute -bottom-1.5 -right-1.5 bg-amber-900 text-amber-100 text-[9px] font-bold px-1.5 py-0.5 border border-amber-500 rounded shadow-md z-20">{user.level}</div>
+          <div className="w-12 h-12 rounded bg-black border-2 border-amber-600 shadow-[0_0_15px_rgba(245,158,11,0.2)] overflow-hidden relative">
+            <img src={bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-80" alt="BG" />
+            <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-top z-10" alt="Avatar" />
+          </div>
+          <div className="absolute -bottom-1.5 -right-1.5 bg-amber-900 text-amber-100 text-[9px] font-bold px-1.5 py-0.5 border border-amber-500 rounded shadow-md z-20">{user.level}</div>
         </div>
         <div className="hidden sm:block">
-            <h2 className="text-lg font-serif font-bold text-amber-500 tracking-wide drop-shadow-md leading-none">{user.username}</h2>
-            <span className="text-[10px] text-slate-500 uppercase tracking-widest">
-                {user.class_name || raceData.name}
-            </span>
+          <h2 className="text-lg font-serif font-bold text-amber-500 tracking-wide drop-shadow-md leading-none">{user.username}</h2>
+          <span className="text-[10px] text-slate-500 uppercase tracking-widest">
+            {user.class_name || raceData.name}
+          </span>
         </div>
       </div>
 
@@ -114,8 +129,8 @@ const TopBar = ({ user, onLogout, onOpenShop }) => {
       {/* BOTÓN TIENDA */}
       <button onClick={onOpenShop} className="relative z-20 flex items-center gap-2 bg-gradient-to-r from-purple-900/80 to-slate-900 border border-purple-500/50 px-4 py-1.5 rounded-full hover:scale-105 transition-transform group shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-pulse hover:animate-none cursor-pointer mx-auto md:mx-4">
         <div className="relative">
-            <Gem size={14} className="text-purple-400 group-hover:text-white transition-colors" />
-            <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span></span>
+          <Gem size={14} className="text-purple-400 group-hover:text-white transition-colors" />
+          <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span></span>
         </div>
         <span className="text-xs font-bold text-purple-200 group-hover:text-white uppercase tracking-wider hidden md:inline">Tienda Ónix</span>
       </button>
