@@ -1,5 +1,7 @@
 const pool = require('../config/db');
 const { giveItemToPlayer } = require('../utils/inventoryUtils');
+const { normalizeCurrency } = require('../utils/currencyUtils'); // <--- NUEVO
+const { processRegeneration } = require('../utils/regenUtils');   // <--- NUEVO
 
 // --- 1. OBTENER ZONAS ---
 exports.getExpeditions = async (req, res) => {
@@ -40,9 +42,19 @@ const resolveEnemyStats = (enemy) => {
     return { ...resolved, max_hp: hp, current_hp: hp, damage: dmg };
 };
 
-// --- 3. MOTOR DE COMBATE V4 (AHORA CON ITEMS) ---
+// --- 3. MOTOR DE COMBATE V4 (CON CURRENCY FIX & REGEN) ---
 exports.startBattle = async (req, res) => {
     const { userId, enemyId, zoneId } = req.body;
+    
+    // Paso Previo: Regenerar al jugador ANTES de conectar la transacción
+    // Esto asegura que si tenía energía pendiente por tiempo, la reciba antes de validar
+    try {
+        const preCheck = await pool.query('SELECT * FROM players WHERE id = $1', [userId]);
+        if (preCheck.rows.length > 0) {
+            await processRegeneration(preCheck.rows[0]);
+        }
+    } catch (e) { console.error("Error regen pre-batalla", e); }
+
     const client = await pool.connect();
     
     try {
@@ -77,7 +89,6 @@ exports.startBattle = async (req, res) => {
         }
 
         // --- B. CÁLCULO DE STATS TOTALES (Items + Base) ---
-        // Recuperamos los items equipados
         const itemsRes = await client.query(`
             SELECT pi.*, it.base_stats 
             FROM player_items pi 
@@ -88,23 +99,21 @@ exports.startBattle = async (req, res) => {
         let bonuses = { strength: 0, dexterity: 0, constitution: 0, armor: 0, damage_min: 0, damage_max: 0 };
 
         itemsRes.rows.forEach(item => {
-            const stats = item.base_stats || {}; // Usamos el JSON del template o del item si tuviera únicos
+            const stats = item.base_stats || {}; 
             Object.entries(stats).forEach(([key, val]) => {
                 let valToAdd = Array.isArray(val) ? Math.floor((val[0] + val[1]) / 2) : val;
                 if (bonuses[key] !== undefined) bonuses[key] += valToAdd;
             });
         });
 
-        // Sumamos Base + Bonus
         const totalStr = (player.stats.strength || 0) + bonuses.strength;
         const totalDex = (player.stats.dexterity || 0) + bonuses.dexterity;
         const totalCon = (player.stats.constitution || 0) + bonuses.constitution;
-        const totalArmor = bonuses.armor; // Armadura viene casi toda del equipo
+        const totalArmor = bonuses.armor; 
 
         // --- C. PREPARACIÓN ---
         const enemy = resolveEnemyStats(baseEnemy);
-        const playerMaxHp = 100 + (totalCon * 20); // HP real con items
-        // Ajustamos HP actual si excede el nuevo máximo (raro en batalla pero posible)
+        const playerMaxHp = 100 + (totalCon * 20); 
         player.current_hp = Math.min(player.current_hp, playerMaxHp); 
 
         let log = []; 
@@ -115,22 +124,17 @@ exports.startBattle = async (req, res) => {
             log.push({ type: 'round', msg: `--- RONDA ${r} ---` });
 
             // 1. JUGADOR ATACA
-            // Fórmula: (Daño Arma Random) + (Stats Scaling)
-            // Scaling: Str * 2 (Igual que en el frontend)
             const weaponDmg = Math.floor(Math.random() * (bonuses.damage_max - bonuses.damage_min + 1)) + bonuses.damage_min;
             const statDmg = Math.floor(Math.max(totalStr, totalDex) * 2); 
             
             let dmgToEnemy = weaponDmg + statDmg;
             
-            // Variación pequeña aleatoria (+/- 10%)
             const variance = Math.floor(dmgToEnemy * 0.1);
             dmgToEnemy += Math.floor(Math.random() * (variance * 2 + 1)) - variance;
 
-            // Crítico
             let isCrit = Math.random() * 100 < (5 + (player.stats.luck || 0));
             if (isCrit) dmgToEnemy = Math.floor(dmgToEnemy * 1.5);
 
-            // Reducción enemiga
             const enemyDef = Math.floor((baseEnemy.armor || 0) / 5);
             dmgToEnemy = Math.max(1, dmgToEnemy - enemyDef);
 
@@ -151,8 +155,6 @@ exports.startBattle = async (req, res) => {
 
             // 2. ENEMIGO ATACA
             let dmgToPlayer = enemy.damage;
-            
-            // Tu Defensa (Armor Items + Con/2)
             const playerDef = totalArmor + Math.floor(totalCon / 2);
             dmgToPlayer = Math.max(1, dmgToPlayer - Math.floor(playerDef / 5));
 
@@ -180,12 +182,25 @@ exports.startBattle = async (req, res) => {
              log.push({ type: 'info', msg: isWin ? "Ganas por resistencia." : "El enemigo te obligó a retirarte." });
         }
 
-        // --- E. RECOMPENSAS ---
+        // --- E. RECOMPENSAS CON CONVERSIÓN ---
         let rewards = { xp: 0, copper: 0, items: [] };
         
+        // Variables finales de moneda (empiezan con lo que tiene el jugador)
+        let finalGold = parseInt(player.gold || 0);
+        let finalSilver = parseInt(player.silver || 0);
+        let finalCopper = parseInt(player.copper || 0);
+
         if (isWin) {
             rewards.xp = baseEnemy.xp_reward;
-            rewards.copper = Math.floor(Math.random() * 10) + (baseEnemy.min_level * 5);
+            rewards.copper = Math.floor(Math.random() * 10) + (baseEnemy.min_level * 5); // Cobre base ganado
+
+            // --- LÓGICA DE CONVERSIÓN AQUÍ ---
+            const normalized = normalizeCurrency(player.gold, player.silver, player.copper, rewards.copper);
+            finalGold = normalized.newGold;
+            finalSilver = normalized.newSilver;
+            finalCopper = normalized.newCopper;
+            // ---------------------------------
+
             const dropsRes = await client.query('SELECT * FROM enemy_drops WHERE enemy_id = $1', [enemyId]);
             for (const drop of dropsRes.rows) {
                 if (Math.random() * 100 <= drop.drop_chance) {
@@ -201,9 +216,24 @@ exports.startBattle = async (req, res) => {
         const durabilityLoss = isWin ? 1 : 2;
         await client.query(`UPDATE player_items SET durability_current = GREATEST(0, durability_current - $1) WHERE player_id = $2 AND is_equipped = true`, [durabilityLoss, userId]);
 
-        // Guardar Jugador
-        await client.query(`UPDATE players SET current_hp = $1, energy = energy - 5, experience = experience + $2, copper = copper + $3, last_expedition_at = NOW() WHERE id = $4`, 
-            [player.current_hp, isWin ? rewards.xp : 0, isWin ? rewards.copper : 0, userId]);
+        // Guardar Jugador (CON ORO/PLATA/COBRE SEPARADOS)
+        await client.query(`
+            UPDATE players 
+            SET current_hp = $1, 
+                energy = energy - 5, 
+                experience = experience + $2, 
+                gold = $3, silver = $4, copper = $5, 
+                last_expedition_at = NOW() 
+            WHERE id = $6`, 
+            [
+                player.current_hp,          
+                isWin ? rewards.xp : 0,     
+                finalGold,   // <--- Valor normalizado
+                finalSilver, // <--- Valor normalizado
+                finalCopper, // <--- Valor normalizado
+                userId
+            ]
+        );
 
         await client.query('COMMIT');
 

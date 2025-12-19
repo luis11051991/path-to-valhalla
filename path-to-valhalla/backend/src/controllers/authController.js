@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { processRegeneration } = require('../utils/regenUtils'); // <--- IMPORTANTE: Importamos la utilidad
 
 const SECRET_KEY = 'valhalla_secret_key_odin';
 
@@ -27,19 +28,17 @@ exports.register = async (req, res) => {
     const hash = await bcrypt.hash(password, salt);
 
     // 3. DATOS POR DEFECTO PARA PASO 1
-    // Al registrarse, aún no ha elegido raza. Ponemos "Humano" (ID 1) temporalmente.
-    // Esto es vital para que la base de datos no rechace el insert por falta de datos.
     const defaultRace = 'human';
     const defaultGender = 'male';
     const defaultClassId = 1; // Novicio Humano
     const defaultBgId = 1;    // Fondo Humano
     const defaultStats = JSON.stringify({ strength: 5, dexterity: 5, constitution: 5, intelligence: 5, luck: 5, charisma: 5 });
 
-    // 4. INSERTAR JUGADOR
+    // 4. INSERTAR JUGADOR (Con last_regen_at en NOW() para iniciar el contador)
     const insertQuery = `
        INSERT INTO players 
-       (username, email, password_hash, race, gender, silver, copper, current_hp, last_regen_at, active_background_id, class_id, stats) 
-       VALUES ($1, $2, $3, $4, $5, 10, 50, 100, NOW(), $6, $7, $8) 
+       (username, email, password_hash, race, gender, silver, copper, current_hp, energy, valor, last_regen_at, active_background_id, class_id, stats) 
+       VALUES ($1, $2, $3, $4, $5, 10, 50, 100, 100, 5, NOW(), $6, $7, $8) 
        RETURNING *
     `;
     
@@ -56,7 +55,7 @@ exports.register = async (req, res) => {
     
     const user = newUser.rows[0];
 
-    // 5. REGISTRAR FONDO INICIAL (Para que no de error al cargar perfil)
+    // 5. REGISTRAR FONDO INICIAL
     await pool.query('INSERT INTO player_backgrounds (player_id, background_id) VALUES ($1, $2)', [user.id, defaultBgId]);
     
     // Obtener URL del fondo
@@ -75,8 +74,7 @@ exports.register = async (req, res) => {
 
   } catch (err) { 
       console.error(">>> ERROR CRÍTICO EN REGISTER:", err); 
-      // Devolvemos JSON de error, NO TEXTO, para que el frontend no explote con JSON.parse
-      res.status(500).json({ message: 'Error interno del servidor. Revisa la consola del backend.' }); 
+      res.status(500).json({ message: 'Error interno del servidor.' }); 
   }
 };
 
@@ -101,19 +99,10 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(400).json({ message: 'Credenciales incorrectas.' });
 
-    // Regeneración offline
-    const now = new Date();
-    const lastRegen = user.last_regen_at ? new Date(user.last_regen_at) : new Date();
-    const con = (user.stats && user.stats.constitution) ? user.stats.constitution : 10;
-    const maxHp = 100 + (con * 20); 
-    const diffSeconds = Math.floor((now - lastRegen) / 1000);
-    const hpToHeal = Math.floor(diffSeconds / 6); 
-
-    if (hpToHeal > 0 && user.current_hp < maxHp) {
-        const newHp = Math.min(user.current_hp + hpToHeal, maxHp);
-        await pool.query('UPDATE players SET current_hp = $1, last_regen_at = NOW() WHERE id = $2', [newHp, user.id]);
-        user.current_hp = newHp;
-    }
+    // --- REGENERACIÓN UNIFICADA (HP, ENERGÍA, VALOR) ---
+    // Calculamos lo que recuperó mientras estaba desconectado
+    user = await processRegeneration(user);
+    // ----------------------------------------------------
 
     // Cargar datos extra
     const itemsQuery = `
@@ -162,7 +151,13 @@ exports.getProfile = async (req, res) => {
     `, [userId]);
 
     if (result.rows.length === 0) return res.status(404).json({ message: 'Usuario no encontrado.' });
-    const user = result.rows[0];
+    
+    let user = result.rows[0];
+
+    // --- REGENERACIÓN UNIFICADA ---
+    // Calculamos regeneración cada vez que el perfil se refresca
+    user = await processRegeneration(user);
+    // -----------------------------
 
     const itemsQuery = `
       SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, 
