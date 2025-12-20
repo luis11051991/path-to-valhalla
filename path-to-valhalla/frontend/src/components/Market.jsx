@@ -41,6 +41,17 @@ const Market = ({ user, onUpdateUser }) => {
         if (mode === 'buy') { loadShopData(); }
     }, [mode]);
 
+    // Helpers para cambiar modo y limpiar tooltip
+    const changeMode = (newMode) => {
+        setMode(newMode);
+        setTooltipData(null); // Limpiar tooltip al cambiar modo
+    };
+
+    const changeCategory = (catId) => {
+        setActiveCategory(catId);
+        setTooltipData(null); // Limpiar tooltip al cambiar pestaña
+    };
+
     const loadShopData = async () => {
         setLoadingShop(true);
         try {
@@ -87,6 +98,7 @@ const Market = ({ user, onUpdateUser }) => {
     };
 
     const initiateSell = (item) => {
+        setTooltipData(null); // Limpiamos tooltip al hacer click por si acaso
         if (item.rarity === 'common' || item.rarity === 'uncommon') { performSell(item); } 
         else { setItemToSell(item); }
     };
@@ -101,7 +113,8 @@ const Market = ({ user, onUpdateUser }) => {
             if (data.success) {
                 onUpdateUser({ ...user, ...data.newMoney, real_inventory: data.inventory });
                 showFeedback(`+${item.price_copper} Cobre`, "success");
-                setItemToSell(null); 
+                setItemToSell(null);
+                setTooltipData(null); // <--- SOLUCIÓN: Forzar cierre del tooltip tras venta exitosa
             } else { showFeedback(data.message, "error"); }
         } catch (error) { showFeedback("Error al vender", "error"); }
     };
@@ -159,10 +172,9 @@ const Market = ({ user, onUpdateUser }) => {
                     <p className={`font-bold text-sm ${item.rarity === 'rare' ? 'text-blue-400' : item.rarity === 'epic' ? 'text-purple-400' : 'text-slate-200'}`}>{item.name}</p>
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p>
                     
-                    {/* FILTRADO DE STATS: SOLO MUESTRA SI VALOR > 0 */}
                     {Object.entries(item.base_stats || {}).map(([key, val]) => {
                         if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
-                        if (val <= 0) return null; // <--- ¡AQUÍ ESTÁ LA MAGIA!
+                        if (val <= 0) return null; 
                         
                         const icon = STAT_ICONS[key] || '🔹';
                         return <p key={key} className="text-xs text-green-400 capitalize flex items-center gap-1">{icon} {key}: <span className="text-white">+{val}</span></p>;
@@ -211,8 +223,8 @@ const Market = ({ user, onUpdateUser }) => {
                     <div><h2 className="text-xl font-serif font-bold text-amber-100 tracking-wide">Distrito Comercial</h2><p className="text-[10px] text-amber-500/60 uppercase tracking-widest">Nivel de Reputación: Neutral</p></div>
                 </div>
                 <div className="flex bg-black/40 rounded-lg p-1 border border-slate-700 shadow-inner">
-                    <button onClick={() => setMode('buy')} className={`px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${mode === 'buy' ? 'bg-amber-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>Comprar</button>
-                    <button onClick={() => setMode('sell')} className={`px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${mode === 'sell' ? 'bg-green-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>Vender</button>
+                    <button onClick={() => changeMode('buy')} className={`px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${mode === 'buy' ? 'bg-amber-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>Comprar</button>
+                    <button onClick={() => changeMode('sell')} className={`px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${mode === 'sell' ? 'bg-green-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>Vender</button>
                 </div>
                 <div className="flex flex-col items-end"><span className="text-[9px] text-slate-400 uppercase tracking-widest mb-1">Tu Bolsa</span>{formatCurrency((user.gold * 10000) + (user.silver * 100) + user.copper)}</div>
             </div>
@@ -243,7 +255,7 @@ const Market = ({ user, onUpdateUser }) => {
                                     if (key === 'default') return null;
                                     const Icon = config.icon;
                                     return (
-                                        <button key={key} onClick={() => setActiveCategory(key)} className={`flex-1 min-w-[80px] py-3 flex flex-col items-center gap-1 text-[10px] font-bold uppercase transition-all relative ${activeCategory === key ? 'text-amber-400 bg-gradient-to-t from-amber-900/20 to-transparent' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
+                                        <button key={key} onClick={() => changeCategory(key)} className={`flex-1 min-w-[80px] py-3 flex flex-col items-center gap-1 text-[10px] font-bold uppercase transition-all relative ${activeCategory === key ? 'text-amber-400 bg-gradient-to-t from-amber-900/20 to-transparent' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
                                             <Icon size={18} className={activeCategory === key ? "drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" : ""} />
                                             {config.label}
                                             {activeCategory === key && <div className="absolute bottom-0 w-full h-0.5 bg-amber-500 shadow-[0_0_10px_#f59e0b]" />}
