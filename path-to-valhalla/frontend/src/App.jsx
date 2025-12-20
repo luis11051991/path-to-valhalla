@@ -3,7 +3,8 @@ import Auth from './components/Auth';
 import RaceSelection from './components/RaceSelection';
 import Dashboard from './components/Dashboard';
 import Expeditions from './components/Expeditions';
-import Packages from './components/Packages'; // <--- 1. NUEVO IMPORT
+import Packages from './components/Packages';
+import Market from './components/Market'; // <--- 1. NUEVO IMPORT
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
 import { apiUrl } from './constants/api';
@@ -11,13 +12,9 @@ import { apiUrl } from './constants/api';
 function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('auth');
-
-  // Controla qué pantalla se ve DENTRO del juego
   const [gameView, setGameView] = useState('dashboard'); 
-
   const [isShopOpen, setIsShopOpen] = useState(false);
 
-  // --- CARGA INICIAL INTELIGENTE ---
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
@@ -40,7 +37,6 @@ function App() {
         })
         .then(data => {
           if (data.user) {
-            console.log("Datos actualizados desde el servidor");
             handleUserUpdate(data.user);
           }
         })
@@ -124,12 +120,19 @@ function App() {
             />
           )}
 
-          {/* --- 2. RENDERIZAR PAQUETES --- */}
           {gameView === 'packages' && (
             <Packages 
                 user={user}
-                token={localStorage.getItem('token')} // Pasamos el token para poder reclamar
+                token={localStorage.getItem('token')}
                 onUpdateUser={handleUserUpdate}
+            />
+          )}
+
+          {/* --- 2. RENDERIZAR MERCADO --- */}
+          {gameView === 'market' && (
+            <Market 
+              user={user}
+              onUpdateUser={handleUserUpdate}
             />
           )}
 

@@ -7,6 +7,7 @@ const playerController = require('./src/controllers/playerController');
 const bgController = require('./src/controllers/backgroundController'); 
 const inventoryController = require('./src/controllers/inventoryController');
 const petController = require('./src/controllers/petController');
+// No necesitamos importar shopController aquí, porque lo usamos a través de las rutas
 
 // --- IMPORTACIÓN DE MIDDLEWARES ---
 const authMiddleware = require('./src/middleware/authMiddleware'); 
@@ -15,7 +16,8 @@ const authMiddleware = require('./src/middleware/authMiddleware');
 const authRoutes = require('./src/routes/authRoutes');
 const evolutionRoutes = require('./src/routes/evolutionRoutes');
 const expeditionRoutes = require('./src/routes/expeditionRoutes');
-const packageRoutes = require('./src/routes/packageRoutes'); // <--- NUEVO
+const packageRoutes = require('./src/routes/packageRoutes'); 
+const shopRoutes = require('./src/routes/shopRoutes'); // <--- 1. NUEVO IMPORT
 
 const app = express();
 
@@ -27,7 +29,8 @@ app.use(express.json());
 app.use('/api/auth', authRoutes); 
 app.use('/api/evolution', evolutionRoutes);
 app.use('/api/expeditions', expeditionRoutes);
-app.use('/api/packages', packageRoutes); // <--- NUEVO
+app.use('/api/packages', packageRoutes); 
+app.use('/api/shop', shopRoutes); // <--- 2. NUEVA RUTA REGISTRADA
 
 // --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);

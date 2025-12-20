@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     User, BookOpen, Trophy, BarChart2, Mail, // Héroe
-    Package, // <--- NUEVO ICONO IMPORTADO
+    Package, // Paquetes
     Map, Skull, ArrowUpCircle, Scroll, // Aventura
     Swords, // Combate
     Hammer, Landmark, Gavel, Shield, // Ciudad
@@ -21,6 +21,7 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
         : (isCompact ? 80 : 256); // 20 * 4 = 80px
     const positionClass = isMobile ? 'fixed inset-y-0 left-0' : 'static';
     const translateClass = isMobile ? (isOpen ? 'translate-x-0' : '-translate-x-full') : 'translate-x-0';
+    
     const handleNavigate = (target) => {
         onNavigate(target);
         if (isMobile && onCloseMobile) {
@@ -43,7 +44,7 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
         )
     );
 
-    // Componente para los Enlaces (Actualizado para aceptar onClick)
+    // Componente para los Enlaces
     const MenuLink = ({ icon: Icon, label, active, disabled, onClick }) => (
         <div className="relative group">
             <button
@@ -57,13 +58,13 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
                 }}
                 onMouseLeave={() => showHoverLabel && setHoverInfo(null)}
                 className={`
-                            w-full flex items-center ${showLabels ? 'justify-start gap-3 px-6' : 'justify-center px-3'} py-2.5
-                transition-all border-l-[3px]
-                ${active
+                    w-full flex items-center ${showLabels ? 'justify-start gap-3 px-6' : 'justify-center px-3'} py-2.5
+                    transition-all border-l-[3px]
+                    ${active
                         ? 'bg-gradient-to-r from-amber-900/40 to-transparent border-amber-500 text-amber-100'
                         : 'border-transparent text-slate-400 hover:text-amber-100 hover:bg-white/5'}
-                ${disabled ? 'opacity-40 cursor-not-allowed grayscale' : 'cursor-pointer'}
-            `}
+                    ${disabled ? 'opacity-40 cursor-not-allowed grayscale' : 'cursor-pointer'}
+                `}
             >
                 <Icon size={18} className={active ? 'text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]' : disabled ? 'text-slate-600' : 'text-slate-500 group-hover:text-amber-200'} />
                 {showLabels ? (
@@ -74,7 +75,6 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
                     <span className="sr-only">{label}</span>
                 )}
             </button>
-
         </div>
     );
 
@@ -123,7 +123,6 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
                     {/* SECCIÓN: HÉROE */}
                     <SectionHeader title="Héroe" />
 
-                    {/* Botón Visión General (Dashboard) */}
                     <MenuLink
                         icon={User}
                         label="Visión General"
@@ -131,14 +130,12 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
                         onClick={() => handleNavigate('dashboard')}
                     />
 
-                    {/* --- AQUÍ ESTÁ EL NUEVO BOTÓN --- */}
                     <MenuLink
                         icon={Package}
                         label="Paquetes"
                         active={currentView === 'packages'}
                         onClick={() => handleNavigate('packages')}
                     />
-                    {/* ------------------------------- */}
 
                     <MenuLink icon={BookOpen} label="Bestiario" />
                     <MenuLink icon={Trophy} label="Logros" />
@@ -148,7 +145,6 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
                     {/* SECCIÓN: AVENTURA */}
                     <SectionHeader title="Aventura" />
 
-                    {/* Botón Expediciones */}
                     <MenuLink
                         icon={Map}
                         label="Expediciones"
@@ -168,7 +164,15 @@ const Sidebar = ({ onNavigate, currentView, isOpen, isCompact, isMobile, onClose
                     <SectionHeader title="Ciudad" />
                     <MenuLink icon={Hammer} label="Taller" />
                     <MenuLink icon={Landmark} label="Banco" />
-                    <MenuLink icon={Gavel} label="Mercado" />
+                    
+                    {/* --- AQUÍ ESTÁ EL CAMBIO: BOTÓN MERCADO ACTIVADO --- */}
+                    <MenuLink 
+                        icon={Gavel} 
+                        label="Mercado" 
+                        active={currentView === 'market'} 
+                        onClick={() => handleNavigate('market')} 
+                    />
+                    
                     <MenuLink icon={Shield} label="Armero" />
 
                     {/* SECCIÓN: SOCIAL */}
