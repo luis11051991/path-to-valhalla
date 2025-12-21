@@ -1,5 +1,4 @@
 const pool = require('../config/db');
-// Nota: Ya no necesitamos giveItemToPlayer porque los drops van a paquetes
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { processRegeneration } = require('../utils/regenUtils');
 
@@ -57,7 +56,7 @@ exports.getZoneEnemies = async (req, res) => {
 };
 
 // ==========================================
-// 3. MOTOR DE COMBATE V2 (Corrección Animación e Imágenes)
+// 3. MOTOR DE COMBATE V2 (Con Loot Random Real de DB)
 // ==========================================
 exports.startBattle = async (req, res) => {
     const { userId, enemyId, zoneId } = req.body;
@@ -91,7 +90,6 @@ exports.startBattle = async (req, res) => {
         if (player.energy < 5) throw new Error("Energía insuficiente.");
         if (player.current_hp <= 5) throw new Error("Estás muy herido.");
 
-        // Cooldown simple
         if (player.last_expedition_at) {
             const now = new Date();
             const lastTime = new Date(player.last_expedition_at);
@@ -127,9 +125,8 @@ exports.startBattle = async (req, res) => {
         const playerMaxHp = 100 + (totalCon * 20);
         player.current_hp = Math.min(player.current_hp, playerMaxHp);
 
-        // [FIX] GUARDAR ESTADO INICIAL PARA LA ANIMACIÓN
         const initialPlayerHp = player.current_hp;
-        const initialEnemyHp = enemy.max_hp; // Los enemigos siempre empiezan full en este motor
+        const initialEnemyHp = enemy.max_hp;
 
         let log = [];
         let isWin = false;
@@ -144,7 +141,6 @@ exports.startBattle = async (req, res) => {
             let dmgToEnemy = Math.max(1, (weaponDmg + statDmg) - Math.floor((baseEnemy.armor || 0) / 5));
 
             enemy.current_hp -= dmgToEnemy;
-            // Guardamos enemyHp actual para que la barra baje en el frontend
             log.push({ type: 'player_atk', msg: `Golpeas por ${dmgToEnemy}`, enemyHp: Math.max(0, enemy.current_hp) });
 
             if (enemy.current_hp <= 0) {
@@ -156,7 +152,6 @@ exports.startBattle = async (req, res) => {
             // Enemy Atk
             let dmgToPlayer = Math.max(1, enemy.damage - Math.floor((totalArmor + totalCon / 2) / 5));
             player.current_hp -= dmgToPlayer;
-            // Guardamos playerHp actual para que la barra baje
             log.push({ type: 'enemy_atk', msg: `Te golpean por ${dmgToPlayer}`, playerHp: Math.max(0, player.current_hp) });
 
             if (player.current_hp <= 0) {
@@ -167,7 +162,7 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- E. RECOMPENSAS & PAQUETES ---
+        // --- E. RECOMPENSAS (LÓGICA RANDOM IMPLEMENTADA) ---
         let rewards = { xp: 0, copper: 0, items: [] };
 
         let finalGold = parseInt(player.gold || 0);
@@ -175,10 +170,18 @@ exports.startBattle = async (req, res) => {
         let finalCopper = parseInt(player.copper || 0);
 
         if (isWin) {
-            rewards.xp = baseEnemy.xp_reward;
-            rewards.copper = Math.floor(Math.random() * 10) + (baseEnemy.min_level * 5);
+            rewards.xp = baseEnemy.xp_reward || 10;
+            
+            // --- AQUÍ ESTÁ LA MAGIA DEL RANDOM ---
+            // 1. Leemos los límites de la DB (o usamos default si no existen)
+            const minGold = baseEnemy.gold_reward_min || 1;
+            const maxGold = baseEnemy.gold_reward_max || 5;
+            
+            // 2. Tiramos el dado entre Min y Max
+            rewards.copper = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
 
-            // Normalizar Moneda
+            // 3. Normalizar Moneda (Cobre -> Plata -> Oro)
+            // Esto asegura que si ganas 120 cobre, se guarde como 1 Plata y 20 Cobre
             const normalized = normalizeCurrency(player.gold, player.silver, player.copper, rewards.copper);
             finalGold = normalized.newGold;
             finalSilver = normalized.newSilver;
@@ -224,18 +227,17 @@ exports.startBattle = async (req, res) => {
 
         await client.query('COMMIT');
 
-        // [FIX] ENVIAMOS LOS DATOS QUE FALTABAN PARA EL FRONTEND
         res.json({
             success: true,
             combatResult: {
                 isWin,
                 log,
                 rewards,
-                initialPlayerHp, // CRUCIAL PARA LA BARRA
-                initialEnemyHp,  // CRUCIAL PARA LA BARRA
+                initialPlayerHp,
+                initialEnemyHp,
                 finalPlayerHp: player.current_hp,
                 enemyName: baseEnemy.name,
-                enemyImage: baseEnemy.image_url // CRUCIAL PARA LA FOTO
+                enemyImage: baseEnemy.image_url
             }
         });
 

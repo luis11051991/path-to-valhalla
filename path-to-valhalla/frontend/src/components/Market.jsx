@@ -92,6 +92,12 @@ const Market = ({ user, onUpdateUser }) => {
             const data = await res.json();
             if (data.success) {
                 onUpdateUser({ ...user, ...data.newMoney, real_inventory: data.inventory });
+                
+                // ACTUALIZACIÓN VISUAL: Usamos el stock nuevo que devuelve el backend
+                if (data.updatedStock) {
+                    setShopItems(data.updatedStock);
+                }
+                
                 showFeedback(`Comprado: ${item.name}`, "success");
             } else { showFeedback(data.message, "error"); }
         } catch (error) { showFeedback("Error al comprar", "error"); }
