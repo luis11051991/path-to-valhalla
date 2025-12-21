@@ -8,6 +8,11 @@ body {
   /* Fondo oscuro por defecto */
 }
 
+/* Desactiva el menú contextual por toque prolongado en imágenes (mejora el drag & drop en mobile) */
+img {
+  -webkit-touch-callout: none;
+}
+
 /* Scrollbar global */
 body {
   scrollbar-width: thin;
