@@ -474,7 +474,7 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         );
     };
 
-    // --- TOOLTIP GLOBAL ---
+    // --- TOOLTIP GLOBAL (CORREGIDO PARA MOSTRAR RANGOS) ---
     const GlobalTooltip = () => {
         if (!tooltipData) return null;
         const { item, rect, side } = tooltipData;
@@ -489,19 +489,27 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         else if (side === 'right') { style.left = rect.right + 10; style.top = rect.top; } 
         else if (side === 'bottom') { style.left = rect.left + (rect.width / 2) - 100; style.top = rect.bottom + 10; }
         
+        // Función Helper para pintar números O rangos [min, max]
+        const renderValue = (val) => {
+            if (Array.isArray(val)) return `${val[0]}-${val[1]}`; // Si es [4, 7] -> "4-7"
+            return val; // Si es 5 -> "5"
+        };
+
         return (
             <div style={style} className="bg-slate-950 border-2 border-amber-600 p-3 rounded shadow-[0_0_20px_rgba(0,0,0,0.8)] min-w-[200px] pointer-events-none animate-in fade-in zoom-in-95 duration-100">
                 <p className={`font-bold text-sm ${item.rarity === 'rare' ? 'text-blue-400' : item.rarity === 'epic' ? 'text-purple-400' : 'text-slate-200'}`}>{item.name}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p>
                 <div className="mb-2 text-[10px] font-bold text-center border-b border-white/5 pb-1"> {item.is_bound ? (<span className="text-red-500">🔒 VINCULADO (Soulbound)</span>) : (<span className="text-green-500">✨ TRADEABLE</span>)} </div>
                 <div className="space-y-1 mb-2">
-                    {stats.damage_min && <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{stats.damage_min} - {stats.damage_max}</span></p>}
-                    {stats.armor ? <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>🛡️ Armadura: <span className="text-white">{stats.armor}</span></p> : null}
+                    {/* AQUI ESTABA EL ERROR: Usamos renderValue para formatear */}
+                    {stats.damage_min && <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{renderValue(stats.damage_min)} - {renderValue(stats.damage_max)}</span></p>}
+                    {stats.armor ? <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>🛡️ Armadura: <span className="text-white">{renderValue(stats.armor)}</span></p> : null}
+                    
                     {Object.entries(stats).map(([key, val]) => {
                         if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
-                        if (val <= 0) return null;
+                        if (val <= 0 && !Array.isArray(val)) return null;
                         const icon = STAT_ICONS[key] || '🍀';
-                        return <p key={key} className="text-xs text-green-400 capitalize">{icon} {key}: +{val}</p>;
+                        return <p key={key} className="text-xs text-green-400 capitalize">{icon} {key}: +{renderValue(val)}</p>;
                     })}
                 </div>
                 <div className="mt-2 pt-1 border-t border-white/10">

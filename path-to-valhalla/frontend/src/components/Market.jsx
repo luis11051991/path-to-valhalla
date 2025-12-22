@@ -18,7 +18,7 @@ const SHOP_CONFIG = {
 const STAT_ICONS = { strength: '💪', dexterity: '⚡', constitution: '❤️', intelligence: '🧠', wisdom: '✨', charisma: '🎭', luck: '🍀', defense: '🛡️', block: '🚫', crit: '🎯' };
 
 const Market = ({ user, onUpdateUser }) => {
-    const [mode, setMode] = useState('sell'); 
+    const [mode, setMode] = useState('buy'); // 'buy' or 'sell'
     const [activeCategory, setActiveCategory] = useState('weapons');
     
     // Feedback mejorado
@@ -208,10 +208,17 @@ const Market = ({ user, onUpdateUser }) => {
     };
 
     const currentConfig = mode === 'buy' ? SHOP_CONFIG[activeCategory] : SHOP_CONFIG.default;
+    
+    // --- LÓGICA DE FILTRADO CORREGIDA ---
     const filteredShopItems = shopItems.filter(item => {
+        // Corrección: 'weapons' (plural en config) vs 'weapon' (singular en DB)
+        if (activeCategory === 'weapons') return item.type === 'weapon';
+        
         if (activeCategory === 'jewelry') return ['ring', 'neck', 'earring', 'accessory'].includes(item.type);
         if (activeCategory === 'recipes') return item.type === 'recipe';
         if (activeCategory === 'consumables') return item.type === 'consumable';
+        
+        // Para 'armor', si en DB es 'armor', coincide directo.
         return item.type === activeCategory;
     });
 

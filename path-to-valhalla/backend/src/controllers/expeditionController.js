@@ -33,21 +33,41 @@ const resolveEnemyStats = (enemy) => {
 };
 
 // --- 1. OBTENER ZONAS ---
+// EN: backend/src/controllers/expeditionController.js
+
 exports.getExpeditions = async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM expeditions ORDER BY level_req ASC');
+        // TRUCO: Usamos 'AS' para que el frontend reciba 'level_req' aunque la DB diga 'level_required'
+        const result = await pool.query(`
+            SELECT id, name, description, 
+                   level_required as level_req, 
+                   energy_cost, 
+                   duration_seconds, 
+                   image_url 
+            FROM expeditions 
+            ORDER BY level_required ASC
+        `);
         res.json({ success: true, expeditions: result.rows });
     } catch (err) {
-        console.error(err);
+        console.error("Error en getExpeditions:", err); // <--- Esto te mostrará el error real en la terminal
         res.status(500).json({ message: 'Error cargando mapa.' });
     }
 };
 
-// --- 2. OBTENER ENEMIGOS ---
+// --- 2. OBTENER ENEMIGOS (Actualizado para Tiers y Ocultos) ---
 exports.getZoneEnemies = async (req, res) => {
     const { zoneId } = req.params;
     try {
-        const enemiesRes = await pool.query('SELECT * FROM enemies WHERE zone_id = $1 ORDER BY min_level ASC, is_boss ASC', [zoneId]);
+        // CAMBIO AQUÍ:
+        // 1. "is_hidden = false": Para que NO salgan los del bestiario secreto (quests).
+        // 2. "ORDER BY difficulty_tier ASC": Primero Tier 1, luego 2, luego 3.
+        // 3. "min_level ASC": Dentro del mismo tier, ordena por nivel.
+        const enemiesRes = await pool.query(`
+            SELECT * FROM enemies 
+            WHERE zone_id = $1 AND is_hidden = false 
+            ORDER BY difficulty_tier ASC, min_level ASC
+        `, [zoneId]);
+        
         res.json({ success: true, enemies: enemiesRes.rows });
     } catch (err) {
         console.error(err);
@@ -86,7 +106,7 @@ exports.startBattle = async (req, res) => {
         const zone = zoneRes.rows[0];
 
         // --- VALIDACIONES ---
-        if (player.level < zone.level_req) throw new Error(`Nivel insuficiente.`);
+        if (player.level < zone.level_required) throw new Error(`Nivel insuficiente.`);
         if (player.energy < 5) throw new Error("Energía insuficiente.");
         if (player.current_hp <= 5) throw new Error("Estás muy herido.");
 

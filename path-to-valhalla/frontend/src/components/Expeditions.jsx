@@ -257,28 +257,88 @@ const Expeditions = ({ user, onUpdateUser }) => {
     );
 };
 
-// --- COMPONENTE CARTA ENEMIGO ---
+// --- COMPONENTE CARTA ENEMIGO (V2: BOSS LEGENDARIO) ---
 const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
-    const levelDiff = enemy.min_level - user.level;
-    let difficultyColor = "text-green-400";
-    if (levelDiff > 2) difficultyColor = "text-red-500";
-    else if (levelDiff >= 0) difficultyColor = "text-yellow-400";
+    // Configuración de Dificultad basada en TU base de datos
+    const DIFFICULTY_CONFIG = {
+        1: { label: 'Fácil', color: 'text-green-400', border: 'border-green-900/30' },
+        2: { label: 'Medio', color: 'text-yellow-400', border: 'border-yellow-900/30' },
+        3: { label: 'Difícil', color: 'text-red-500', border: 'border-red-900/30' },
+        4: { label: 'Mortal', color: 'text-purple-500', border: 'border-purple-900/30' }
+    };
+
+    const tierConfig = DIFFICULTY_CONFIG[enemy.difficulty_tier] || DIFFICULTY_CONFIG[1];
+
+    // Clases dinámicas: Si es Boss, usa dorado y brillos. Si no, usa el borde del tier.
+    const containerClasses = enemy.is_boss
+        ? "border-2 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.4)] scale-105 z-10 ring-1 ring-yellow-200/50"
+        : `border border-slate-700 hover:border-amber-500 ${tierConfig.border}`;
 
     return (
-        <div className={`relative bg-slate-900/90 border transition-all group overflow-hidden flex flex-col backdrop-blur-sm ${enemy.is_boss ? 'border-red-600/60 shadow-[0_0_20px_rgba(220,38,38,0.3)]' : 'border-slate-700 hover:border-amber-500'} rounded-xl`}>
-            {enemy.is_boss && <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg z-20 shadow-md">JEFE</div>}
-            <div className="h-48 overflow-hidden relative bg-black/50">
-                <img src={enemy.image_url} alt={enemy.name} className={`w-full h-full object-contain p-2 transition-transform duration-500 ${disabled ? 'grayscale opacity-50' : 'group-hover:scale-110'}`} onError={(e) => e.target.src = "https://via.placeholder.com/150?text=Monstruo"} />
-            </div>
-            <div className="p-4 flex-1 flex flex-col bg-slate-900/90">
-                <h3 className={`font-bold text-lg leading-tight mb-1 ${enemy.is_boss ? 'text-red-400' : 'text-slate-200'}`}>{enemy.name}</h3>
-                <div className="text-xs text-slate-500 mb-4 flex justify-between">
-                    <span>Nvl {enemy.min_level}-{enemy.max_level}</span>
-                    <span className={difficultyColor}>{levelDiff > 2 ? 'Mortal' : levelDiff >= 0 ? 'Difícil' : 'Fácil'}</span>
+        <div className={`relative bg-slate-900/95 transition-all group overflow-hidden flex flex-col backdrop-blur-md rounded-xl ${containerClasses}`}>
+
+            {/* --- EFECTOS ESPECIALES SOLO PARA BOSS --- */}
+            {enemy.is_boss && (
+                <>
+                    {/* Brillo de fondo animado */}
+                    <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/10 via-transparent to-amber-500/10 animate-pulse pointer-events-none" />
+
+                    {/* Decoración Esquina Superior Izquierda */}
+                    <div className="absolute -top-10 -left-10 w-20 h-20 bg-yellow-500/40 blur-xl rounded-full pointer-events-none" />
+
+                    {/* Decoración Esquina Inferior Derecha */}
+                    <div className="absolute -bottom-10 -right-10 w-20 h-20 bg-red-600/40 blur-xl rounded-full pointer-events-none" />
+
+                    {/* Etiqueta BOSS Dorada */}
+                    <div className="absolute top-0 right-0 bg-gradient-to-l from-yellow-600 via-amber-600 to-amber-700 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20 shadow-lg border-b border-l border-yellow-300 flex items-center gap-1">
+                        <span className="text-yellow-200">👑</span> BOSS DE ZONA
+                    </div>
+                </>
+            )}
+
+            {/* Etiqueta para enemigos normales */}
+            {!enemy.is_boss && (
+                <div className={`absolute top-0 right-0 bg-black/60 px-2 py-1 rounded-bl-lg z-20 text-[10px] font-bold uppercase ${tierConfig.color}`}>
+                    {tierConfig.label}
                 </div>
+            )}
+
+            {/* IMAGEN DEL ENEMIGO */}
+            <div className={`h-48 overflow-hidden relative ${enemy.is_boss ? 'bg-gradient-to-b from-amber-900/20 to-black/80' : 'bg-black/50'}`}>
+                <img
+                    src={enemy.image_url}
+                    alt={enemy.name}
+                    className={`w-full h-full object-contain p-2 transition-transform duration-500 ${disabled ? 'grayscale opacity-50' : 'group-hover:scale-110'}`}
+                    onError={(e) => e.target.src = "https://via.placeholder.com/150?text=Monstruo"}
+                />
+            </div>
+
+            {/* INFO Y BOTONES */}
+            <div className="p-4 flex-1 flex flex-col relative z-10">
+                <h3 className={`font-bold text-lg leading-tight mb-1 truncate ${enemy.is_boss ? 'text-amber-400 drop-shadow-md' : 'text-slate-200'}`}>
+                    {enemy.name}
+                </h3>
+
+                <div className="text-xs text-slate-500 mb-4 flex justify-between items-center">
+                    <span>Nvl {enemy.min_level}-{enemy.max_level}</span>
+                    <span className={`${enemy.is_boss ? 'text-red-400 font-black tracking-wider' : tierConfig.color}`}>
+                        {enemy.is_boss ? '💀 INFERNAL' : tierConfig.label}
+                    </span>
+                </div>
+
                 <div className="mt-auto">
-                    <button onClick={onAttack} disabled={disabled} className={`w-full py-3 rounded font-bold uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all ${disabled ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700' : 'bg-gradient-to-r from-amber-700 to-amber-600 text-white shadow-lg hover:scale-[1.02]'}`}>
-                        {disabled ? 'Descansando...' : <><Sword size={14} /> Atacar (5E)</>}
+                    <button
+                        onClick={onAttack}
+                        disabled={disabled}
+                        className={`w-full py-3 rounded font-bold uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all 
+                        ${disabled
+                                ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'
+                                : enemy.is_boss
+                                    ? 'bg-gradient-to-r from-red-700 via-red-600 to-amber-700 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)] hover:scale-[1.02] border border-red-500'
+                                    : 'bg-gradient-to-r from-amber-700 to-amber-600 text-white shadow-lg hover:scale-[1.02]'
+                            }`}
+                    >
+                        {disabled ? 'Descansando...' : <><Sword size={14} /> {enemy.is_boss ? 'DESAFIAR JEFE' : 'Atacar (5E)'}</>}
                     </button>
                 </div>
             </div>
@@ -480,5 +540,7 @@ const getLogStyle = (type) => {
         default: return "text-slate-300";
     }
 };
+
+
 
 export default Expeditions;
