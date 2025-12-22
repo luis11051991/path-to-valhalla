@@ -178,6 +178,11 @@ const Market = ({ user, onUpdateUser }) => {
                     <p className={`font-bold text-sm ${item.rarity === 'rare' ? 'text-blue-400' : item.rarity === 'epic' ? 'text-purple-400' : 'text-slate-200'}`}>{item.name}</p>
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p>
                     
+                    {/* --- CORRECCIÓN AQUÍ: DAÑO Y ARMADURA PRIMERO --- */}
+                    {item.base_stats?.damage_min && <p className="text-xs text-slate-300 mt-1">⚔️ Daño: <span className="text-white">{item.base_stats.damage_min} - {item.base_stats.damage_max}</span></p>}
+                    {item.base_stats?.armor && <p className="text-xs text-slate-300 mt-1">🛡️ Armadura: <span className="text-white">{item.base_stats.armor}</span></p>}
+
+                    {/* --- STATS DESPUÉS --- */}
                     {Object.entries(item.base_stats || {}).map(([key, val]) => {
                         if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
                         if (val <= 0) return null; 
@@ -185,9 +190,6 @@ const Market = ({ user, onUpdateUser }) => {
                         const icon = STAT_ICONS[key] || '🔹';
                         return <p key={key} className="text-xs text-green-400 capitalize flex items-center gap-1">{icon} {key}: <span className="text-white">+{val}</span></p>;
                     })}
-                    
-                    {item.base_stats?.damage_min && <p className="text-xs text-slate-300 mt-1">⚔️ Daño: <span className="text-white">{item.base_stats.damage_min} - {item.base_stats.damage_max}</span></p>}
-                    {item.base_stats?.armor && <p className="text-xs text-slate-300 mt-1">🛡️ Armadura: <span className="text-white">{item.base_stats.armor}</span></p>}
 
                     {item.description && <p className="text-[10px] text-slate-400 italic mt-2 border-t border-white/10 pt-1 line-clamp-3">{item.description}</p>}
                     

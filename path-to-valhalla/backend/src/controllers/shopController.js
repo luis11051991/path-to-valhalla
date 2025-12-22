@@ -157,7 +157,7 @@ exports.refreshShop = async (req, res) => {
     }
 };
 
-// 3. COMPRAR ÍTEM (AHORA ELIMINA EL ÍTEM DEL STOCK)
+// 3. COMPRAR ÍTEM (CORREGIDO PARA EVITAR RANGOS EN INVENTARIO)
 exports.buyItem = async (req, res) => {
     const userId = req.user.id;
     const { shopId, quantity } = req.body; 
@@ -207,30 +207,33 @@ exports.buyItem = async (req, res) => {
             for (let i = 0; i < 200; i++) { if (!occupiedSlots.has(i)) { targetSlot = i; break; } }
             if (targetSlot === -1) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Inventario lleno.' }); }
 
+            // --- CORRECCIÓN AQUÍ ---
+            // Forzamos la generación de stats concretos AHORA MISMO.
+            // Si el stock tenía rangos [4, 7], esto lo convierte en un número fijo (ej: 5) antes de guardarlo.
+            const finalStats = generateConcreteStats(targetItem.specific_stats);
+
             await client.query(`
                 INSERT INTO player_items (player_id, template_id, bag_slot, quantity, base_stats, is_equipped, durability_current, durability_max, is_bound) 
                 VALUES ($1, $2, $3, $4, $5, false, 100, 100, false)
-            `, [userId, targetItem.template_id, targetSlot, qty, targetItem.specific_stats]);
+            `, [userId, targetItem.template_id, targetSlot, qty, finalStats]);
         }
 
-        // --- ELIMINAR DEL STOCK (SOLUCIÓN PEDIDA) ---
-        // Si no es stackeable (equipo), lo borramos siempre.
-        // Si es stackeable (pociones), quizás quieras dejarlo, pero por ahora lo borramos para evitar abusos.
+        // Eliminar del stock
         currentStock.splice(targetItemIndex, 1);
         
         await client.query('UPDATE players SET current_shop_stock = $1 WHERE id = $2', [JSON.stringify(currentStock), userId]);
 
         await client.query('COMMIT');
         
+        // Retornar inventario actualizado
         const invRes = await client.query(`SELECT pi.*, it.name, it.image_url, it.rarity, it.type, it.price_copper, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 ORDER BY pi.bag_slot ASC`, [userId]);
 
-        // Devolvemos el stock actualizado para que el frontend quite el ítem visualmente
         res.json({ 
             success: true, 
             message: `Compraste ${qty}x ${targetItem.name}`, 
             inventory: invRes.rows, 
             newMoney: newBalance,
-            updatedStock: currentStock // Enviamos el stock nuevo
+            updatedStock: currentStock
         });
 
     } catch (err) { await client.query('ROLLBACK'); console.error(err); res.status(500).json({ message: err.message }); } finally { client.release(); }
