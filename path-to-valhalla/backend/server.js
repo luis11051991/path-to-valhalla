@@ -7,7 +7,6 @@ const playerController = require('./src/controllers/playerController');
 const bgController = require('./src/controllers/backgroundController'); 
 const inventoryController = require('./src/controllers/inventoryController');
 const petController = require('./src/controllers/petController');
-// No necesitamos importar shopController aquí, porque lo usamos a través de las rutas
 
 // --- IMPORTACIÓN DE MIDDLEWARES ---
 const authMiddleware = require('./src/middleware/authMiddleware'); 
@@ -17,7 +16,8 @@ const authRoutes = require('./src/routes/authRoutes');
 const evolutionRoutes = require('./src/routes/evolutionRoutes');
 const expeditionRoutes = require('./src/routes/expeditionRoutes');
 const packageRoutes = require('./src/routes/packageRoutes'); 
-const shopRoutes = require('./src/routes/shopRoutes'); // <--- 1. NUEVO IMPORT
+const shopRoutes = require('./src/routes/shopRoutes'); 
+const workshopRoutes = require('./src/routes/workshopRoutes'); // <--- 1. NUEVO IMPORT
 
 const app = express();
 
@@ -30,7 +30,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/evolution', evolutionRoutes);
 app.use('/api/expeditions', expeditionRoutes);
 app.use('/api/packages', packageRoutes); 
-app.use('/api/shop', shopRoutes); // <--- 2. NUEVA RUTA REGISTRADA
+app.use('/api/shop', shopRoutes); 
+app.use('/api/workshop', workshopRoutes); // <--- 2. CONECTADO AQUÍ
 
 // --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);
@@ -61,7 +62,6 @@ app.post('/api/inventory/organize', inventoryController.organizeInventory);
 
 // --- 6. RUTAS DE ADMIN / DEBUG ---
 app.post('/api/admin/give-item', inventoryController.adminGiveItem);
-
 
 // --- ARRANQUE ---
 const PORT = 3000;

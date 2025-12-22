@@ -2,6 +2,22 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Coins, Gem, LogOut, Menu, PanelLeft, PanelRightClose } from 'lucide-react';
 import { RACES } from '../../constants/races';
 
+// --- TABLA DE EXPERIENCIA (Debe coincidir con el Backend) ---
+const XP_TABLE = [
+    0, // Nivel 0 no existe
+    15, 40, 65, 90, 115, 140, 165, 190, 215, 240,
+    265, 290, 315, 340, 365, 390, 415, 440, 465, 490,
+    515, 540, 565, 595, 625, 655, 685, 720, 755, 790,
+    830, 870, 915, 960, 1010, 1060, 1115, 1170, 1230, 1290,
+    1355, 1420, 1490, 1565, 1645, 1725, 1810, 1900, 1995, 2095,
+    2200, 2310, 2425, 2545, 2670, 2805, 2945, 3090, 3245, 3405,
+    3575, 3755, 3940, 4135, 4340, 4555, 4780, 5020, 5270, 5535,
+    5810, 6100, 6405, 6725, 7060, 7415, 7785, 8175, 8585, 9015,
+    9465, 9940, 10435, 10955, 11500, 12075, 12680, 13315, 13980, 14680,
+    15415, 16185, 16995, 17845, 18735, 19670, 20655, 21685, 22770, 23910
+];
+const ODIN_LEVEL_XP = 25000;
+
 const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, isSidebarCompact }) => {
   // Estado para forzar la actualización del timer cada segundo
   const [, setTick] = useState(0);
@@ -17,7 +33,10 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
   const maxHp = user.calculatedMaxHp || ((user.stats?.constitution || 10) * 20);
   const currentHp = user.current_hp;
   const currentXp = user.experience || 0;
-  const maxXp = user.level * 1000;
+  
+  // --- CORRECCIÓN AQUÍ: Usamos la Tabla en lugar de multiplicar por 1000 ---
+  const maxXp = user.level >= 100 ? ODIN_LEVEL_XP : (XP_TABLE[user.level] || 99999);
+  
   const bgUrl = user.active_background_url || "https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=2544&auto=format&fit=crop";
 
   // --- LÓGICA DE TIEMPO RESTANTE ---
@@ -66,7 +85,6 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
         <div className="flex justify-between px-1 mb-0.5 items-end">
           <div className="flex gap-1 items-center">
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{label}</span>
-            {/* AQUÍ ESTÁ EL TIMER QUE PEDISTE */}
             {timerText && (
               <span className="text-[9px] text-amber-400 font-mono animate-pulse">({timerText})</span>
             )}
@@ -120,7 +138,6 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
       {/* SECCIÓN CENTRAL: BARRAS DE ESTADO CON TIMERS */}
       <div className="relative z-10 hidden xl:flex items-center gap-6 bg-black/30 px-6 py-2 rounded border border-white/5 shadow-inner mx-4">
         <StatBar value={currentXp} max={maxXp} label="Exp" colorClass="bg-yellow-500" />
-        {/* Pasamos el 'type' para activar el timer correspondiente */}
         <StatBar value={currentHp} max={maxHp} label="Vida" colorClass="bg-red-600" type="hp" />
         <StatBar value={user.energy} max={100} label="Energía" colorClass="bg-blue-600" type="energy" />
         <StatBar value={user.valor} max={5} label="Valor" colorClass="bg-orange-500" type="valor" />

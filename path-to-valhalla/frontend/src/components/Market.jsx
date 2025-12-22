@@ -163,9 +163,47 @@ const Market = ({ user, onUpdateUser }) => {
         setTooltipData({ item: tooltipItem, rect, side: isRightSide ? 'left' : 'right', viewType: type });
     };
 
+    // --- HELPER DE ESTILOS POR RAREZA ---
+    const getItemStyles = (rarity) => {
+        switch (rarity) {
+            case 'uncommon': // VERDE
+                return { 
+                    text: 'text-green-400', 
+                    border: 'border-green-800', // Borde sutil
+                    glow: '' 
+                };
+            case 'rare': // AZUL
+                return { 
+                    text: 'text-blue-400', 
+                    border: 'border-blue-800', // Borde sutil
+                    glow: '' 
+                };
+            case 'legendary': // NARANJA
+                return { 
+                    text: 'text-orange-400', 
+                    border: 'border-orange-500', 
+                    glow: 'shadow-[0_0_15px_rgba(251,146,60,0.4)]' // Aura Naranja
+                };
+            case 'mythic': // ROJO
+                return { 
+                    text: 'text-red-500', 
+                    border: 'border-red-600', 
+                    glow: 'shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse' // Aura Roja Pulsante
+                };
+            default: // COMÚN (Blanco)
+                return { 
+                    text: 'text-slate-200', 
+                    border: 'border-slate-600', 
+                    glow: '' 
+                };
+        }
+    };
+
+    // --- TOOLTIP GLOBAL ---
     const GlobalTooltip = () => {
         if (!tooltipData) return null;
         const { item, rect, side, viewType } = tooltipData;
+        const styles = getItemStyles(item.rarity);
         
         let style = { position: 'fixed', top: rect.top, zIndex: 100 };
         if (side === 'left') { style.left = rect.left - 210; } 
@@ -174,15 +212,18 @@ const Market = ({ user, onUpdateUser }) => {
 
         return (
             <div style={style} className="w-[200px] pointer-events-none">
-                <div className="bg-slate-950 border-2 border-amber-600 p-3 rounded shadow-[0_0_20px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-100">
-                    <p className={`font-bold text-sm ${item.rarity === 'rare' ? 'text-blue-400' : item.rarity === 'epic' ? 'text-purple-400' : 'text-slate-200'}`}>{item.name}</p>
+                <div className={`bg-slate-950 border-2 p-3 rounded shadow-[0_0_30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-100 ${styles.border}`}>
+                    
+                    {/* Título con Color */}
+                    <p className={`font-bold text-sm ${styles.text}`}>{item.name}</p>
+                    
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p>
                     
-                    {/* --- CORRECCIÓN AQUÍ: DAÑO Y ARMADURA PRIMERO --- */}
+                    {/* --- DAÑO Y ARMADURA --- */}
                     {item.base_stats?.damage_min && <p className="text-xs text-slate-300 mt-1">⚔️ Daño: <span className="text-white">{item.base_stats.damage_min} - {item.base_stats.damage_max}</span></p>}
                     {item.base_stats?.armor && <p className="text-xs text-slate-300 mt-1">🛡️ Armadura: <span className="text-white">{item.base_stats.armor}</span></p>}
 
-                    {/* --- STATS DESPUÉS --- */}
+                    {/* --- STATS --- */}
                     {Object.entries(item.base_stats || {}).map(([key, val]) => {
                         if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
                         if (val <= 0) return null; 
@@ -211,16 +252,12 @@ const Market = ({ user, onUpdateUser }) => {
 
     const currentConfig = mode === 'buy' ? SHOP_CONFIG[activeCategory] : SHOP_CONFIG.default;
     
-    // --- LÓGICA DE FILTRADO CORREGIDA ---
+    // --- LÓGICA DE FILTRADO ---
     const filteredShopItems = shopItems.filter(item => {
-        // Corrección: 'weapons' (plural en config) vs 'weapon' (singular en DB)
         if (activeCategory === 'weapons') return item.type === 'weapon';
-        
         if (activeCategory === 'jewelry') return ['ring', 'neck', 'earring', 'accessory'].includes(item.type);
         if (activeCategory === 'recipes') return item.type === 'recipe';
         if (activeCategory === 'consumables') return item.type === 'consumable';
-        
-        // Para 'armor', si en DB es 'armor', coincide directo.
         return item.type === activeCategory;
     });
 
@@ -289,22 +326,25 @@ const Market = ({ user, onUpdateUser }) => {
                                 {loadingShop ? <div className="flex justify-center mt-20"><div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div></div> : 
                                  filteredShopItems.length === 0 ? <div className="text-center text-slate-500 mt-20 italic">No hay existencias de {SHOP_CONFIG[activeCategory].label} hoy.</div> : (
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                        {filteredShopItems.map((item) => (
-                                            <div key={item.shop_id} onMouseEnter={(e) => handleMouseEnter(item, e, 'buy')} onMouseLeave={() => setTooltipData(null)} className="bg-slate-800 border border-slate-600 rounded p-2 flex flex-col gap-2 hover:border-amber-500 transition-all group relative cursor-help">
-                                                <div className="h-24 bg-black/40 rounded flex items-center justify-center p-2 relative overflow-hidden group-hover:bg-black/60 transition-colors">
-                                                    <img src={item.image_url} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" />
-                                                    <span className={`absolute top-1 right-1 text-[9px] px-1 rounded border ${item.rarity === 'rare' ? 'bg-blue-900/80 border-blue-500 text-blue-200' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>Lvl {item.min_level}</span>
+                                        {filteredShopItems.map((item) => {
+                                            const styles = getItemStyles(item.rarity);
+                                            return (
+                                                <div key={item.shop_id} onMouseEnter={(e) => handleMouseEnter(item, e, 'buy')} onMouseLeave={() => setTooltipData(null)} className={`bg-slate-800 border rounded p-2 flex flex-col gap-2 hover:border-amber-500 transition-all group relative cursor-help ${styles.border} ${styles.glow}`}>
+                                                    <div className="h-24 bg-black/40 rounded flex items-center justify-center p-2 relative overflow-hidden group-hover:bg-black/60 transition-colors">
+                                                        <img src={item.image_url} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" />
+                                                        <span className={`absolute top-1 right-1 text-[9px] px-1 rounded border ${item.rarity === 'rare' ? 'bg-blue-900/80 border-blue-500 text-blue-200' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>Lvl {item.min_level}</span>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <h4 className={`text-xs font-bold line-clamp-1 ${styles.text}`}>{item.name}</h4>
+                                                        <p className="text-[10px] text-slate-500 line-clamp-1">{item.type}</p>
+                                                    </div>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleBuy(item); }} className="w-full py-1.5 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold rounded flex items-center justify-center gap-1 shadow-md active:scale-95 transition-transform cursor-pointer">
+                                                        <span className="text-[9px] text-slate-300 mr-1">Compra:</span>
+                                                        <span className="text-yellow-200">{formatCurrency(item.buy_price)}</span>
+                                                    </button>
                                                 </div>
-                                                <div className="flex-1">
-                                                    <h4 className={`text-xs font-bold line-clamp-1 ${item.rarity === 'rare' ? 'text-blue-400' : 'text-slate-200'}`}>{item.name}</h4>
-                                                    <p className="text-[10px] text-slate-500 line-clamp-1">{item.type}</p>
-                                                </div>
-                                                <button onClick={(e) => { e.stopPropagation(); handleBuy(item); }} className="w-full py-1.5 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold rounded flex items-center justify-center gap-1 shadow-md active:scale-95 transition-transform cursor-pointer">
-                                                    <span className="text-[9px] text-slate-300 mr-1">Compra:</span>
-                                                    <span className="text-yellow-200">{formatCurrency(item.buy_price)}</span>
-                                                </button>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

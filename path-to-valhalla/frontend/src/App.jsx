@@ -4,7 +4,8 @@ import RaceSelection from './components/RaceSelection';
 import Dashboard from './components/Dashboard';
 import Expeditions from './components/Expeditions';
 import Packages from './components/Packages';
-import Market from './components/Market'; // <--- 1. NUEVO IMPORT
+import Market from './components/Market'; 
+import Workshop from './components/Workshop'; // <--- 1. IMPORTANTE
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
 import { apiUrl } from './constants/api';
@@ -128,9 +129,16 @@ function App() {
             />
           )}
 
-          {/* --- 2. RENDERIZAR MERCADO --- */}
           {gameView === 'market' && (
             <Market 
+              user={user}
+              onUpdateUser={handleUserUpdate}
+            />
+          )}
+
+          {/* --- 2. MOSTRAR EL TALLER --- */}
+          {gameView === 'workshop' && (
+            <Workshop 
               user={user}
               onUpdateUser={handleUserUpdate}
             />

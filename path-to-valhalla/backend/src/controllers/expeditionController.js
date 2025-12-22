@@ -2,7 +2,18 @@ const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { processRegeneration } = require('../utils/regenUtils');
 
-// --- HELPER: RNG para Stats (Usado al crear el paquete de equipo) ---
+// IMPORTANTE: Asegúrate de haber creado el archivo en el PASO 1
+let getXpRequiredForLevel;
+try {
+    const levels = require('../constants/levels');
+    getXpRequiredForLevel = levels.getXpRequiredForLevel;
+} catch (error) {
+    console.error("⚠️ ERROR FATAL: No se encontró backend/src/constants/levels.js");
+    // Fallback de emergencia para que no crashee, pero debes crear el archivo
+    getXpRequiredForLevel = (lvl) => lvl * 100; 
+}
+
+// --- HELPER: RNG para Stats ---
 const generateRandomStats = (templateStats) => {
     const finalStats = {};
     if (!templateStats) return {};
@@ -16,7 +27,7 @@ const generateRandomStats = (templateStats) => {
     return finalStats;
 };
 
-// --- HELPER: Resolve Enemy Stats (Para el combate) ---
+// --- HELPER: Resolve Enemy Stats ---
 const resolveEnemyStats = (enemy) => {
     const stats = enemy.stats || {};
     const resolved = { ...stats };
@@ -33,11 +44,8 @@ const resolveEnemyStats = (enemy) => {
 };
 
 // --- 1. OBTENER ZONAS ---
-// EN: backend/src/controllers/expeditionController.js
-
 exports.getExpeditions = async (req, res) => {
     try {
-        // TRUCO: Usamos 'AS' para que el frontend reciba 'level_req' aunque la DB diga 'level_required'
         const result = await pool.query(`
             SELECT id, name, description, 
                    level_required as level_req, 
@@ -49,25 +57,20 @@ exports.getExpeditions = async (req, res) => {
         `);
         res.json({ success: true, expeditions: result.rows });
     } catch (err) {
-        console.error("Error en getExpeditions:", err); // <--- Esto te mostrará el error real en la terminal
+        console.error("Error getExpeditions:", err);
         res.status(500).json({ message: 'Error cargando mapa.' });
     }
 };
 
-// --- 2. OBTENER ENEMIGOS (Actualizado para Tiers y Ocultos) ---
+// --- 2. OBTENER ENEMIGOS ---
 exports.getZoneEnemies = async (req, res) => {
     const { zoneId } = req.params;
     try {
-        // CAMBIO AQUÍ:
-        // 1. "is_hidden = false": Para que NO salgan los del bestiario secreto (quests).
-        // 2. "ORDER BY difficulty_tier ASC": Primero Tier 1, luego 2, luego 3.
-        // 3. "min_level ASC": Dentro del mismo tier, ordena por nivel.
         const enemiesRes = await pool.query(`
             SELECT * FROM enemies 
             WHERE zone_id = $1 AND is_hidden = false 
             ORDER BY difficulty_tier ASC, min_level ASC
         `, [zoneId]);
-        
         res.json({ success: true, enemies: enemiesRes.rows });
     } catch (err) {
         console.error(err);
@@ -76,18 +79,18 @@ exports.getZoneEnemies = async (req, res) => {
 };
 
 // ==========================================
-// 3. MOTOR DE COMBATE V2 (Con Loot Random Real de DB)
+// 3. MOTOR DE COMBATE V3 (CON LEVEL UP)
 // ==========================================
 exports.startBattle = async (req, res) => {
     const { userId, enemyId, zoneId } = req.body;
 
-    // Paso Previo: Regenerar al jugador
     try {
+        // Regeneración pasiva antes de pelear
         const preCheck = await pool.query('SELECT * FROM players WHERE id = $1', [userId]);
         if (preCheck.rows.length > 0) {
             await processRegeneration(preCheck.rows[0]);
         }
-    } catch (e) { console.error("Error regen pre-batalla", e); }
+    } catch (e) { console.error("Error regen:", e); }
 
     const client = await pool.connect();
 
@@ -109,14 +112,6 @@ exports.startBattle = async (req, res) => {
         if (player.level < zone.level_required) throw new Error(`Nivel insuficiente.`);
         if (player.energy < 5) throw new Error("Energía insuficiente.");
         if (player.current_hp <= 5) throw new Error("Estás muy herido.");
-
-        if (player.last_expedition_at) {
-            const now = new Date();
-            const lastTime = new Date(player.last_expedition_at);
-            const diffSeconds = (now - lastTime) / 1000;
-            let cd = 10;
-            if (diffSeconds < cd) throw new Error(`Descansando... espera ${Math.ceil(cd - diffSeconds)}s`);
-        }
 
         // --- B. CÁLCULO DE STATS JUGADOR ---
         const itemsRes = await client.query(`
@@ -151,7 +146,7 @@ exports.startBattle = async (req, res) => {
         let log = [];
         let isWin = false;
 
-        // --- D. PELEA (Motor por Turnos) ---
+        // --- D. PELEA ---
         for (let r = 1; r <= 10; r++) {
             log.push({ type: 'round', msg: `--- RONDA ${r} ---` });
 
@@ -182,32 +177,52 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- E. RECOMPENSAS (LÓGICA RANDOM IMPLEMENTADA) ---
+        // --- E. RECOMPENSAS Y LEVEL UP ---
         let rewards = { xp: 0, copper: 0, items: [] };
-
         let finalGold = parseInt(player.gold || 0);
         let finalSilver = parseInt(player.silver || 0);
         let finalCopper = parseInt(player.copper || 0);
 
+        // Variables temporales para calcular la subida
+        let currentXp = parseInt(player.experience || 0);
+        let currentLevel = parseInt(player.level || 1);
+        let currentStatPoints = parseInt(player.stat_points || 0);
+        let leveledUp = false;
+
         if (isWin) {
-            rewards.xp = baseEnemy.xp_reward || 10;
-            
-            // --- AQUÍ ESTÁ LA MAGIA DEL RANDOM ---
-            // 1. Leemos los límites de la DB (o usamos default si no existen)
+            // 1. Calcular XP y gestionar Nivel
+            const xpGain = baseEnemy.xp_reward || 10;
+            rewards.xp = xpGain;
+            currentXp += xpGain;
+
+            // Bucle: Puede que subas 2 niveles de golpe si matas un boss muy fuerte
+            while (true) {
+                const xpNeeded = getXpRequiredForLevel(currentLevel);
+                if (currentXp >= xpNeeded) {
+                    currentXp -= xpNeeded; // Se resta la XP usada
+                    currentLevel++;        // Sube nivel
+                    currentStatPoints += 5; // Premio: +5 Puntos
+                    leveledUp = true;
+                    
+                    // Curación completa al subir de nivel (Gratificación inmediata)
+                    player.current_hp = 100 + (totalCon * 20); 
+                    log.push({ type: 'info', msg: `¡LEVEL UP! Ahora eres nivel ${currentLevel}` });
+                } else {
+                    break;
+                }
+            }
+
+            // 2. Dinero (Tu lógica Random original)
             const minGold = baseEnemy.gold_reward_min || 1;
             const maxGold = baseEnemy.gold_reward_max || 5;
-            
-            // 2. Tiramos el dado entre Min y Max
             rewards.copper = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
 
-            // 3. Normalizar Moneda (Cobre -> Plata -> Oro)
-            // Esto asegura que si ganas 120 cobre, se guarde como 1 Plata y 20 Cobre
             const normalized = normalizeCurrency(player.gold, player.silver, player.copper, rewards.copper);
             finalGold = normalized.newGold;
             finalSilver = normalized.newSilver;
             finalCopper = normalized.newCopper;
 
-            // Drops -> PAQUETES
+            // 3. Drops (Tu lógica de Paquetes original)
             const dropsRes = await client.query('SELECT * FROM enemy_drops WHERE enemy_id = $1', [enemyId]);
             for (const drop of dropsRes.rows) {
                 if (Math.random() * 100 <= drop.drop_chance) {
@@ -230,19 +245,22 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // Desgaste y Update Player
+        // --- UPDATE FINAL ---
         const durabilityLoss = isWin ? 1 : 2;
         await client.query(`UPDATE player_items SET durability_current = GREATEST(0, durability_current - $1) WHERE player_id = $2 AND is_equipped = true`, [durabilityLoss, userId]);
 
+        // Guardamos todo: Nivel nuevo, XP sobrante, Puntos de stat nuevos
         await client.query(`
             UPDATE players 
             SET current_hp = $1, 
                 energy = energy - 5, 
-                experience = experience + $2, 
-                gold = $3, silver = $4, copper = $5, 
+                experience = $2, 
+                level = $3,
+                stat_points = $4,
+                gold = $5, silver = $6, copper = $7, 
                 last_expedition_at = NOW() 
-            WHERE id = $6`,
-            [player.current_hp, isWin ? rewards.xp : 0, finalGold, finalSilver, finalCopper, userId]
+            WHERE id = $8`,
+            [player.current_hp, currentXp, currentLevel, currentStatPoints, finalGold, finalSilver, finalCopper, userId]
         );
 
         await client.query('COMMIT');
@@ -253,6 +271,7 @@ exports.startBattle = async (req, res) => {
                 isWin,
                 log,
                 rewards,
+                leveledUp, 
                 initialPlayerHp,
                 initialEnemyHp,
                 finalPlayerHp: player.current_hp,

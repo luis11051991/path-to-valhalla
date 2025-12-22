@@ -9,6 +9,22 @@ import { apiUrl } from '../constants/api';
 import StatsPanel from './StatsPanel';
 import EvolutionModal from './EvolutionModal';
 
+// --- 1. TABLA DE EXPERIENCIA (Igual que en Backend y TopBar) ---
+const XP_TABLE = [
+    0, // Nivel 0 no existe
+    15, 40, 65, 90, 115, 140, 165, 190, 215, 240,
+    265, 290, 315, 340, 365, 390, 415, 440, 465, 490,
+    515, 540, 565, 595, 625, 655, 685, 720, 755, 790,
+    830, 870, 915, 960, 1010, 1060, 1115, 1170, 1230, 1290,
+    1355, 1420, 1490, 1565, 1645, 1725, 1810, 1900, 1995, 2095,
+    2200, 2310, 2425, 2545, 2670, 2805, 2945, 3090, 3245, 3405,
+    3575, 3755, 3940, 4135, 4340, 4555, 4780, 5020, 5270, 5535,
+    5810, 6100, 6405, 6725, 7060, 7415, 7785, 8175, 8585, 9015,
+    9465, 9940, 10435, 10955, 11500, 12075, 12680, 13315, 13980, 14680,
+    15415, 16185, 16995, 17845, 18735, 19670, 20655, 21685, 22770, 23910
+];
+const ODIN_LEVEL_XP = 25000;
+
 // --- DICCIONARIO DE ICONOS PARA TOOLTIP ---
 const STAT_ICONS = {
     strength: '💪',
@@ -437,7 +453,11 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
 
     const getBackgroundImage = () => currentBgUrl || raceData.bgImage;
     const currentXp = user.experience || 0;
-    const maxXp = user.level * 1000;
+    
+    // --- 2. CORRECCIÓN: CALCULO DE XP MÁXIMA ---
+    // Usamos la tabla para que la barra de progreso sea correcta
+    const maxXp = user.level >= 100 ? ODIN_LEVEL_XP : (XP_TABLE[user.level] || 99999);
+    
     const xpPercent = Math.min((currentXp / maxXp) * 100, 100);
 
     // --- RENDERIZADO DE SLOTS ---
@@ -474,7 +494,43 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         );
     };
 
-    // --- TOOLTIP GLOBAL (CORREGIDO PARA MOSTRAR RANGOS) ---
+    // --- 3. HELPER DE ESTILOS POR RAREZA (5 NIVELES + BRILLOS) ---
+    const getItemStyles = (rarity) => {
+        switch (rarity) {
+            case 'uncommon': // VERDE
+                return { 
+                    text: 'text-green-400', 
+                    border: 'border-green-800', 
+                    glow: '' 
+                };
+            case 'rare': // AZUL
+                return { 
+                    text: 'text-blue-400', 
+                    border: 'border-blue-800', 
+                    glow: '' 
+                };
+            case 'legendary': // NARANJA
+                return { 
+                    text: 'text-orange-400', 
+                    border: 'border-orange-500', 
+                    glow: 'shadow-[0_0_15px_rgba(251,146,60,0.4)]' 
+                };
+            case 'mythic': // ROJO
+                return { 
+                    text: 'text-red-500', 
+                    border: 'border-red-600', 
+                    glow: 'shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse' 
+                };
+            default: // COMÚN (Blanco) - Borde discreto
+                return { 
+                    text: 'text-slate-200', 
+                    border: 'border-slate-600', 
+                    glow: '' 
+                };
+        }
+    };
+
+    // --- 4. TOOLTIP GLOBAL (ACTUALIZADO CON ESTILOS) ---
     const GlobalTooltip = () => {
         if (!tooltipData) return null;
         const { item, rect, side } = tooltipData;
@@ -483,34 +539,39 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         const maxDurability = item.durability_max || 100;
         const isBroken = durability === 0;
         
+        // Aplicamos estilos de rareza
+        const styles = getItemStyles(item.rarity);
+        
         let style = { position: 'fixed', zIndex: 9999 };
         if (side === 'left') { style.right = (window.innerWidth - rect.left) + 10; style.top = rect.top; } 
         else if (side === 'top') { style.left = rect.left + (rect.width / 2) - 100; style.bottom = (window.innerHeight - rect.top) + 10; } 
         else if (side === 'right') { style.left = rect.right + 10; style.top = rect.top; } 
         else if (side === 'bottom') { style.left = rect.left + (rect.width / 2) - 100; style.top = rect.bottom + 10; }
         
-        // Función Helper para pintar números O rangos [min, max]
         const renderValue = (val) => {
-            if (Array.isArray(val)) return `${val[0]}-${val[1]}`; // Si es [4, 7] -> "4-7"
-            return val; // Si es 5 -> "5"
+            if (Array.isArray(val)) return `${val[0]}-${val[1]}`; 
+            return val; 
         };
 
         return (
-            <div style={style} className="bg-slate-950 border-2 border-amber-600 p-3 rounded shadow-[0_0_20px_rgba(0,0,0,0.8)] min-w-[200px] pointer-events-none animate-in fade-in zoom-in-95 duration-100">
-                <p className={`font-bold text-sm ${item.rarity === 'rare' ? 'text-blue-400' : item.rarity === 'epic' ? 'text-purple-400' : 'text-slate-200'}`}>{item.name}</p>
+            <div style={style} className={`bg-slate-950 border-2 p-3 rounded shadow-[0_0_30px_rgba(0,0,0,0.9)] min-w-[200px] pointer-events-none animate-in fade-in zoom-in-95 duration-100 ${styles.border} ${styles.glow}`}>
+                <p className={`font-bold text-sm ${styles.text}`}>{item.name}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p>
                 <div className="mb-2 text-[10px] font-bold text-center border-b border-white/5 pb-1"> {item.is_bound ? (<span className="text-red-500">🔒 VINCULADO (Soulbound)</span>) : (<span className="text-green-500">✨ TRADEABLE</span>)} </div>
                 <div className="space-y-1 mb-2">
-                    {/* AQUI ESTABA EL ERROR: Usamos renderValue para formatear */}
+                    
+                    {/* 1. PRIMERO: DAÑO Y ARMADURA */}
                     {stats.damage_min && <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{renderValue(stats.damage_min)} - {renderValue(stats.damage_max)}</span></p>}
                     {stats.armor ? <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>🛡️ Armadura: <span className="text-white">{renderValue(stats.armor)}</span></p> : null}
-                    
+
+                    {/* 2. LUEGO: STATS (Fuerza, Destreza, etc.) */}
                     {Object.entries(stats).map(([key, val]) => {
                         if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
                         if (val <= 0 && !Array.isArray(val)) return null;
                         const icon = STAT_ICONS[key] || '🍀';
                         return <p key={key} className="text-xs text-green-400 capitalize">{icon} {key}: +{renderValue(val)}</p>;
                     })}
+                    
                 </div>
                 <div className="mt-2 pt-1 border-t border-white/10">
                     <div className="flex justify-between text-[10px] mb-0.5"><span className={isBroken ? "text-red-500 font-bold" : "text-slate-400"}>{isBroken ? "ROTO" : "Durabilidad"}</span><span className={durability < 20 ? "text-red-400" : "text-slate-400"}>{durability}/{maxDurability}</span></div>
