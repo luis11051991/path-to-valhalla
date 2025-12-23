@@ -3,6 +3,22 @@ const pool = require('../config/db');
 // Curva de XP de Profesión
 const PROF_XP_TABLE = [0, 100, 300, 600, 1000, 1500, 2200, 3000, 4000, 5500];
 
+// --- HELPER: RNG para Stats (Convertir rangos en números fijos) ---
+const generateRandomStats = (templateStats) => {
+    const finalStats = {};
+    if (!templateStats) return {};
+    for (const [key, value] of Object.entries(templateStats)) {
+        // Si es un array [min, max], generamos un número aleatorio
+        if (Array.isArray(value) && value.length === 2) {
+            finalStats[key] = Math.floor(Math.random() * (value[1] - value[0] + 1)) + value[0];
+        } else {
+            // Si es un valor fijo, lo mantenemos
+            finalStats[key] = value;
+        }
+    }
+    return finalStats;
+};
+
 // 1. ELEGIR PROFESIÓN
 exports.chooseProfession = async (req, res) => {
     const userId = req.user.id;
@@ -15,7 +31,7 @@ exports.chooseProfession = async (req, res) => {
         if (player.level < 5) return res.status(400).json({ message: "Necesitas ser Nivel 5." });
         if (player.profession) return res.status(400).json({ message: "Ya tienes una profesión." });
 
-        const initialRecipes = [1]; // ID de receta básica (asegúrate de tenerla en DB)
+        const initialRecipes = [1]; 
 
         await pool.query(
             'UPDATE players SET profession = $1, learned_recipes = $2, profession_level = 1, profession_xp = 0 WHERE id = $3',
@@ -43,14 +59,14 @@ exports.getWorkshopData = async (req, res) => {
         let recipes = [];
         
         if (recipeIds.length > 0) {
-            // Traemos también los stats base del template para mostrarlos en el tooltip
             const recipesRes = await pool.query(`
                 SELECT r.*, 
                        it.name as result_name, 
                        it.image_url as result_image, 
                        it.rarity,
                        it.type,
-                       it.base_stats -- Necesario para el tooltip
+                       it.base_stats,
+                       it.description as item_desc
                 FROM recipes r
                 JOIN items_templates it ON r.result_item_template_id = it.id
                 WHERE r.id = ANY($1::int[])
@@ -74,7 +90,7 @@ exports.getWorkshopData = async (req, res) => {
     }
 };
 
-// 3. CRAFTEAR (ENVIAR A PAQUETES)
+// 3. CRAFTEAR (Corregido para generar stats fijos)
 exports.craftItem = async (req, res) => {
     const userId = req.user.id;
     const { recipeId } = req.body;
@@ -91,7 +107,10 @@ exports.craftItem = async (req, res) => {
         const playerRes = await client.query('SELECT * FROM players WHERE id = $1', [userId]);
         const player = playerRes.rows[0];
 
-        if (parseInt(player.copper) < recipe.cost_gold) { await client.query('ROLLBACK'); return res.status(400).json({ message: "No tienes suficiente cobre." }); }
+        if (parseInt(player.copper) < recipe.cost_gold) { 
+            await client.query('ROLLBACK'); 
+            return res.status(400).json({ message: "No tienes suficiente cobre." }); 
+        }
 
         // XP y Nivel
         let currentXp = player.profession_xp || 0;
@@ -104,30 +123,31 @@ exports.craftItem = async (req, res) => {
             currentLevel++;
         }
 
+        // Cobrar y dar XP
         await client.query(
             'UPDATE players SET copper = copper - $1, profession_xp = $2, profession_level = $3 WHERE id = $4',
             [recipe.cost_gold, newXp, currentLevel, userId]
         );
 
-        // --- CAMBIO CLAVE: INSERTAR EN PAQUETES (NO EN MOCHILA) ---
-        // Obtenemos el template para saber qué stats tiene (rangos o fijos)
+        // --- CORRECCIÓN: GENERAR STATS FIJOS AHORA ---
         const tplRes = await client.query('SELECT base_stats FROM items_templates WHERE id = $1', [recipe.result_item_template_id]);
         const templateStats = tplRes.rows[0].base_stats;
 
-        // Guardamos el objeto en PAQUETES.
-        // El campo 'data' guarda los rangos originales. Cuando el jugador abra el paquete,
-        // el sistema de paquetes tirará los dados (si es rango) o dará el fijo (si es fijo).
+        // Aquí ocurre la magia: Convertimos [10, 20] -> 15
+        const finalItemStats = generateRandomStats(templateStats);
+
+        // Insertamos en player_packages con los stats YA CALCULADOS
         await client.query(`
             INSERT INTO player_packages (player_id, item_template_id, quantity, data)
             VALUES ($1, $2, $3, $4)
-        `, [userId, recipe.result_item_template_id, recipe.result_quantity, templateStats]);
+        `, [userId, recipe.result_item_template_id, recipe.result_quantity, finalItemStats]);
 
         await client.query('COMMIT');
         
         res.json({ 
             success: true, 
-            message: "¡Objeto forjado!", 
-            detail: "El objeto ha sido enviado a tus Paquetes." 
+            message: "¡Trabajo completado!", 
+            detail: `Has forjado ${recipe.result_quantity}x Objeto. Revisa tus Paquetes.` 
         });
 
     } catch (err) {

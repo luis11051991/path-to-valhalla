@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Hammer, Anvil, FlaskRound, Scroll, Lock, ArrowUpCircle, AlertTriangle, Package, Info } from 'lucide-react';
+import { Hammer, Anvil, FlaskRound, Scroll, Lock, ArrowUpCircle, AlertTriangle, Package, Info, XCircle, CheckCircle } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 
 // --- CONFIGURACIÓN DE PROFESIONES ---
@@ -9,6 +9,8 @@ const PROFESSIONS = [
     { id: 'artificer', name: 'Artífice', icon: Scroll, desc: 'Crea joyas y artefactos mágicos.', color: 'text-blue-500', border: 'border-blue-500', bg: 'bg-blue-900/20' }
 ];
 
+const STAT_ICONS = { strength: '💪', dexterity: '⚡', constitution: '❤️', intelligence: '🧠', wisdom: '✨', charisma: '🎭', luck: '🍀', defense: '🛡️', block: '🚫', crit: '🎯' };
+
 // --- RANGOS DE MAESTRÍA ---
 const getProfessionRankTitle = (level) => {
     if (level < 10) return "Novato";
@@ -16,18 +18,18 @@ const getProfessionRankTitle = (level) => {
     if (level < 60) return "Oficial";
     if (level < 90) return "Artífice";
     if (level < 100) return "Maestro";
-    return "Leyenda";
+    return "Leyenda Viviente";
 };
-
-const STAT_ICONS = { strength: '💪', dexterity: '⚡', constitution: '❤️', intelligence: '🧠', wisdom: '✨', charisma: '🎭', luck: '🍀', defense: '🛡️', block: '🚫', crit: '🎯' };
 
 const Workshop = ({ user, onUpdateUser }) => {
     const [loading, setLoading] = useState(true);
     const [workshopData, setWorkshopData] = useState(null);
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [confirmProfession, setConfirmProfession] = useState(null);
-    const [successModal, setSuccessModal] = useState(null); // Estado para el modal de éxito
-    const [tooltipData, setTooltipData] = useState(null); // Estado para el Tooltip
+    
+    // Estado unificado para mensajes (Éxito o Error) - Adiós alerts feos
+    const [messageModal, setMessageModal] = useState(null); 
+    const [tooltipData, setTooltipData] = useState(null);
 
     useEffect(() => { loadData(); }, []);
 
@@ -54,7 +56,14 @@ const Workshop = ({ user, onUpdateUser }) => {
                 body: JSON.stringify({ profession: confirmProfession })
             });
             const data = await res.json();
-            if (data.success) { setConfirmProfession(null); setLoading(true); await loadData(); }
+            if (data.success) { 
+                setConfirmProfession(null); 
+                setLoading(true); 
+                await loadData(); 
+            } else {
+                // Error en selección (poco probable, pero por si acaso)
+                setMessageModal({ type: 'error', title: 'Error', message: data.message });
+            }
         } catch (err) { console.error(err); }
     };
 
@@ -67,12 +76,16 @@ const Workshop = ({ user, onUpdateUser }) => {
             });
             const data = await res.json();
             if (data.success) {
-                setSuccessModal({ message: data.message, detail: data.detail, item: selectedRecipe });
+                // ÉXITO: Mostramos modal bonito y recargamos
+                setMessageModal({ type: 'success', title: data.message, message: data.detail, item: selectedRecipe });
                 loadData(); 
             } else {
-                alert(data.message);
+                // ERROR: Mostramos modal de error (no alert)
+                setMessageModal({ type: 'error', title: 'Fallo al Forjar', message: data.message });
             }
-        } catch (err) { console.error(err); }
+        } catch (err) { 
+            setMessageModal({ type: 'error', title: 'Error de Conexión', message: 'No se pudo contactar con el taller.' });
+        }
     };
 
     // --- TOOLTIP LOGIC ---
@@ -98,14 +111,12 @@ const Workshop = ({ user, onUpdateUser }) => {
         const { item, rect } = tooltipData;
         const styles = getItemStyles(item.rarity);
         const stats = item.base_stats || {};
-
-        // Helper para mostrar stats (Rango o Fijo)
         const renderValue = (val) => Array.isArray(val) ? `${val[0]}-${val[1]}` : val;
 
         return (
             <div 
                 className={`fixed z-[100] bg-slate-950 border-2 p-3 rounded shadow-[0_0_30px_rgba(0,0,0,0.9)] w-[220px] pointer-events-none animate-in fade-in zoom-in-95 duration-100 ${styles.border} ${styles.glow}`}
-                style={{ top: rect.top, left: rect.right + 10 }}
+                style={{ top: rect.top, left: rect.right + 15 }}
             >
                 <p className={`font-bold text-sm ${styles.text}`}>{item.result_name}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p>
@@ -120,7 +131,7 @@ const Workshop = ({ user, onUpdateUser }) => {
                         return <p key={key} className="text-xs text-green-400 capitalize">{icon} {key}: +{renderValue(val)}</p>;
                     })}
                 </div>
-                <p className="text-[10px] text-slate-500 italic border-t border-white/10 pt-1">Resultado de fabricación</p>
+                {item.item_desc && <p className="text-[10px] text-slate-400 italic border-t border-white/10 pt-1 mt-2 line-clamp-3">{item.item_desc}</p>}
             </div>
         );
     };
@@ -153,6 +164,7 @@ const Workshop = ({ user, onUpdateUser }) => {
                         </button>
                     ))}
                 </div>
+                {/* Modal Confirmación Profesión */}
                 {confirmProfession && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in">
                         <div className={`bg-slate-900 border-2 ${selectedProfData.border} rounded-xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center`}>
@@ -174,7 +186,7 @@ const Workshop = ({ user, onUpdateUser }) => {
     const { profession, level, xp, nextLevelXp, recipes } = workshopData;
     const profInfo = PROFESSIONS.find(p => p.id === profession) || PROFESSIONS[0];
     const xpPercent = Math.min((xp / nextLevelXp) * 100, 100);
-    const rankTitle = getProfessionRankTitle(level);
+    const rankTitle = getProfessionRankTitle(level); // Obtenemos el título del rango
 
     return (
         <div className="h-full flex flex-col bg-slate-950 relative overflow-hidden animate-in fade-in duration-500">
@@ -187,7 +199,7 @@ const Workshop = ({ user, onUpdateUser }) => {
                         <profInfo.icon size={32} className={profInfo.color} />
                     </div>
                     <div>
-                        <h2 className={`text-2xl font-serif font-bold ${profInfo.color}`}>{profInfo.name} <span className="text-slate-400 text-sm ml-2 uppercase tracking-widest border border-slate-700 px-2 py-0.5 rounded-full">{rankTitle} (Nvl {level})</span></h2>
+                        <h2 className={`text-2xl font-serif font-bold ${profInfo.color}`}>{profInfo.name} <span className="text-slate-300 text-xs ml-2 uppercase tracking-widest border border-slate-700 bg-black/30 px-2 py-1 rounded-full">{rankTitle} (NVL {level})</span></h2>
                         <div className="w-64 h-2.5 bg-slate-800 rounded-full mt-2 overflow-hidden border border-slate-700 relative shadow-inner">
                             <div className={`h-full ${profInfo.color.replace('text', 'bg')} transition-all duration-500 shadow-[0_0_10px_currentColor]`} style={{ width: `${xpPercent}%` }} />
                         </div>
@@ -201,17 +213,20 @@ const Workshop = ({ user, onUpdateUser }) => {
                 <div className="w-1/3 border-r border-slate-800 bg-black/20 p-4 overflow-y-auto custom-scrollbar">
                     <h3 className="text-slate-400 text-xs uppercase tracking-widest font-bold mb-4 flex items-center gap-2"><Scroll size={14} /> Recetas Conocidas</h3>
                     <div className="space-y-2">
-                        {recipes.length === 0 ? <div className="text-slate-600 text-xs italic text-center py-4">No conoces ninguna receta aún.</div> : recipes.map(recipe => (
-                            <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${selectedRecipe?.id === recipe.id ? 'bg-amber-900/20 border-amber-500 shadow-md' : 'bg-slate-900 border-slate-700 hover:border-slate-500 hover:bg-slate-800'}`}>
-                                <div className={`w-10 h-10 rounded bg-black border flex items-center justify-center ${recipe.rarity === 'rare' ? 'border-blue-500' : 'border-slate-600'}`}>
-                                    <img src={recipe.result_image} className="w-8 h-8 object-contain" />
+                        {recipes.length === 0 ? <div className="text-slate-600 text-xs italic text-center py-4">No conoces ninguna receta aún.</div> : recipes.map(recipe => {
+                            const styles = getItemStyles(recipe.rarity);
+                            return (
+                                <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${selectedRecipe?.id === recipe.id ? 'bg-amber-900/20 border-amber-500 shadow-md' : 'bg-slate-900 border-slate-700 hover:border-slate-500 hover:bg-slate-800'}`}>
+                                    <div className={`w-10 h-10 rounded bg-black border flex items-center justify-center relative overflow-hidden ${styles.border}`}>
+                                        <img src={recipe.result_image} className="w-8 h-8 object-contain" />
+                                    </div>
+                                    <div>
+                                        <div className={`text-sm font-bold ${styles.text}`}>{recipe.result_name}</div>
+                                        <div className="text-[10px] text-slate-500">Nivel Req: {recipe.min_profession_level}</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div className={`text-sm font-bold ${recipe.rarity === 'rare' ? 'text-blue-400' : 'text-slate-200'}`}>{recipe.result_name}</div>
-                                    <div className="text-[10px] text-slate-500">Nivel Req: {recipe.min_profession_level}</div>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -224,14 +239,14 @@ const Workshop = ({ user, onUpdateUser }) => {
                             
                             <div className="flex justify-center mb-6">
                                 <div className="relative group">
-                                    <div className={`w-24 h-24 bg-black border-2 rounded flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.5)] ${selectedRecipe.rarity === 'legendary' ? 'border-orange-500 shadow-orange-500/20' : 'border-amber-600'}`}>
+                                    <div className={`w-24 h-24 bg-black border-2 rounded flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.5)] ${getItemStyles(selectedRecipe.rarity).border} ${getItemStyles(selectedRecipe.rarity).glow}`}>
                                         <img src={selectedRecipe.result_image} className="w-20 h-20 object-contain drop-shadow-md" />
                                     </div>
                                     <div className="absolute -bottom-3 -right-3 bg-slate-800 text-slate-200 text-xs px-2 py-1 rounded border border-slate-600 font-mono shadow-lg">x{selectedRecipe.result_quantity}</div>
                                 </div>
                             </div>
                             
-                            <h3 className="text-xl font-bold text-center text-white mb-2">{selectedRecipe.result_name}</h3>
+                            <h3 className={`text-xl font-bold text-center mb-2 ${getItemStyles(selectedRecipe.rarity).text}`}>{selectedRecipe.result_name}</h3>
                             <div className="flex justify-center gap-4 text-xs text-slate-400 mb-6 border-b border-slate-800 pb-4">
                                 <span className="flex items-center gap-1 bg-green-900/20 px-2 py-1 rounded border border-green-900/30 text-green-400"><ArrowUpCircle size={14} /> +{selectedRecipe.xp_reward} XP</span>
                                 <span className="flex items-center gap-1 bg-amber-900/20 px-2 py-1 rounded border border-amber-900/30 text-amber-400"><Hammer size={14} /> Costo: {selectedRecipe.cost_gold}c</span>
@@ -263,19 +278,31 @@ const Workshop = ({ user, onUpdateUser }) => {
                 </div>
             </div>
 
-            {/* --- MODAL DE ÉXITO --- */}
-            {successModal && (
+            {/* --- MODAL UNIFICADO PARA MENSAJES (ÉXITO O ERROR) --- */}
+            {messageModal && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md animate-in zoom-in-95 duration-300">
-                    <div className="bg-slate-900 border-2 border-green-500 rounded-xl p-8 max-w-sm w-full shadow-[0_0_50px_rgba(34,197,94,0.3)] flex flex-col items-center text-center relative overflow-hidden">
-                        <div className="absolute inset-0 bg-green-500/10 animate-pulse pointer-events-none"></div>
-                        <div className="p-4 bg-green-900/30 rounded-full mb-4 border border-green-500/50 relative z-10">
-                            <Package size={40} className="text-green-400" />
+                    <div className={`bg-slate-900 border-2 rounded-xl p-8 max-w-sm w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col items-center text-center relative overflow-hidden ${messageModal.type === 'success' ? 'border-green-500 shadow-green-500/20' : 'border-red-500 shadow-red-500/20'}`}>
+                        <div className={`absolute inset-0 animate-pulse pointer-events-none ${messageModal.type === 'success' ? 'bg-green-500/10' : 'bg-red-500/10'}`}></div>
+                        
+                        <div className={`p-4 rounded-full mb-4 border relative z-10 ${messageModal.type === 'success' ? 'bg-green-900/30 border-green-500/50' : 'bg-red-900/30 border-red-500/50'}`}>
+                            {messageModal.type === 'success' ? <Package size={40} className="text-green-400" /> : <XCircle size={40} className="text-red-400" />}
                         </div>
-                        <h3 className="text-2xl font-serif font-bold text-white mb-1 relative z-10">{successModal.message}</h3>
-                        <p className="text-green-300 text-xs mb-4 uppercase tracking-widest font-bold relative z-10">{successModal.item.result_name}</p>
-                        <p className="text-slate-400 text-sm mb-6 leading-relaxed relative z-10">{successModal.detail}</p>
-                        <button onClick={() => setSuccessModal(null)} className="w-full py-3 bg-green-700 hover:bg-green-600 text-white font-bold uppercase rounded shadow-lg transition-all relative z-10 border border-green-500">
-                            Entendido
+                        
+                        <h3 className="text-2xl font-serif font-bold text-white mb-2 relative z-10">{messageModal.title}</h3>
+                        
+                        {messageModal.item && (
+                            <p className="text-green-300 text-xs mb-4 uppercase tracking-widest font-bold relative z-10 border border-green-900 bg-green-900/20 px-2 py-1 rounded">
+                                {messageModal.item.result_name}
+                            </p>
+                        )}
+                        
+                        <p className="text-slate-400 text-sm mb-6 leading-relaxed relative z-10">{messageModal.message}</p>
+                        
+                        <button 
+                            onClick={() => setMessageModal(null)} 
+                            className={`w-full py-3 text-white font-bold uppercase rounded shadow-lg transition-all relative z-10 border ${messageModal.type === 'success' ? 'bg-green-700 hover:bg-green-600 border-green-500' : 'bg-red-700 hover:bg-red-600 border-red-500'}`}
+                        >
+                            {messageModal.type === 'success' ? 'Entendido' : 'Cerrar'}
                         </button>
                     </div>
                 </div>

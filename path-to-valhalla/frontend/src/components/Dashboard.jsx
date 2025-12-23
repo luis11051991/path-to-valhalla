@@ -454,10 +454,8 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
     const getBackgroundImage = () => currentBgUrl || raceData.bgImage;
     const currentXp = user.experience || 0;
     
-    // --- 2. CORRECCIÓN: CALCULO DE XP MÁXIMA ---
-    // Usamos la tabla para que la barra de progreso sea correcta
+    // --- 2. CALCULO DE XP MÁXIMA ---
     const maxXp = user.level >= 100 ? ODIN_LEVEL_XP : (XP_TABLE[user.level] || 99999);
-    
     const xpPercent = Math.min((currentXp / maxXp) * 100, 100);
 
     // --- RENDERIZADO DE SLOTS ---
@@ -494,7 +492,7 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         );
     };
 
-    // --- 3. HELPER DE ESTILOS POR RAREZA (5 NIVELES + BRILLOS) ---
+    // --- 3. HELPER DE ESTILOS POR RAREZA ---
     const getItemStyles = (rarity) => {
         switch (rarity) {
             case 'uncommon': // VERDE
@@ -521,7 +519,7 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
                     border: 'border-red-600', 
                     glow: 'shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse' 
                 };
-            default: // COMÚN (Blanco) - Borde discreto
+            default: // COMÚN
                 return { 
                     text: 'text-slate-200', 
                     border: 'border-slate-600', 
@@ -530,7 +528,7 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         }
     };
 
-    // --- 4. TOOLTIP GLOBAL (ACTUALIZADO CON ESTILOS) ---
+    // --- 4. TOOLTIP GLOBAL ---
     const GlobalTooltip = () => {
         if (!tooltipData) return null;
         const { item, rect, side } = tooltipData;
@@ -560,14 +558,17 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
                 <div className="mb-2 text-[10px] font-bold text-center border-b border-white/5 pb-1"> {item.is_bound ? (<span className="text-red-500">🔒 VINCULADO (Soulbound)</span>) : (<span className="text-green-500">✨ TRADEABLE</span>)} </div>
                 <div className="space-y-1 mb-2">
                     
-                    {/* 1. PRIMERO: DAÑO Y ARMADURA */}
+                    {/* 1. DAÑO Y ARMADURA */}
                     {stats.damage_min && <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{renderValue(stats.damage_min)} - {renderValue(stats.damage_max)}</span></p>}
                     {stats.armor ? <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>🛡️ Armadura: <span className="text-white">{renderValue(stats.armor)}</span></p> : null}
 
-                    {/* 2. LUEGO: STATS (Fuerza, Destreza, etc.) */}
+                    {/* 2. STATS (OCULTAR SI VALOR ES 0) */}
                     {Object.entries(stats).map(([key, val]) => {
                         if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
-                        if (val <= 0 && !Array.isArray(val)) return null;
+                        
+                        // Validar si es un número y es <= 0 para ocultarlo
+                        if (!Array.isArray(val) && val <= 0) return null;
+
                         const icon = STAT_ICONS[key] || '🍀';
                         return <p key={key} className="text-xs text-green-400 capitalize">{icon} {key}: +{renderValue(val)}</p>;
                     })}
@@ -645,7 +646,6 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
                                             item.image_url ? (
                                                 <>
                                                     <img src={item.image_url} alt={item.name} className="w-full h-full object-contain p-0.5 drop-shadow-md hover:scale-110 transition-transform" />
-                                                    {/* --- CORRECCIÓN AQUÍ: EL SPAN DE CANTIDAD --- */}
                                                     {item.quantity > 1 && (
                                                         <span className="absolute bottom-0 right-0 bg-black/90 text-[10px] text-white px-1.5 font-mono font-bold border-tl border-slate-700 rounded-tl z-10">
                                                             {item.quantity}

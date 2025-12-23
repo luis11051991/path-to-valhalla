@@ -14,6 +14,7 @@ exports.getMyPackages = async (req, res) => {
         const totalItems = parseInt(countRes.rows[0].count);
         const totalPages = Math.ceil(totalItems / limit);
 
+        // Aquí traemos los datos del paquete. 'pp.data' contiene los stats ya calculados (fijos).
         const query = `
             SELECT pp.*, 
                    it.name, it.image_url, it.rarity, it.type, it.description, it.stackable 
@@ -38,7 +39,7 @@ exports.getMyPackages = async (req, res) => {
 };
 
 // ==========================================
-// 2. RECLAMAR PAQUETE (STACKING POR NOMBRE)
+// 2. RECLAMAR PAQUETE (STACKING Y STATS FIJOS)
 // ==========================================
 exports.claimPackage = async (req, res) => {
     const userId = req.user.id;
@@ -49,9 +50,9 @@ exports.claimPackage = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // A. Obtener info del paquete (incluyendo NOMBRE y STACKABLE)
+        // A. Obtener info del paquete
         const pkgRes = await client.query(`
-            SELECT pp.*, it.stackable, it.name 
+            SELECT pp.*, it.stackable, it.name, it.base_stats as template_stats
             FROM player_packages pp
             JOIN items_templates it ON pp.item_template_id = it.id
             WHERE pp.id = $1 AND pp.player_id = $2
@@ -63,21 +64,26 @@ exports.claimPackage = async (req, res) => {
         }
 
         const pkg = pkgRes.rows[0];
-        const newItemStats = pkg.data || {}; 
+        
+        // --- LÓGICA CRÍTICA DE STATS ---
+        // Usamos pkg.data (stats fijos generados al craftear/dropear).
+        // Si por alguna razón está vacío, usamos el template como fallback.
+        let finalItemStats = pkg.data;
+        if (!finalItemStats || Object.keys(finalItemStats).length === 0) {
+            finalItemStats = pkg.template_stats || {};
+        }
 
         let itemToUpdateId = null;
         let finalSlotToInsert = -1;
 
-        // --- LÓGICA MAESTRA: STACKING POR NOMBRE ---
-        // Si es stackable, buscamos si existe CUALQUIER item con el MISMO NOMBRE en el inventario.
-        // Esto soluciona el problema de tener IDs duplicados (8, 13, 18) en la base de datos.
+        // --- LÓGICA DE STACKING (Solo si es stackable) ---
         if (pkg.stackable) {
             const existingStackRes = await client.query(`
                 SELECT pi.id 
                 FROM player_items pi
                 JOIN items_templates it ON pi.template_id = it.id
                 WHERE pi.player_id = $1 
-                  AND it.name = $2  -- BUSQUEDA POR NOMBRE EXACTO
+                  AND it.name = $2 
                   AND pi.is_equipped = false
                 LIMIT 1
             `, [userId, pkg.name]);
@@ -87,7 +93,7 @@ exports.claimPackage = async (req, res) => {
             }
         }
 
-        // --- Si no se encontró stack, buscar hueco vacío ---
+        // --- BUSCAR SLOT VACÍO ---
         if (!itemToUpdateId) {
             // A. Intento en slot específico (Drag & Drop)
             if (targetSlot !== undefined && targetSlot !== null) {
@@ -97,12 +103,12 @@ exports.claimPackage = async (req, res) => {
                  }
             } 
             
-            // B. Búsqueda automática de slot libre
+            // B. Búsqueda automática
             if (finalSlotToInsert === -1) {
                 const slotsRes = await client.query('SELECT bag_slot FROM player_items WHERE player_id = $1 AND bag_slot IS NOT NULL', [userId]);
                 const occupiedSlots = new Set(slotsRes.rows.map(row => row.bag_slot));
                 
-                for (let i = 0; i < 200; i++) {
+                for (let i = 0; i < 40; i++) { // Asumiendo mochila base de 40
                     if (!occupiedSlots.has(i)) {
                         finalSlotToInsert = i;
                         break;
@@ -120,19 +126,25 @@ exports.claimPackage = async (req, res) => {
         if (itemToUpdateId) {
             await client.query(`UPDATE player_items SET quantity = quantity + $1 WHERE id = $2`, [pkg.quantity, itemToUpdateId]);
         } else {
+            // INSERTAMOS CON LOS STATS FIJOS (finalItemStats)
             await client.query(`
                 INSERT INTO player_items 
                 (player_id, template_id, bag_slot, quantity, base_stats, is_equipped, durability_current, durability_max, is_bound)
                 VALUES ($1, $2, $3, $4, $5, false, 100, 100, false)
-            `, [userId, pkg.item_template_id, finalSlotToInsert, pkg.quantity, newItemStats]);
+            `, [userId, pkg.item_template_id, finalSlotToInsert, pkg.quantity, finalItemStats]);
         }
 
         await client.query('DELETE FROM player_packages WHERE id = $1', [packageId]);
         await client.query('COMMIT');
 
-        // Retornar inventario
+        // --- CORRECCIÓN FINAL: RECUPERAR INVENTARIO ---
+        // IMPORTANTE: NO seleccionamos 'it.base_stats'.
+        // Al hacer 'SELECT pi.*', ya estamos trayendo los stats fijos guardados en la tabla player_items.
+        // Si seleccionamos 'it.base_stats', sobrescribiríamos lo fijo con el rango del template.
         const inventoryRes = await client.query(`
-            SELECT pi.*, it.name, it.image_url, it.rarity, it.type, it.icon, it.description, it.price_copper, it.stackable, it.base_stats
+            SELECT pi.*, 
+                   it.name, it.image_url, it.rarity, it.type, it.icon, it.description, it.price_copper, it.stackable
+                   -- NO incluimos it.base_stats aquí para respetar los stats únicos del item (pi.base_stats)
             FROM player_items pi
             JOIN items_templates it ON pi.template_id = it.id
             WHERE pi.player_id = $1
