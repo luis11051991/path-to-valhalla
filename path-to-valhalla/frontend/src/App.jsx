@@ -5,7 +5,8 @@ import Dashboard from './components/Dashboard';
 import Expeditions from './components/Expeditions';
 import Packages from './components/Packages';
 import Market from './components/Market'; 
-import Workshop from './components/Workshop'; // <--- 1. IMPORTANTE
+import Workshop from './components/Workshop'; 
+import ValhallaHall from './components/ValhallaHall'; // <--- 1. NUEVO IMPORT
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
 import { apiUrl } from './constants/api';
@@ -136,9 +137,16 @@ function App() {
             />
           )}
 
-          {/* --- 2. MOSTRAR EL TALLER --- */}
           {gameView === 'workshop' && (
             <Workshop 
+              user={user}
+              onUpdateUser={handleUserUpdate}
+            />
+          )}
+
+          {/* --- 2. RENDERIZAR VALHALLA HALL --- */}
+          {gameView === 'valhalla_hall' && (
+            <ValhallaHall 
               user={user}
               onUpdateUser={handleUserUpdate}
             />

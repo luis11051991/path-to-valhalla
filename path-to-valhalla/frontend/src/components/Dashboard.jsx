@@ -2,17 +2,16 @@ import React, { useMemo, useState, useEffect } from 'react';
 import {
     Maximize2, X, Sword, Shield, Shirt, Footprints, Crown, Gem, Sparkles, Hand, Lock,
     Store, Gift, PlayCircle, Users, MessageCircle, ScrollText, Image as ImageIcon, AlertTriangle, Ban, Clock, Plus,
-    BookOpen, Zap, PawPrint, Heart, CheckCircle
+    BookOpen, Zap, PawPrint, Heart, CheckCircle, ArrowRight
 } from 'lucide-react';
 import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
 import StatsPanel from './StatsPanel';
 import EvolutionModal from './EvolutionModal';
 
-// --- 1. TABLA DE EXPERIENCIA (Igual que en Backend y TopBar) ---
+// --- 1. TABLA DE EXPERIENCIA ---
 const XP_TABLE = [
-    0, // Nivel 0 no existe
-    15, 40, 65, 90, 115, 140, 165, 190, 215, 240,
+    0, 15, 40, 65, 90, 115, 140, 165, 190, 215, 240,
     265, 290, 315, 340, 365, 390, 415, 440, 465, 490,
     515, 540, 565, 595, 625, 655, 685, 720, 755, 790,
     830, 870, 915, 960, 1010, 1060, 1115, 1170, 1230, 1290,
@@ -25,18 +24,8 @@ const XP_TABLE = [
 ];
 const ODIN_LEVEL_XP = 25000;
 
-// --- DICCIONARIO DE ICONOS PARA TOOLTIP ---
 const STAT_ICONS = {
-    strength: '💪',
-    dexterity: '⚡',
-    constitution: '❤️',
-    intelligence: '🧠',
-    wisdom: '✨',
-    charisma: '🎭',
-    luck: '🍀',
-    defense: '🛡️',
-    block: '🚫',
-    crit: '🎯'
+    strength: '💪', dexterity: '⚡', constitution: '❤️', intelligence: '🧠', wisdom: '✨', charisma: '🎭', luck: '🍀', defense: '🛡️', block: '🚫', crit: '🎯'
 };
 
 const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) => {
@@ -59,6 +48,36 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
     const [currentBgUrl, setCurrentBgUrl] = useState(user.active_background_url);
     const [pendingPurchase, setPendingPurchase] = useState(null);
     const [errorMsg, setErrorMsg] = useState(null);
+
+    // --- ESTADO PARA LA QUEST DE EVOLUCIÓN (LÓGICA OPTIMISTA) ---
+    // ESTO ARREGLA QUE NO APAREZCA EL BOTÓN:
+    // Si ya eres nivel 10 y no has completado, asumimos "available" inmediatamente.
+    const [evolutionStatus, setEvolutionStatus] = useState(() => {
+        if (user.evolution_quest_status === 'completed') return 'completed';
+        if (user.level >= 10) return 'available'; 
+        return 'locked';
+    });
+    const [evolutionQuestData, setEvolutionQuestData] = useState(null); 
+
+    // Cargar estado de evolución (CON FIX DE CACHÉ)
+    useEffect(() => {
+        if (user.level >= 10 && user.evolution_quest_status !== 'completed') {
+            // ?t=Date.now() OBLIGA al navegador a pedir datos nuevos y no usar caché antiguo
+            fetch(apiUrl(`/api/quests/status?context=evolution&t=${Date.now()}`), {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            })
+            .then(r => r.json())
+            .then(data => {
+                setEvolutionStatus(data.status); 
+                if (data.quest) setEvolutionQuestData(data); 
+            })
+            .catch(err => console.error("Error cargando estado evolución:", err));
+        } else if (user.evolution_quest_status === 'completed') {
+            setEvolutionStatus('completed');
+        } else {
+            setEvolutionStatus('locked');
+        }
+    }, [user.evolution_quest_status, user.level]);
 
     // --- CARGAR DATOS ---
     const fetchSkills = () => {
@@ -93,7 +112,7 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         }
     }, [showAvatarModal, user.id]);
 
-    // --- ACCIONES DE MASCOTAS Y SKILLS ---
+    // --- ACCIONES ---
     const handleEquipPet = async (playerPetId) => {
         const res = await fetch(apiUrl('/api/equip-pet'), {
             method: 'POST',
@@ -138,7 +157,6 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         }
     };
 
-    // --- ACCIONES DE TIENDA Y PERSONALIZACIÓN ---
     const handleEquipBg = async (bgId) => {
         const res = await fetch(apiUrl('/api/equip-background'), {
             method: 'POST',
@@ -324,7 +342,6 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
     };
 
     const getEquippedItem = (slotName) => user.real_inventory?.find(i => i.is_equipped && i.equipped_slot === slotName);
-    
     const getBagItem = (slotIndex) => {
         const realIndex = ((activeBag - 1) * 40) + slotIndex;
         return user.real_inventory?.find(i => !i.is_equipped && i.bag_slot === realIndex);
@@ -453,12 +470,9 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
 
     const getBackgroundImage = () => currentBgUrl || raceData.bgImage;
     const currentXp = user.experience || 0;
-    
-    // --- 2. CALCULO DE XP MÁXIMA ---
     const maxXp = user.level >= 100 ? ODIN_LEVEL_XP : (XP_TABLE[user.level] || 99999);
     const xpPercent = Math.min((currentXp / maxXp) * 100, 100);
 
-    // --- RENDERIZADO DE SLOTS ---
     const renderEquipmentSlot = (DefaultIcon, slotName, className = '', tooltipSide = 'top') => {
         const item = getEquippedItem(slotName);
         const ItemIcon = item ? ITEM_ICONS[item.icon] : DefaultIcon;
@@ -492,43 +506,17 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         );
     };
 
-    // --- 3. HELPER DE ESTILOS POR RAREZA ---
     const getItemStyles = (rarity) => {
         switch (rarity) {
-            case 'uncommon': // VERDE
-                return { 
-                    text: 'text-green-400', 
-                    border: 'border-green-800', 
-                    glow: '' 
-                };
-            case 'rare': // AZUL
-                return { 
-                    text: 'text-blue-400', 
-                    border: 'border-blue-800', 
-                    glow: '' 
-                };
-            case 'legendary': // NARANJA
-                return { 
-                    text: 'text-orange-400', 
-                    border: 'border-orange-500', 
-                    glow: 'shadow-[0_0_15px_rgba(251,146,60,0.4)]' 
-                };
-            case 'mythic': // ROJO
-                return { 
-                    text: 'text-red-500', 
-                    border: 'border-red-600', 
-                    glow: 'shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse' 
-                };
-            default: // COMÚN
-                return { 
-                    text: 'text-slate-200', 
-                    border: 'border-slate-600', 
-                    glow: '' 
-                };
+            case 'uncommon': return { text: 'text-green-400', border: 'border-green-800', glow: '' };
+            case 'rare': return { text: 'text-blue-400', border: 'border-blue-800', glow: '' };
+            case 'legendary': return { text: 'text-orange-400', border: 'border-orange-500', glow: 'shadow-[0_0_15px_rgba(251,146,60,0.4)]' };
+            case 'mythic': return { text: 'text-red-500', border: 'border-red-600', glow: 'shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse' };
+            default: return { text: 'text-slate-200', border: 'border-slate-600', glow: '' };
         }
     };
 
-    // --- 4. TOOLTIP GLOBAL ---
+    // --- TOOLTIP GLOBAL UNIVERSAL (CORREGIDO PARA EL ARCO) ---
     const GlobalTooltip = () => {
         if (!tooltipData) return null;
         const { item, rect, side } = tooltipData;
@@ -537,7 +525,6 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         const maxDurability = item.durability_max || 100;
         const isBroken = durability === 0;
         
-        // Aplicamos estilos de rareza
         const styles = getItemStyles(item.rarity);
         
         let style = { position: 'fixed', zIndex: 9999 };
@@ -546,10 +533,8 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
         else if (side === 'right') { style.left = rect.right + 10; style.top = rect.top; } 
         else if (side === 'bottom') { style.left = rect.left + (rect.width / 2) - 100; style.top = rect.bottom + 10; }
         
-        const renderValue = (val) => {
-            if (Array.isArray(val)) return `${val[0]}-${val[1]}`; 
-            return val; 
-        };
+        // Helper para renderizar arrays
+        const renderValue = (val) => Array.isArray(val) ? `${val[0]}-${val[1]}` : val;
 
         return (
             <div style={style} className={`bg-slate-950 border-2 p-3 rounded shadow-[0_0_30px_rgba(0,0,0,0.9)] min-w-[200px] pointer-events-none animate-in fade-in zoom-in-95 duration-100 ${styles.border} ${styles.glow}`}>
@@ -558,18 +543,26 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
                 <div className="mb-2 text-[10px] font-bold text-center border-b border-white/5 pb-1"> {item.is_bound ? (<span className="text-red-500">🔒 VINCULADO (Soulbound)</span>) : (<span className="text-green-500">✨ TRADEABLE</span>)} </div>
                 <div className="space-y-1 mb-2">
                     
-                    {/* 1. DAÑO Y ARMADURA */}
-                    {stats.damage_min && <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{renderValue(stats.damage_min)} - {renderValue(stats.damage_max)}</span></p>}
+                    {/* SOPORTE PARA DAÑO MIN/MAX SEPARADOS O EN ARRAY (NUEVO Y VIEJO) */}
+                    {stats.damage_min ? (
+                        <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{stats.damage_min} - {stats.damage_max}</span></p>
+                    ) : stats.damage ? (
+                        <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>⚔️ Daño: <span className="text-white">{renderValue(stats.damage)}</span></p>
+                    ) : null}
+
+                    {/* SOPORTE PARA ARMADURA */}
                     {stats.armor ? <p className={`text-xs ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>🛡️ Armadura: <span className="text-white">{renderValue(stats.armor)}</span></p> : null}
 
-                    {/* 2. STATS (OCULTAR SI VALOR ES 0) */}
+                    {/* RESTO DE STATS */}
                     {Object.entries(stats).map(([key, val]) => {
-                        if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
+                        // Ignoramos las claves especiales que ya pintamos arriba
+                        if (['damage_min', 'damage_max', 'damage', 'armor'].includes(key)) return null; 
                         
-                        // Validar si es un número y es <= 0 para ocultarlo
+                        // Si es valor único <= 0, no lo mostramos (a menos que sea array rango)
                         if (!Array.isArray(val) && val <= 0) return null;
 
                         const icon = STAT_ICONS[key] || '🍀';
+                        // IMPORTANTE: 'renderValue' maneja arrays, así que esto arregla el arco si tiene [4,7]
                         return <p key={key} className="text-xs text-green-400 capitalize">{icon} {key}: +{renderValue(val)}</p>;
                     })}
                     
@@ -613,9 +606,25 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
                             </div>
                             <div className="flex-1"><h2 className="text-xl font-serif text-amber-500">{user.username}</h2><p className="text-slate-400 text-[10px] uppercase tracking-widest">{raceData.name} • Lvl {user.level}</p><div className="w-full mt-2"><div className="flex justify-between text-[9px] text-slate-400 mb-0.5"><span>EXP</span><span>{Math.floor(xpPercent)}%</span></div><div className="h-1.5 bg-slate-800 border border-slate-600 rounded-full overflow-hidden"><div className="h-full bg-yellow-500 shadow-[0_0_5px_rgba(234,179,8,0.8)]" style={{ width: `${xpPercent}%` }}></div></div></div></div>
                         </div>
-                        {((user.level >= 10 && user.evolution_quest_status !== 'completed') || (user.level >= 50 && user.evolution_quest_status !== 'completed')) && (
-                            <button onClick={() => setShowEvolutionModal(true)} className="w-full mb-4 bg-gradient-to-r from-purple-700 via-pink-700 to-purple-700 bg-[length:200%_auto] animate-gradient text-white font-bold py-2 px-4 rounded border border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.5)] flex items-center justify-center gap-2 uppercase tracking-widest text-xs hover:scale-105 transition-transform"><Sparkles size={16} className="animate-spin-slow" />¡Evolución Disponible!</button>
+                        
+                        {/* --- BOTÓN DE EVOLUCIÓN INTELIGENTE --- */}
+                        {evolutionStatus !== 'locked' && evolutionStatus !== 'completed' && (
+                            <button 
+                                onClick={() => setShowEvolutionModal(true)} 
+                                className={`w-full mb-4 font-bold py-3 px-4 rounded border flex items-center justify-center gap-2 uppercase tracking-widest text-xs hover:scale-105 transition-transform shadow-lg
+                                ${evolutionStatus === 'in_progress' 
+                                    ? 'bg-slate-800 border-amber-500 text-amber-400 animate-pulse' 
+                                    : 'bg-gradient-to-r from-purple-700 via-pink-700 to-purple-700 bg-[length:200%_auto] animate-gradient text-white border-purple-400'
+                                }`}
+                            >
+                                {evolutionStatus === 'in_progress' ? (
+                                    <><ScrollText size={16} /> Misión en Progreso</>
+                                ) : (
+                                    <><Sparkles size={16} className="animate-spin-slow" /> ¡Evolución Disponible!</>
+                                )}
+                            </button>
                         )}
+
                         <StatsPanel stats={user.stats} bonuses={totalBonuses} availablePoints={user.stat_points || 0} onSave={handleSaveStats} />
                         <div className="bg-black/50 backdrop-blur-sm border border-slate-700 rounded p-3 text-xs space-y-2">
                             <div className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-slate-400">⚔️ Daño Físico</span><span className="text-white font-mono font-bold text-amber-500">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span></div>
@@ -630,10 +639,9 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
                         </div>
                     </div>
                     
-                    {/* EQUIPAMIENTO */}
+                    {/* El resto de componentes (Equipamiento, Mochila, etc) se mantienen igual */}
                     <div className="lg:col-span-5"><div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 h-[700px] relative shadow-2xl flex flex-col items-center"><h3 className="text-amber-500 font-serif uppercase tracking-widest text-sm mb-4 border-b border-amber-500/20 w-full text-center pb-2">Equipamiento</h3><div className="relative w-full h-full max-w-[420px]"><div className="absolute inset-x-0 top-12 bottom-12 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none"><img src={getAvatarImage()} className="h-full w-auto object-contain drop-shadow-[0_0_15px_rgba(0,0,0,1)]" /></div><div className="absolute top-0 left-1/2 -translate-x-1/2">{renderEquipmentSlot(Crown, "head", "", "bottom")}</div><div className="absolute top-4 left-0">{renderEquipmentSlot(Sparkles, "earring_1", "", "right")}</div><div className="absolute top-4 right-0">{renderEquipmentSlot(Sparkles, "earring_2", "", "left")}</div><div className="absolute top-24 left-0">{renderEquipmentSlot(Gem, "neck", "", "bottom")}</div> <div className="absolute top-44 left-0">{renderEquipmentSlot(Sword, "main_hand")}</div><div className="absolute bottom-36 left-0">{renderEquipmentSlot(Gem, "ring_1")}</div><div className="absolute bottom-16 left-0">{renderEquipmentSlot(Hand, "gloves")}</div><div className="absolute bottom-0 left-1/2 -translate-x-1/2">{renderEquipmentSlot(Footprints, "feet")}</div><div className="absolute top-24 right-0">{renderEquipmentSlot(Shirt, "chest")}</div><div className="absolute top-44 right-0">{renderEquipmentSlot(Shield, "off_hand")}</div><div className="absolute bottom-36 right-0">{renderEquipmentSlot(Gem, "ring_2")}</div><div className={`absolute bottom-8 right-8 w-16 h-16 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 shadow-lg z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${equippedPet ? 'border-amber-400' : 'border-slate-600 border-dashed'}`} onClick={() => setShowPetModal(true)} title="Ver Mascotas"> {equippedPet ? (<img src={equippedPet.image_url} className="w-full h-full object-cover rounded-full p-1" />) : (<PawPrint className="text-slate-500" size={24} />)} {equippedPet && equippedPet.current_hunger < 20 && (<div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />)} </div> </div></div></div>
                     
-                    {/* MOCHILA CON NUMERITOS */}
                     <div className="lg:col-span-4"><div className="bg-slate-900 border-2 border-amber-900/50 rounded-lg p-1 h-[700px] flex flex-col shadow-2xl relative"><div className="flex gap-1 mb-1 px-1 overflow-x-auto">{[1, 2, 3, 4, 5, 6].map((num) => (<button key={num} onClick={() => setActiveBag(num)} className={`flex-1 py-1.5 text-[10px] font-bold uppercase border-t-2 transition-colors relative ${activeBag === num ? 'bg-amber-900/80 text-amber-100 border-amber-500' : 'bg-slate-800 text-slate-500 border-transparent hover:bg-slate-700'} ${!isBagUnlocked(num) ? 'opacity-70' : ''}`}>{!isBagUnlocked(num) && <Lock size={10} className="absolute top-0.5 right-0.5 text-red-400" />}{num >= 4 ? <span className="text-purple-400">VIP</span> : `BOLSA ${num}`}</button>))}</div><div className="flex-1 bg-black/60 border border-slate-700 rounded p-2 overflow-y-auto relative">{!isBagUnlocked(activeBag) ? (<div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 z-20"><Lock size={48} className={activeBag >= 4 ? "text-purple-500 mb-4" : "text-slate-500 mb-4"} /><h3 className="text-white font-bold mb-2">Mochila Bloqueada</h3>{activeBag === 3 ? (<p className="text-slate-400 text-xs">Necesitas alcanzar el <span className="text-amber-500">Nivel 20</span>.</p>) : (<div><p className="text-slate-400 text-xs mb-4">Esta es una bolsa <span className="text-purple-400 font-bold">Premium</span>.</p><button onClick={() => handleRentBagClick(activeBag)} className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded shadow-lg transition-colors border border-purple-400 flex items-center justify-center gap-2 mx-auto"><Gem size={12} /> 7 días por 50 Ónix</button></div>)}</div>) : (
                         <div className="grid grid-cols-5 gap-1.5 h-full content-start">
                             {[...Array(40)].map((_, i) => {
@@ -642,18 +650,7 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
                                 const realBagSlot = ((activeBag - 1) * 40) + i;
                                 return (
                                     <div key={i} className={`aspect-square border rounded-sm flex items-center justify-center cursor-pointer shadow-inner relative group transition-colors ${item ? 'bg-slate-800 border-amber-600/50 cursor-grab active:cursor-grabbing' : 'bg-slate-800/50 border-slate-700 hover:border-amber-500/30'}`} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, { type: 'bag', slot: realBagSlot })} draggable={!!item} onDragStart={(e) => handleDragStart(e, item)} onDragEnd={handleDragEnd} onMouseEnter={(e) => handleMouseEnter(item, e, 'left')} onMouseLeave={handleMouseLeave} >
-                                        {item ? (
-                                            item.image_url ? (
-                                                <>
-                                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-contain p-0.5 drop-shadow-md hover:scale-110 transition-transform" />
-                                                    {item.quantity > 1 && (
-                                                        <span className="absolute bottom-0 right-0 bg-black/90 text-[10px] text-white px-1.5 font-mono font-bold border-tl border-slate-700 rounded-tl z-10">
-                                                            {item.quantity}
-                                                        </span>
-                                                    )}
-                                                </>
-                                            ) : (ItemIcon && <ItemIcon size={20} className="text-amber-500 drop-shadow-md" />)
-                                        ) : null}
+                                        {item ? (item.image_url ? (<><img src={item.image_url} alt={item.name} className="w-full h-full object-contain p-0.5 drop-shadow-md hover:scale-110 transition-transform" />{item.quantity > 1 && (<span className="absolute bottom-0 right-0 bg-black/90 text-[10px] text-white px-1.5 font-mono font-bold border-tl border-slate-700 rounded-tl z-10">{item.quantity}</span>)}</>) : (ItemIcon && <ItemIcon size={20} className="text-amber-500 drop-shadow-md" />)) : null}
                                     </div>
                                 );
                             })}
@@ -680,7 +677,20 @@ const Dashboard = ({ user, onLogout, isShopOpen, onCloseShop, onUpdateUser }) =>
             {pendingPurchase && (<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in"><div className="bg-slate-900 border-2 border-amber-600 rounded-lg p-6 max-w-sm w-full shadow-[0_0_50px_rgba(245,158,11,0.2)] transform scale-100 flex flex-col items-center"><AlertTriangle className="text-amber-500 mb-4 h-10 w-10" /><h3 className="text-xl font-serif font-bold text-amber-500 mb-2 text-center uppercase tracking-widest">Confirmar Compra</h3><p className="text-slate-300 text-center text-sm mb-6 leading-relaxed">¿Deseas confirmar la transacción por <br /><span className="font-bold text-purple-400 text-lg">{pendingPurchase.price} Ónix</span>?<br /><span className="text-xs text-slate-500 mt-2 block">{pendingPurchase.name}</span></p><div className="flex justify-center gap-4 w-full"><button onClick={() => setPendingPurchase(null)} className="flex-1 py-2 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors text-sm font-bold uppercase">Cancelar</button><button onClick={executePurchase} className="flex-1 py-2 rounded bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white shadow-lg transition-all text-sm font-bold uppercase">Confirmar</button></div></div></div>)}
             {errorMsg && (<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in"><div className="bg-slate-900 border-2 border-red-600 rounded-lg p-6 max-w-sm w-full shadow-[0_0_50px_rgba(220,38,38,0.3)] flex flex-col items-center"><Ban className="text-red-500 mb-4 h-10 w-10" /><h3 className="text-xl font-serif font-bold text-red-500 mb-2 text-center uppercase tracking-widest">Acción Inválida</h3><p className="text-slate-300 text-center text-sm mb-6 leading-relaxed">{errorMsg}</p><button onClick={() => setErrorMsg(null)} className="w-full py-2 rounded bg-red-700 hover:bg-red-600 text-white shadow-lg transition-all text-sm font-bold uppercase">Entendido</button></div></div>)}
             
-            {showEvolutionModal && (<EvolutionModal user={user} onClose={() => setShowEvolutionModal(false)} onEvolveSuccess={(updatedUser) => { onUpdateUser(updatedUser); setShowEvolutionModal(false); }} />)}
+            {showEvolutionModal && (
+                <EvolutionModal 
+                    user={user} 
+                    status={evolutionStatus}           
+                    activeQuestData={evolutionQuestData}
+                    onClose={() => setShowEvolutionModal(false)} 
+                    onEvolveSuccess={(updatedUser) => { 
+                        onUpdateUser(updatedUser); 
+                        setShowEvolutionModal(false); 
+                        setEvolutionStatus('completed'); 
+                    }} 
+                />
+            )}
+            
             {showPetModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowPetModal(false)}><div className="relative w-full max-w-4xl h-[70vh] bg-slate-950 border-2 border-amber-600 rounded-xl flex overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]" onClick={e => e.stopPropagation()}><div className="w-1/3 border-r border-slate-800 bg-black/40 flex flex-col"><h3 className="p-4 text-amber-500 font-serif font-bold uppercase tracking-widest border-b border-slate-800 flex items-center gap-2"><PawPrint size={18} /> Establo</h3><div className="flex-1 overflow-y-auto p-2 space-y-2">{myPets.length === 0 ? (<div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aún.</div>) : (myPets.map(pet => (<div key={pet.player_pet_id} onClick={() => setActivePet(pet)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}><img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" /><div><div className="text-sm text-slate-200 font-bold">{pet.name}</div><div className="text-[10px] text-slate-500">Nivel {pet.tier}</div></div>{pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}</div>)))}</div></div><div className="w-2/3 relative flex flex-col bg-slate-950"><button onClick={() => setShowPetModal(false)} className="absolute top-4 right-4 text-white z-50 p-2 bg-black/50 rounded-full hover:bg-red-600"><X /></button>{activePet ? (<><div className="flex-1 relative w-full bg-black overflow-hidden flex items-center justify-center"><div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div><img src={activePet.image_url} className="h-full w-full object-contain p-0 animate-in zoom-in duration-500 z-10" /><div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 to-transparent z-20"></div><div className="absolute bottom-4 left-0 right-0 text-center z-30"><h2 className="text-4xl font-serif text-amber-400 drop-shadow-md mb-1">{activePet.name}</h2><p className="text-slate-300 text-sm max-w-lg mx-auto italic drop-shadow-md">"{activePet.description}"</p></div></div><div className="h-48 bg-slate-900 border-t-4 border-amber-900 p-4 flex gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-40"><div className="w-1/2 space-y-2"><h4 className="text-amber-500 text-xs uppercase tracking-widest font-bold border-b border-slate-700 pb-1 mb-2">Bonificaciones Activas</h4><div className="grid grid-cols-2 gap-2">{Object.entries(activePet.bonus_stats || {}).map(([key, val]) => (<div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between"><span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span></div>))}</div></div><div className="w-1/2 flex flex-col justify-between"><div><div className="flex justify-between text-xs text-slate-300 mb-1 font-bold"><span>Nivel de Saciedad</span><span className={activePet.current_hunger < 30 ? "text-red-500" : "text-green-500"}>{activePet.current_hunger}%</span></div><div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700"><div className={`h-full transition-all ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div></div></div><div className="flex gap-2 mt-2">{activePet.is_active ? (<div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div>) : (<button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>)}<button onClick={() => handleFeedPet(activePet.player_pet_id)} className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase rounded border border-slate-600 transition-colors flex flex-col items-center justify-center gap-1" title={getFeedCostText(activePet.tier)}><Heart size={14} className="text-red-500" /> Comer</button></div></div></div></>) : (<div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>)}</div></div></div>)}
         </div>
     );

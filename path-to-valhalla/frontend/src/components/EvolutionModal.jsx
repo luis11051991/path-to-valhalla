@@ -1,220 +1,241 @@
 import React, { useEffect, useState } from 'react';
-import { X, ChevronRight, Award, ShieldAlert, Sword, Shield, Zap, Heart, Crosshair } from 'lucide-react';
+import { X, ChevronRight, Award, Shield, Sword, Zap, CheckCircle, Scroll, Skull, AlertTriangle } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 
-const EvolutionModal = ({ user, onClose, onEvolveSuccess }) => {
+const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSuccess }) => {
+    // Si status es 'in_progress', empezamos directo en el paso de visualización
+    const [step, setStep] = useState(status === 'in_progress' ? 10 : 0); 
+    
     const [options, setOptions] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [selectedOption, setSelectedOption] = useState(null);
+    const [questPreview, setQuestPreview] = useState(null);
     const [error, setError] = useState(null);
+    const [customAlert, setCustomAlert] = useState(null); // Alerta bonita
 
+    // Cargar opciones SOLO si estamos en modo selección (CON FIX DE CACHÉ)
     useEffect(() => {
-        fetch(apiUrl('/api/evolution/options'), {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        })
+        if (status === 'available') {
+            fetch(apiUrl(`/api/evolution/options?t=${Date.now()}`), {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            })
             .then(res => res.json())
             .then(data => {
                 if (data.available) {
                     setOptions(data.options);
+                    setStep(1); // Intro Odín
                 } else {
                     setError(data.message);
                 }
-                setLoading(false);
             })
-            .catch(err => {
-                console.error(err);
-                setError("Error conectando con el destino.");
-                setLoading(false);
-            });
-    }, []);
+            .catch(() => setError("Los dioses guardan silencio."));
+        }
+    }, [status]);
 
-    const handleConfirm = async () => {
+    // Helper imagen
+    const getClassImage = (dbPath) => {
+        if (!dbPath) return "https://via.placeholder.com/400x600?text=Clase";
+        if (dbPath.includes('_male') || dbPath.includes('_female')) return dbPath;
+        const genderSuffix = user.gender === 'female' ? '_female' : '_male';
+        const lastDotIndex = dbPath.lastIndexOf('.');
+        if (lastDotIndex === -1) return dbPath + genderSuffix + ".png";
+        return `${dbPath.substring(0, lastDotIndex)}${genderSuffix}${dbPath.substring(lastDotIndex)}`;
+    };
+
+    // --- ACCIONES ---
+    const handleAcceptQuest = async () => {
         if (!selectedOption) return;
         try {
-            const res = await fetch(apiUrl('/api/evolution/confirm'), {
+            const res = await fetch(apiUrl('/api/evolution/start'), {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
                 body: JSON.stringify({ targetClassId: selectedOption.id })
             });
             const data = await res.json();
             if (data.success) {
-                onEvolveSuccess(data.user);
-                onClose();
+                // En lugar de cerrar, recargamos la página o cambiamos estado local para mostrar progreso
+                // Por simplicidad y seguridad, cerramos para que el dashboard actualice el botón
+                setCustomAlert({ type: 'success', msg: "Destino Aceptado. Revisa tu progreso aquí mismo." });
+                setTimeout(() => {
+                    window.location.reload(); // Forzar actualización completa del estado
+                }, 2000);
             } else {
-                setError(data.message);
+                setCustomAlert({ type: 'error', msg: data.message });
             }
-        } catch (err) {
-            setError("Error al realizar el ritual.");
-        }
+        } catch (err) { setCustomAlert({ type: 'error', msg: "Error de conexión." }); }
     };
 
-    const getClassImage = (dbPath) => {
-        if (!dbPath) return null;
-        const genderSuffix = user.gender === 'female' ? '_female' : '_male';
-        const lastDotIndex = dbPath.lastIndexOf('.');
-        if (lastDotIndex === -1) return dbPath + genderSuffix;
-        const path = dbPath.substring(0, lastDotIndex);
-        const ext = dbPath.substring(lastDotIndex);
-        return `${path}${genderSuffix}${ext}`;
+    const handleFinishEvolution = async () => {
+        if (!activeQuestData?.quest?.id) return;
+        try {
+            const res = await fetch(apiUrl('/api/quests/complete'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ playerQuestId: activeQuestData.quest.id })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCustomAlert({ type: 'success', msg: data.message });
+                // Actualizar usuario en App
+                fetch(apiUrl('/api/auth/profile'), { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+                    .then(r => r.json()).then(d => {
+                        onEvolveSuccess(d.user); 
+                    });
+            } else {
+                setCustomAlert({ type: 'error', msg: data.message });
+            }
+        } catch (e) { setCustomAlert({ type: 'error', msg: "Error al evolucionar." }); }
     };
 
-    // --- HELPER: ETIQUETAS DE ROL AUTOMÁTICAS ---
-    // Analiza los stats para decirte qué "Rol" cumple la clase
-    const getRoleBadge = (stats) => {
-        const s = stats || {};
-        if (s.constitution > 18) return { label: "TANQUE PURO", icon: Shield, color: "text-blue-400 border-blue-500/50" };
-        if (s.intelligence > 18) return { label: "DAÑO MÁGICO / AOE", icon: Zap, color: "text-purple-400 border-purple-500/50" };
-        if (s.strength > 18) return { label: "DAÑO FÍSICO", icon: Sword, color: "text-red-400 border-red-500/50" };
-        if (s.dexterity > 18) return { label: "DPS VELOZ / CRÍTICO", icon: Crosshair, color: "text-yellow-400 border-yellow-500/50" };
-        if (s.luck > 18) return { label: "LOOT / BLOQUEO", icon: Award, color: "text-green-400 border-green-500/50" };
-        return { label: "EQUILIBRADO", icon: Award, color: "text-slate-400 border-slate-500/50" };
-    };
+    // --- RENDERIZADO ---
 
-    if (!user) return null;
-
-    return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in duration-500">
-            {/* Contenedor Principal Más Alto */}
-            <div className="bg-slate-950 border border-amber-900/50 rounded-lg max-w-6xl w-full h-[90vh] flex flex-col shadow-[0_0_100px_rgba(245,158,11,0.1)] relative overflow-hidden">
-
-                {/* Background Decorativo */}
-                <div className="absolute inset-0 bg-[url('/bg-pattern.png')] opacity-5 pointer-events-none"></div>
-
-                {/* Header */}
-                <div className="p-6 border-b border-white/10 flex justify-between items-center z-10 bg-slate-900/80 backdrop-blur">
-                    <div>
-                        <h2 className="text-4xl font-serif text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-600 uppercase tracking-widest flex items-center gap-3 drop-shadow-sm">
-                            <Award size={36} className="text-amber-500" /> Ascensión de Héroe
-                        </h2>
-                        <p className="text-slate-400 text-sm mt-1 tracking-wide">Elige tu destino, guerrero. Esta decisión forjará tu leyenda.</p>
+    // 1. VISTA DE ODÍN (Selección) - Igual que antes
+    const renderOdinFlow = () => (
+        <div className="h-full flex flex-col relative z-10">
+            {step === 1 && (
+                <div className="flex flex-col items-center justify-center h-full animate-in fade-in zoom-in">
+                    <img src="/npcs/odin.png" className="w-48 h-48 rounded-full border-4 border-amber-500 shadow-[0_0_50px_rgba(245,158,11,0.5)] mb-6 bg-slate-900 object-cover" />
+                    <div className="bg-slate-900/90 border-2 border-amber-600 p-6 rounded-xl max-w-2xl text-center relative shadow-2xl">
+                        <p className="text-xl font-serif italic text-slate-200">"Oh mortal, tu persistencia te ha traído aquí. Elige tu destino."</p>
                     </div>
-                    <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"><X size={32} /></button>
+                    <button onClick={() => setStep(2)} className="mt-8 px-8 py-3 bg-amber-700 hover:bg-amber-600 text-white font-bold rounded uppercase tracking-widest shadow-lg flex items-center gap-2 animate-bounce">Siguiente <ChevronRight /></button>
                 </div>
+            )}
+            
+            {step === 2 && (
+                <div className="h-full flex flex-col">
+                    <h2 className="text-3xl text-center text-amber-500 font-serif mb-4 uppercase tracking-widest">Escoge tu Senda</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full pb-4 overflow-y-auto">
+                        {options.map((opt) => (
+                            <div key={opt.id} onClick={() => { setSelectedOption(opt); setStep(3); }} className="relative group cursor-pointer rounded-xl border-2 border-slate-700 hover:border-amber-500 bg-slate-900 overflow-hidden flex flex-col transition-all hover:scale-[1.02]">
+                                <img src={getClassImage(opt.image_url)} className="h-64 w-full object-cover object-top opacity-80 group-hover:opacity-100 transition-opacity" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
+                                <div className="p-4 relative z-10 mt-auto">
+                                    <h3 className="text-2xl font-black text-white uppercase italic">{opt.name}</h3>
+                                    <p className="text-slate-300 text-xs italic font-serif mt-2">"{opt.description}"</p>
+                                    <div className="w-full py-2 bg-amber-900/20 border border-amber-900/50 rounded text-center text-amber-500 font-bold uppercase text-xs mt-4 group-hover:bg-amber-600 group-hover:text-white transition-colors">Seleccionar Senda</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
-                {/* Contenido Central */}
-                <div className="flex-1 overflow-y-auto p-4 lg:p-8 relative z-10">
-                    {loading ? (
-                        <div className="flex h-full items-center justify-center text-amber-500 animate-pulse text-xl font-serif">Consultando a los oráculos...</div>
-                    ) : error ? (
-                        <div className="flex flex-col h-full items-center justify-center text-red-400 gap-4">
-                            <ShieldAlert size={64} />
-                            <p className="text-2xl font-serif">{error}</p>
-                            <button onClick={onClose} className="px-8 py-3 bg-slate-800 rounded border border-slate-700 hover:bg-slate-700 text-white uppercase tracking-widest">Regresar</button>
+            {step === 3 && selectedOption && (
+                <div className="h-full flex items-center justify-center animate-in slide-in-from-right">
+                    <div className="max-w-4xl w-full bg-slate-900 border-2 border-amber-600 rounded-xl overflow-hidden shadow-2xl flex flex-col md:flex-row">
+                        <div className="w-full md:w-1/2 relative h-64 md:h-auto">
+                            <img src={getClassImage(selectedOption.image_url)} className="w-full h-full object-cover object-top" />
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><h3 className="text-3xl font-black text-white uppercase tracking-widest drop-shadow-lg px-4 text-center">{selectedOption.name}</h3></div>
                         </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-                            {options.map((opt) => {
-                                const isSelected = selectedOption?.id === opt.id;
-                                const stats = opt.base_stats || {};
-                                const role = getRoleBadge(stats);
-                                const RoleIcon = role.icon;
+                        <div className="p-8 w-full md:w-1/2 bg-black/60 flex flex-col justify-between">
+                            <div>
+                                <h4 className="text-amber-500 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Scroll size={20} /> Desafío Divino</h4>
+                                <p className="text-slate-300 italic mb-4 text-sm">"Para obtener este poder, tráeme las cabezas de mis enemigos."</p>
+                                <div className="bg-slate-800/50 p-4 rounded-lg border-l-4 border-red-500 mb-6 space-y-2">
+                                    <div className="flex justify-between text-sm text-red-300 font-mono border-b border-white/5 pb-1"><span>• Lobo de Tundra</span><span className="font-bold">x10</span></div>
+                                    <div className="flex justify-between text-sm text-red-300 font-mono border-b border-white/5 pb-1"><span>• Rata Escarcha</span><span className="font-bold">x10</span></div>
+                                    <div className="flex justify-between text-sm text-red-300 font-mono border-b border-white/5 pb-1"><span>• Esqueleto Vikingo</span><span className="font-bold">x1</span></div>
+                                </div>
+                            </div>
+                            <div className="flex gap-4">
+                                <button onClick={() => setStep(2)} className="flex-1 py-3 border border-slate-600 text-slate-400 font-bold uppercase hover:bg-slate-800 rounded">Volver</button>
+                                <button onClick={handleAcceptQuest} className="flex-1 py-3 bg-gradient-to-r from-red-700 to-orange-700 text-white font-bold uppercase shadow-lg hover:scale-105 transition-transform rounded border border-orange-500">Aceptar Desafío</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    // 2. VISTA DE PROGRESO (Cuando ya tienes la misión)
+    const renderProgressFlow = () => {
+        if (!activeQuestData) return <div>Cargando destino...</div>;
+        const { quest, targetClass } = activeQuestData;
+        
+        // Calcular si está completo
+        let isComplete = true;
+        quest.requirements.forEach(req => {
+            const current = quest.progress?.[req.target_id] || 0;
+            if (current < req.count) isComplete = false;
+        });
+
+        return (
+            <div className="h-full flex items-center justify-center animate-in zoom-in">
+                <div className="max-w-5xl w-full bg-slate-900 border-2 border-amber-600 rounded-xl overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)] flex flex-col md:flex-row h-[500px]">
+                    
+                    {/* Panel Izquierdo: Tu Futuro */}
+                    <div className="w-full md:w-5/12 relative bg-black">
+                        <img src={getClassImage(targetClass?.image_url)} className="w-full h-full object-cover object-top opacity-70" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+                        <div className="absolute bottom-8 left-0 right-0 text-center">
+                            <p className="text-amber-500 text-xs font-bold uppercase tracking-widest mb-1">Destino Elegido</p>
+                            <h3 className="text-3xl font-black text-white uppercase tracking-wider">{targetClass?.name || "Guerrero"}</h3>
+                        </div>
+                    </div>
+
+                    {/* Panel Derecho: Progreso */}
+                    <div className="w-full md:w-7/12 p-8 bg-slate-950 flex flex-col relative">
+                        <h3 className="text-2xl font-serif text-amber-500 mb-2">Prueba de Valor</h3>
+                        <p className="text-slate-400 text-sm italic mb-6">"Demuestra tu fuerza eliminando a las bestias que amenazan nuestras tierras."</p>
+
+                        <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                            {quest.requirements.map((req, idx) => {
+                                const current = quest.progress?.[req.target_id] || 0;
+                                const reqComplete = current >= req.count;
+                                const pct = Math.min((current / req.count) * 100, 100);
 
                                 return (
-                                    <div
-                                        key={opt.id}
-                                        onClick={() => setSelectedOption(opt)}
-                                        className={`relative group cursor-pointer rounded-xl border-2 transition-all duration-500 h-full flex flex-col overflow-hidden bg-slate-900
-                                        ${isSelected
-                                                ? 'border-amber-500 shadow-[0_0_40px_rgba(245,158,11,0.2)] scale-[1.01]'
-                                                : 'border-slate-800 hover:border-slate-600 hover:shadow-xl'}`}
-                                    >
-                                        {/* --- IMAGEN EXPANDIDA (Corrección del problema de recorte) --- */}
-                                        <div className="h-[50%] lg:h-[60%] overflow-hidden relative">
-                                            {/* Gradiente inferior para mezclar imagen con texto */}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/20 to-transparent z-10" />
-
-                                            {/* Badge de Rol Flotante */}
-                                            <div className={`absolute top-4 left-4 z-20 px-3 py-1 bg-black/80 backdrop-blur rounded border ${role.color} flex items-center gap-2 text-xs font-bold uppercase tracking-widest shadow-lg`}>
-                                                <RoleIcon size={14} /> {role.label}
-                                            </div>
-
-                                            <img
-                                                src={getClassImage(opt.image_url)}
-                                                alt={opt.name}
-                                                // KEY FIX: object-top asegura que se vea la cabeza, h-full llena el espacio
-                                                className="w-full h-full object-cover object-top transition-transform duration-1000 group-hover:scale-105"
-                                                onError={(e) => { e.target.src = "https://via.placeholder.com/400x600?text=Arte+Pendiente"; }}
-                                            />
-
-                                            {/* Nombre sobre la imagen */}
-                                            <div className="absolute bottom-0 left-0 right-0 p-6 z-20">
-                                                <h3 className={`text-3xl font-black uppercase font-serif tracking-tight drop-shadow-lg ${isSelected ? 'text-amber-400' : 'text-white'}`}>
-                                                    {opt.name}
-                                                </h3>
-                                            </div>
+                                    <div key={idx} className="bg-slate-900 p-3 rounded border border-slate-800">
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className={`font-bold flex items-center gap-2 ${reqComplete ? 'text-green-400' : 'text-slate-300'}`}>
+                                                {reqComplete ? <CheckCircle size={14}/> : <Skull size={14}/>} {req.name}
+                                            </span>
+                                            <span className="font-mono text-slate-400">{current} / {req.count}</span>
                                         </div>
-
-                                        {/* --- DESCRIPCIÓN Y LORE (Más espacio) --- */}
-                                        <div className="p-6 flex-1 flex flex-col gap-4 bg-slate-950">
-                                            {/* Lore Text */}
-                                            <div className="relative pl-4 border-l-2 border-amber-600/50">
-                                                <p className="text-slate-300 text-sm leading-relaxed italic font-serif opacity-90">
-                                                    "{opt.description}"
-                                                </p>
-                                            </div>
-
-                                            {/* Stats Grid */}
-                                            <div className="mt-auto">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <div className="h-[1px] flex-1 bg-slate-800"></div>
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Bonificaciones de Ascensión</span>
-                                                    <div className="h-[1px] flex-1 bg-slate-800"></div>
-                                                </div>
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {Object.entries(stats).map(([key, val]) => {
-                                                        // Solo mostramos stats relevantes (>5) para no saturar
-                                                        if (val < 5) return null;
-                                                        return (
-                                                            <div key={key} className="bg-slate-900 px-3 py-2 rounded border border-slate-800 flex flex-col items-center justify-center">
-                                                                <span className="text-[10px] text-slate-500 uppercase tracking-wider">{key.substring(0, 3)}</span>
-                                                                <span className={`text-sm font-bold font-mono ${isSelected ? 'text-green-400' : 'text-slate-300'}`}>+{val}</span>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
+                                        <div className="h-2 bg-black rounded-full overflow-hidden border border-slate-700">
+                                            <div className={`h-full transition-all duration-700 ${reqComplete ? 'bg-green-500' : 'bg-amber-600'}`} style={{ width: `${pct}%` }}></div>
                                         </div>
-
-                                        {/* Indicador de Selección */}
-                                        {isSelected && (
-                                            <div className="absolute top-4 right-4 bg-amber-500 text-black p-3 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.6)] animate-in zoom-in spin-in-12">
-                                                <Award size={28} />
-                                            </div>
-                                        )}
                                     </div>
                                 );
                             })}
                         </div>
-                    )}
-                </div>
 
-                {/* Footer */}
-                {!loading && !error && (
-                    <div className="p-6 border-t border-white/10 bg-slate-900 flex justify-between items-center z-20">
-                        <div className="text-xs text-slate-500 hidden md:block">
-                            * Al evolucionar, tus puntos de atributo serán reseteados y devueltos.
-                        </div>
-                        <div className="flex gap-4 w-full md:w-auto">
-                            <button onClick={onClose} className="flex-1 md:flex-none px-6 py-3 rounded border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 font-bold uppercase text-xs tracking-widest transition-colors">
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleConfirm}
-                                disabled={!selectedOption}
-                                className={`flex-1 md:flex-none px-10 py-3 rounded font-bold uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all
-                                ${selectedOption
-                                        ? 'bg-gradient-to-r from-amber-600 to-orange-700 text-white shadow-[0_0_30px_rgba(245,158,11,0.3)] hover:shadow-[0_0_50px_rgba(245,158,11,0.5)] hover:scale-105'
-                                        : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
-                            >
-                                Confirmar Linaje <ChevronRight size={16} />
+                        {/* Botón Final */}
+                        <div className="mt-6 pt-6 border-t border-slate-800">
+                            {/* BOTÓN DESACTIVADO SI NO ESTÁ COMPLETO */}
+                            <button onClick={handleFinishEvolution} disabled={!isComplete} className={`w-full py-4 font-black uppercase tracking-widest rounded shadow-lg transition-all ${isComplete ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black animate-pulse hover:scale-[1.02] cursor-pointer' : 'bg-slate-800 text-slate-600 border border-slate-700 cursor-not-allowed'}`}>
+                                {isComplete ? '¡Reclamar Evolución!' : 'Objetivos Incompletos'}
                             </button>
                         </div>
                     </div>
-                )}
+                </div>
             </div>
+        );
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4">
+            <div className="absolute inset-0 bg-[url('/backgrounds/valhalla_stars.png')] opacity-20 pointer-events-none"></div>
+            
+            <div className="bg-slate-950 border border-amber-900/50 rounded-lg max-w-6xl w-full h-[90vh] flex flex-col shadow-[0_0_100px_rgba(245,158,11,0.1)] relative overflow-hidden">
+                <button onClick={onClose} className="absolute top-4 right-4 z-50 text-slate-500 hover:text-white p-2 bg-black/50 rounded-full"><X size={24} /></button>
+                
+                <div className="flex-1 p-6 relative z-10">
+                    {step === 10 ? renderProgressFlow() : renderOdinFlow()}
+                </div>
+            </div>
+
+            {/* Custom Alert Overlay */}
+            {customAlert && (
+                <div className="absolute inset-0 z-[300] flex items-center justify-center bg-black/80">
+                    <div className={`p-8 rounded-xl border-2 text-center max-w-md bg-slate-900 shadow-2xl animate-in zoom-in ${customAlert.type === 'success' ? 'border-green-500' : 'border-red-500'}`}>
+                        <h3 className={`text-2xl font-bold mb-2 ${customAlert.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{customAlert.type === 'success' ? '¡Éxito!' : 'Error'}</h3>
+                        <p className="text-white mb-6">{customAlert.msg}</p>
+                        <button onClick={() => setCustomAlert(null)} className="px-6 py-2 bg-slate-800 rounded border border-slate-700 text-white font-bold uppercase">Entendido</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

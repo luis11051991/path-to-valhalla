@@ -89,13 +89,19 @@ const Sidebar = ({ user, onNavigate, currentView, isOpen, isCompact, isMobile, o
                     <MenuLink icon={Map} label="Expediciones" active={currentView === 'expeditions'} onClick={() => handleNavigate('expeditions')} />
                     <MenuLink icon={Skull} label="Mazmorras" />
                     <MenuLink icon={ArrowUpCircle} label="Torre Infinita" disabled />
-                    <MenuLink icon={Scroll} label="Salón de Valhallus" />
+                    
+                    {/* --- NUEVO: SALÓN DE VALHALLUS --- */}
+                    <MenuLink 
+                        icon={Scroll} 
+                        label="Salón de Valhallus" 
+                        active={currentView === 'valhalla_hall'}
+                        onClick={() => handleNavigate('valhalla_hall')}
+                    />
 
                     <SectionHeader title="Combate" />
                     <MenuLink icon={Swords} label="Coliseo" />
 
                     <SectionHeader title="Ciudad" />
-                    {/* --- TALLER CON LÓGICA DE NIVEL --- */}
                     <MenuLink 
                         icon={Hammer} 
                         label="Taller" 

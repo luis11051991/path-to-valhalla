@@ -3,8 +3,7 @@ const router = express.Router();
 const evolutionController = require('../controllers/evolutionController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-// Rutas protegidas (necesitan Token)
 router.get('/options', authMiddleware, evolutionController.getEvolutionOptions);
-router.post('/confirm', authMiddleware, evolutionController.evolvePlayer);
+router.post('/start', authMiddleware, evolutionController.startEvolutionPath); // Usamos 'start' en lugar de 'confirm'
 
 module.exports = router;

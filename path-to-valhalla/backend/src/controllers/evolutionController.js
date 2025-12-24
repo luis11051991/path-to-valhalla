@@ -5,7 +5,6 @@ exports.getEvolutionOptions = async (req, res) => {
     const userId = req.user.id; 
 
     try {
-        // A. Obtener datos actuales del jugador
         const playerQuery = `
             SELECT p.id, p.level, p.race, p.class_id, c.tier, c.name as class_name
             FROM players p
@@ -16,60 +15,21 @@ exports.getEvolutionOptions = async (req, res) => {
         if (playerRes.rows.length === 0) return res.status(404).json({ message: 'Jugador no encontrado' });
         
         const player = playerRes.rows[0];
-
-        // --- CORRECCIÓN DE SEGURIDAD ---
-        // Si el jugador no tiene clase (class_id es null), asumimos que es Tier 0 (Novato)
-        // y buscamos su clase base según su raza para corregirlo al vuelo.
-        let currentTier = player.tier;
+        let currentTier = player.tier !== null ? player.tier : 0;
         let currentClassId = player.class_id;
 
-        if (currentTier === null || currentTier === undefined) {
-            // Es un personaje nuevo sin clase asignada. Lo tratamos como Tier 0.
-            currentTier = 0;
-            
-            // Intentamos encontrar su clase base para mostrar las opciones correctas
-            // (Esto es un "parche" visual, lo ideal es el SQL que te pasé)
-            const baseClassRes = await pool.query("SELECT id FROM classes WHERE name ILIKE $1", [player.race]); // Buscamos por nombre de raza aprox
-            if (baseClassRes.rows.length > 0) {
-                currentClassId = baseClassRes.rows[0].id;
-            }
+        if (!currentClassId) {
+            const baseClassRes = await pool.query("SELECT id FROM classes WHERE name ILIKE $1", [player.race]);
+            if (baseClassRes.rows.length > 0) currentClassId = baseClassRes.rows[0].id;
         }
 
-        // B. Validar requisitos (Ahora currentTier 0 pide nivel 10)
-        let requiredLevel = 999;
-        if (currentTier === 0) requiredLevel = 10;
-        else if (currentTier === 1) requiredLevel = 50;
-        else if (currentTier === 2) requiredLevel = 100;
-
-        if (player.level < requiredLevel) {
-            return res.json({ 
-                available: false, 
-                message: `Necesitas ser nivel ${requiredLevel} para evolucionar.` 
-            });
-        }
-
-        // C. Buscar evoluciones
-        const optionsQuery = `
-            SELECT id, name, description, image_url, base_stats 
-            FROM classes 
-            WHERE parent_id = $1
-        `;
-        
-        // Si no tenía class_id, esto podría fallar, por eso es vital el SQL anterior.
-        // Pero si hicimos el parche arriba, intentará buscar hijos de la clase base.
-        const parentToSearch = currentClassId || 99999; 
-        
+        const optionsQuery = `SELECT * FROM classes WHERE parent_id = $1`;
+        const parentToSearch = currentClassId || 99999;
         const optionsRes = await pool.query(optionsQuery, [parentToSearch]);
-
-        if (optionsRes.rows.length === 0) {
-            // Fallback: Si no encontramos opciones, sugerimos al usuario contactar soporte o revisar datos
-            return res.json({ available: false, message: 'No se encontraron caminos para tu clase actual.' });
-        }
 
         res.json({
             available: true,
             currentTier: currentTier,
-            nextTier: currentTier + 1,
             options: optionsRes.rows
         });
 
@@ -79,65 +39,52 @@ exports.getEvolutionOptions = async (req, res) => {
     }
 };
 
-// --- 2. EJECUTAR EVOLUCIÓN (CONFIRMAR) ---
-exports.evolvePlayer = async (req, res) => {
+// --- 2. INICIAR EL CAMINO (Con protección anti-duplicados) ---
+exports.startEvolutionPath = async (req, res) => {
     const userId = req.user.id;
-    const { targetClassId } = req.body; 
+    const { targetClassId } = req.body;
 
+    const client = await pool.connect();
     try {
-        await pool.query('BEGIN');
+        await client.query('BEGIN');
 
-        const playerRes = await pool.query('SELECT level, class_id FROM players WHERE id = $1', [userId]);
-        const player = playerRes.rows[0];
-
-        // Verificar validez (Si no tiene clase, esto fallará, el usuario DEBE tener clase base)
-        const classCheckRes = await pool.query('SELECT * FROM classes WHERE id = $1', [targetClassId]);
+        // Buscar quest adecuada
+        const questRes = await client.query("SELECT * FROM quests WHERE type = 'evolution' AND min_level <= (SELECT level FROM players WHERE id = $1) ORDER BY min_level DESC LIMIT 1", [userId]);
         
-        if (classCheckRes.rows.length === 0) {
-            await pool.query('ROLLBACK');
-            return res.status(400).json({ message: 'Clase destino no válida.' });
+        if (questRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "No hay pruebas divinas disponibles." });
         }
+        const quest = questRes.rows[0];
+
+        // --- VALIDACIÓN DOBLE: Por Quest ID Específico O por Tipo 'evolution' ---
+        const check = await client.query(`
+            SELECT pq.id FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.player_id = $1 AND pq.status = 'active' AND (pq.quest_id = $2 OR q.type = 'evolution')
+        `, [userId, quest.id]);
+
+        if (check.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Ya has aceptado el desafío de los dioses." });
+        }
+
+        // Guardar elección
+        await client.query("UPDATE players SET pending_class_id = $1, evolution_quest_status = 'in_progress' WHERE id = $2", [targetClassId, userId]);
         
-        const newClass = classCheckRes.rows[0];
-
-        if (player.level < newClass.min_level) {
-            await pool.query('ROLLBACK');
-            return res.status(400).json({ message: `Nivel insuficiente. Requiere ${newClass.min_level}.` });
-        }
-
-        const pointsRefund = (player.level - 1) * 5;
-        const newStats = newClass.base_stats; 
-
-        await pool.query(
-            `UPDATE players 
-            SET class_id = $1, 
-                stats = $2, 
-                stat_points = $3,
-                evolution_quest_status = 'completed'
-            WHERE id = $4`,
-            [targetClassId, newStats, pointsRefund, userId]
+        await client.query(
+            "INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')",
+            [userId, quest.id]
         );
-        
-        const finalUserRes = await pool.query(`
-            SELECT p.*, c.image_url as class_image, c.name as class_name
-            FROM players p
-            LEFT JOIN classes c ON p.class_id = c.id
-            WHERE p.id = $1
-        `, [userId]);
 
-        const updatedUser = finalUserRes.rows[0];
-
-        await pool.query('COMMIT');
-
-        res.json({
-            success: true,
-            message: `¡Has evolucionado a ${newClass.name}! Tus puntos han sido reseteados.`,
-            user: updatedUser
-        });
+        await client.query('COMMIT');
+        res.json({ success: true, message: "Los dioses han hablado. Ve al Salón de Valhallus.", quest });
 
     } catch (err) {
-        await pool.query('ROLLBACK');
+        await client.query('ROLLBACK');
         console.error(err);
-        res.status(500).json({ message: 'Error en la evolución.' });
+        res.status(500).json({ message: err.message });
+    } finally {
+        client.release();
     }
 };
