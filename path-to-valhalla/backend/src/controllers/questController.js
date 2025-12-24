@@ -1,6 +1,15 @@
 const pool = require('../config/db');
+const { normalizeCurrency } = require('../utils/currencyUtils'); // IMPORTANTE: Asegúrate de tener esto
 
-// Helper: Calcular Cooldown en Segundos según Nivel
+// Configuración: Slots por Nivel
+const getMaxQuestSlots = (level) => {
+    if (level >= 40) return 5;
+    if (level >= 21) return 4;
+    if (level >= 11) return 3;
+    return 2; 
+};
+
+// Helper: Calcular Cooldown
 const getCooldownSeconds = (level) => {
     if (level <= 5) return 30;
     if (level <= 10) return 60;
@@ -9,18 +18,18 @@ const getCooldownSeconds = (level) => {
     return 180;
 };
 
-// 1. OBTENER ESTADO COMPLETO (Salón y Dashboard)
+// 1. OBTENER ESTADO
 exports.getQuestStatus = async (req, res) => {
     const userId = req.user.id;
     const { context } = req.query; 
 
     try {
         const playerRes = await pool.query('SELECT level, last_quest_accepted_at, evolution_quest_status FROM players WHERE id = $1', [userId]);
+        if (playerRes.rows.length === 0) return res.status(404).json({ message: "Jugador no encontrado" });
         const player = playerRes.rows[0];
 
-        // --- CONTEXTO: EVOLUCIÓN (Botón Dashboard) ---
+        // --- CONTEXTO: EVOLUCIÓN ---
         if (context === 'evolution') {
-            // 1. Buscamos si tiene la misión de evolución ACTIVA en la tabla de misiones
             const evoQuestRes = await pool.query(`
                 SELECT pq.*, q.title, q.description, q.requirements, p.pending_class_id
                 FROM player_quests pq
@@ -29,7 +38,6 @@ exports.getQuestStatus = async (req, res) => {
                 WHERE pq.player_id = $1 AND q.type = 'evolution' AND pq.status = 'active'
             `, [userId]);
 
-            // Si tiene misión activa, devolvemos estado 'in_progress'
             if (evoQuestRes.rows.length > 0) {
                 const pendingClassId = evoQuestRes.rows[0].pending_class_id;
                 let classInfo = null;
@@ -37,31 +45,22 @@ exports.getQuestStatus = async (req, res) => {
                     const cRes = await pool.query("SELECT name, image_url FROM classes WHERE id = $1", [pendingClassId]);
                     if (cRes.rows.length > 0) classInfo = cRes.rows[0];
                 }
-                return res.json({ 
-                    status: 'in_progress', 
-                    quest: evoQuestRes.rows[0], 
-                    targetClass: classInfo 
-                });
+                return res.json({ status: 'in_progress', quest: evoQuestRes.rows[0], targetClass: classInfo });
             }
 
-            // --- CORRECCIÓN CRÍTICA AQUÍ ---
-            // Si NO tiene misión activa (pasó el if de arriba), verificamos si puede empezar.
-            // Antes bloqueábamos si el estado era 'in_progress'. Ahora solo bloqueamos si es 'completed'.
-            // Esto arregla el "estado zombie".
             if (player.level >= 10 && player.evolution_quest_status !== 'completed') {
                 return res.json({ status: 'available' });
             }
             
-            // Si ya completó o es nivel bajo, devolvemos el estado real
             const finalStatus = player.evolution_quest_status === 'completed' ? 'completed' : 'locked';
             return res.json({ status: finalStatus });
         }
 
-        // --- CONTEXTO: VALHALLA HALL (Diarias) ---
+        // --- CONTEXTO: SALÓN DE VALHALLUS ---
         if (context === 'hall') {
-            // A. Misiones Activas
+            // A. Misiones Activas (Ahora traemos reward_copper y silver también)
             const activeQuestsRes = await pool.query(`
-                SELECT pq.*, q.title, q.description, q.requirements, q.type, q.reward_xp, q.reward_gold
+                SELECT pq.*, q.title, q.description, q.requirements, q.type, q.reward_xp, q.reward_gold, q.reward_silver, q.reward_copper
                 FROM player_quests pq
                 JOIN quests q ON pq.quest_id = q.id
                 WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type != 'evolution'
@@ -72,9 +71,7 @@ exports.getQuestStatus = async (req, res) => {
                 SELECT * FROM quests 
                 WHERE type IN ('daily', 'weekly') 
                 AND min_level <= $1
-                AND id NOT IN (
-                    SELECT quest_id FROM player_quests WHERE player_id = $2 AND status = 'active'
-                )
+                AND id NOT IN (SELECT quest_id FROM player_quests WHERE player_id = $2 AND status = 'active')
                 ORDER BY RANDOM() LIMIT 6
             `, [player.level, userId]);
 
@@ -95,7 +92,7 @@ exports.getQuestStatus = async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ message: "Error en misiones." });
+        res.status(500).json({ message: "Error interno." });
     }
 };
 
@@ -148,7 +145,7 @@ exports.refreshBoard = async (req, res) => {
     res.json({ success: true, message: "Tablón actualizado." });
 };
 
-// 4. COMPLETAR
+// 4. COMPLETAR (CON CORRECCIÓN ECONÓMICA)
 exports.completeQuest = async (req, res) => {
     const userId = req.user.id;
     const { playerQuestId } = req.body;
@@ -157,8 +154,10 @@ exports.completeQuest = async (req, res) => {
     try {
         await client.query('BEGIN');
 
+        // 1. Obtener datos de la Quest y del Jugador (para la economía)
+        // Agregamos reward_silver y reward_copper al SELECT
         const pqRes = await client.query(`
-            SELECT pq.*, q.requirements, q.reward_xp, q.reward_gold, q.reward_items, q.type
+            SELECT pq.*, q.requirements, q.reward_xp, q.reward_gold, q.reward_silver, q.reward_copper, q.reward_items, q.type
             FROM player_quests pq
             JOIN quests q ON pq.quest_id = q.id
             WHERE pq.id = $1 AND pq.player_id = $2 AND pq.status = 'active'
@@ -168,6 +167,7 @@ exports.completeQuest = async (req, res) => {
         const userQuest = pqRes.rows[0];
         const progress = userQuest.progress || {};
         
+        // 2. Validar objetivos
         let isComplete = true;
         (userQuest.requirements || []).forEach(req => {
             const current = progress[req.target_id || req.type] || 0;
@@ -176,16 +176,55 @@ exports.completeQuest = async (req, res) => {
 
         if (!isComplete) throw new Error("Objetivos incompletos.");
 
-        await client.query(`UPDATE players SET experience = experience + $1, gold = gold + $2 WHERE id = $3`, [userQuest.reward_xp || 0, userQuest.reward_gold || 0, userId]);
+        // 3. CALCULAR ECONOMÍA REAL
+        // Convertimos todo el premio de la quest a valor base en cobre para sumarlo
+        // Premio total en Cobre = (Oro*10000) + (Plata*100) + Cobre
+        const rewardCopperTotal = 
+            ((userQuest.reward_gold || 0) * 10000) + 
+            ((userQuest.reward_silver || 0) * 100) + 
+            (userQuest.reward_copper || 0);
+
+        // Obtenemos dinero actual del jugador
+        const playerMoneyRes = await client.query("SELECT gold, silver, copper FROM players WHERE id = $1", [userId]);
+        const pMoney = playerMoneyRes.rows[0];
+
+        // Usamos la utilidad para sumar y normalizar (evitar que tengas 150 de cobre, lo convierte a 1 plata 50 cobre)
+        // normalizeCurrency(currentGold, currentSilver, currentCopper, addedCopper)
+        const normalizedMoney = normalizeCurrency(
+            pMoney.gold || 0, 
+            pMoney.silver || 0, 
+            pMoney.copper || 0, 
+            rewardCopperTotal
+        );
+
+        // 4. ACTUALIZAR JUGADOR (XP + Dinero Normalizado)
+        await client.query(`
+            UPDATE players 
+            SET experience = experience + $1, 
+                gold = $2, 
+                silver = $3, 
+                copper = $4,
+                last_quest_completed_at = NOW()
+            WHERE id = $5
+        `, [
+            userQuest.reward_xp || 0, 
+            normalizedMoney.newGold, 
+            normalizedMoney.newSilver, 
+            normalizedMoney.newCopper, 
+            userId
+        ]);
         
+        // 5. Dar Items
         if (userQuest.reward_items && Array.isArray(userQuest.reward_items)) {
             for (const item of userQuest.reward_items) {
                 await client.query(`INSERT INTO player_packages (player_id, item_template_id, quantity) VALUES ($1, $2, $3)`, [userId, item.template_id, item.qty]);
             }
         }
 
+        // 6. Cerrar Misión
         await client.query("UPDATE player_quests SET status = 'completed', completed_at = NOW() WHERE id = $1", [playerQuestId]);
 
+        // 7. Evolución (Si aplica)
         let extraMsg = "";
         if (userQuest.type === 'evolution') {
              const pData = await client.query("SELECT pending_class_id, level FROM players WHERE id = $1", [userId]);
@@ -193,15 +232,25 @@ exports.completeQuest = async (req, res) => {
                  const cls = (await client.query("SELECT base_stats, name FROM classes WHERE id = $1", [pData.rows[0].pending_class_id])).rows[0];
                  const refund = (pData.rows[0].level - 1) * 5;
                  await client.query("UPDATE players SET class_id = $1, pending_class_id = NULL, stats = $2, stat_points = $3, evolution_quest_status = 'completed' WHERE id = $4", [pData.rows[0].pending_class_id, cls.base_stats, refund, userId]);
-                 extraMsg = ` ¡Has evolucionado a ${cls.name}!`;
+                 extraMsg = ` ¡Has ascendido a ${cls.name}!`;
              }
         }
 
         await client.query('COMMIT');
-        res.json({ success: true, message: `Misión Completada.${extraMsg}` });
-    } catch(e) {
+        
+        // Mensaje de recompensa formateado para el usuario
+        const moneyMsg = [];
+        if (userQuest.reward_gold > 0) moneyMsg.push(`${userQuest.reward_gold} Oro`);
+        if (userQuest.reward_silver > 0) moneyMsg.push(`${userQuest.reward_silver} Plata`);
+        if (userQuest.reward_copper > 0) moneyMsg.push(`${userQuest.reward_copper} Cobre`);
+        
+        const moneyString = moneyMsg.length > 0 ? `, +${moneyMsg.join(', ')}` : "";
+
+        res.json({ success: true, message: `¡Misión Completada! +${userQuest.reward_xp} XP${moneyString}.${extraMsg}` });
+
+    } catch (err) {
         await client.query('ROLLBACK');
-        res.status(400).json({ message: e.message });
+        res.status(400).json({ message: err.message });
     } finally {
         client.release();
     }
