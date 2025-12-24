@@ -132,10 +132,11 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                 </div>
             )}
 
-            {/* STEP 3: SELECCIÓN DE SENDA (Mejorada visualmente) */}
+            {/* STEP 3: SELECCIÓN DE SENDA (Ajustado Título e Imágenes) */}
             {step === 3 && (
-                <div className="h-full flex flex-col p-4">
-                    <h2 className="text-4xl text-center text-amber-500 font-serif mb-8 mt-4 uppercase tracking-[0.2em] drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
+                <div className="h-full flex flex-col p-4 pt-8"> {/* Agregado pt-8 al contenedor */}
+                    {/* AJUSTE TÍTULO: Más margen superior (mt-12) */}
+                    <h2 className="text-4xl text-center text-amber-500 font-serif mb-8 mt-12 uppercase tracking-[0.2em] drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
                         Escoge tu Destino
                     </h2>
                     
@@ -144,11 +145,12 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                             <div key={opt.id} onClick={() => { setSelectedOption(opt); setStep(4); }} className="relative group cursor-pointer rounded-xl border-2 border-slate-700 hover:border-amber-500 bg-slate-900 overflow-hidden flex flex-col transition-all hover:scale-[1.02] shadow-2xl">
                                 
                                 {/* Imagen del Personaje - AJUSTADA */}
-                                <div className="h-[350px] w-full relative bg-gradient-to-b from-slate-800 to-slate-950">
+                                <div className="h-[350px] w-full relative bg-gradient-to-b from-slate-800 to-slate-950 overflow-hidden">
                                     <div className="absolute inset-0 opacity-20 bg-[url('/patterns/hex.png')]"></div>
+                                    {/* AJUSTE IMAGEN: object-center y padding reducido */}
                                     <img 
                                         src={getClassImage(opt.image_url)} 
-                                        className="w-full h-full object-contain object-top pt-4 drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] transition-transform duration-500 group-hover:scale-105" 
+                                        className="w-full h-full object-contain object-center p-2 drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] transition-transform duration-500 group-hover:scale-105" 
                                         alt={opt.name}
                                     />
                                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
@@ -167,7 +169,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                                         "{opt.description}"
                                     </p>
                                     
-                                    {/* NUEVO: REJILLA DE STATS */}
+                                    {/* REJILLA DE STATS */}
                                     <div className="grid grid-cols-3 gap-2 mb-6">
                                         {Object.entries(opt.base_stats || {}).map(([key, val]) => (
                                             <div key={key} className="bg-slate-900 p-2 rounded border border-slate-800 flex flex-col items-center">
@@ -187,7 +189,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                 </div>
             )}
 
-            {/* STEP 4: PREVIEW DE QUEST (Confirmación Épica) */}
+            {/* STEP 4: PREVIEW DE QUEST (Imagen Ajustada) */}
             {step === 4 && selectedOption && (
                 <div className="h-full flex items-center justify-center animate-in slide-in-from-right duration-500 p-8">
                     <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 bg-slate-950 border-2 border-amber-600 rounded-xl overflow-hidden shadow-[0_0_100px_rgba(245,158,11,0.2)]">
@@ -195,9 +197,10 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                         {/* Lado Izquierdo: Clase Elegida */}
                         <div className="relative h-64 md:h-auto bg-slate-900 flex items-center justify-center overflow-hidden">
                             <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-10"></div>
+                            {/* AJUSTE IMAGEN: object-center y escala normal (100) */}
                             <img 
                                 src={getClassImage(selectedOption.image_url)} 
-                                className="w-full h-full object-contain object-top scale-110" 
+                                className="w-full h-full object-contain object-center scale-100 p-4" 
                                 alt={selectedOption.name}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
@@ -255,7 +258,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
         </div>
     );
 
-    // 2. VISTA DE PROGRESO (Cuando ya tienes la misión)
+    // 2. VISTA DE PROGRESO (Cuando ya tienes la misión) - MANTENIDA IGUAL
     const renderProgressFlow = () => {
         if (!activeQuestData) return <div>Cargando destino...</div>;
         const { quest, targetClass } = activeQuestData;
@@ -271,11 +274,12 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                 <div className="max-w-5xl w-full bg-slate-900 border-2 border-amber-600 rounded-xl overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)] flex flex-col md:flex-row h-[600px]">
                     
                     {/* Panel Izquierdo: Tu Futuro */}
-                    <div className="w-full md:w-5/12 relative bg-slate-950">
+                    <div className="w-full md:w-5/12 relative bg-slate-950 overflow-hidden">
                          <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-10"></div>
+                         {/* AJUSTE IMAGEN PROGRESO: object-center */}
                         <img 
                             src={getClassImage(targetClass?.image_url)} 
-                            className="w-full h-full object-contain object-center opacity-80" 
+                            className="w-full h-full object-contain object-center opacity-80 p-4" 
                             alt={targetClass?.name}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
