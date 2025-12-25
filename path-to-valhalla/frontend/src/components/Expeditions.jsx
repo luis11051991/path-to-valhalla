@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Sword, Shield, Zap, Skull, Trophy, ArrowLeft, Lock, Clock, Heart, Crosshair, Ban } from 'lucide-react';
+import { Sword, Shield, Skull, Trophy, Lock, Clock, Crosshair, Ban } from 'lucide-react';
 import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
+
+const EXPEDITION_ICONS = {
+    back: '/icons/expedition/back_arrow.png',
+    header: '/icons/expedition/header_map.png',
+    skull: '/icons/expedition/skull.png',
+    attack: '/icons/expedition/attack_sword.png',
+    bossBadge: '/icons/expedition/boss_badge.png',
+};
 
 const Expeditions = ({ user, onUpdateUser }) => {
     // --- ESTADOS ---
@@ -187,7 +195,8 @@ const Expeditions = ({ user, onUpdateUser }) => {
                 {view === 'MAP' && (
                     <div className="p-6 h-full overflow-y-auto pb-20 custom-scrollbar">
                         <h2 className="text-3xl font-serif text-amber-500 mb-6 border-b border-amber-900/30 pb-2 flex items-center gap-3">
-                            <Sword size={32} /> Mapa de Expediciones
+                            <img src={EXPEDITION_ICONS.header} alt="Mapa" className="w-8 h-8 object-contain" />
+                            Mapa de Expediciones
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {zones.map(zone => {
@@ -219,7 +228,11 @@ const Expeditions = ({ user, onUpdateUser }) => {
 
                         <div className="relative z-10 p-6 flex flex-col h-full overflow-y-auto custom-scrollbar">
                             <button onClick={() => { setView('MAP'); setSelectedZone(null); }} className="self-start mb-4 flex items-center gap-2 text-slate-200 hover:text-white transition-colors bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm hover:bg-black/60">
-                                <ArrowLeft size={20} /> Volver
+                                <img
+                                    src={EXPEDITION_ICONS.back}
+                                    alt="Volver"
+                                    className="w-8 h-8 object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.6)]"
+                                />
                             </button>
                             <h2 className="text-4xl font-serif text-amber-500 mb-8 text-center drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] tracking-wide">
                                 {selectedZone.name}
@@ -290,8 +303,9 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
                     <div className="absolute -bottom-10 -right-10 w-20 h-20 bg-red-600/40 blur-xl rounded-full pointer-events-none" />
 
                     {/* Etiqueta BOSS Dorada */}
-                    <div className="absolute top-0 right-0 bg-gradient-to-l from-yellow-600 via-amber-600 to-amber-700 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20 shadow-lg border-b border-l border-yellow-300 flex items-center gap-1">
-                        <span className="text-yellow-200">👑</span> BOSS DE ZONA
+                    <div className="absolute top-0 right-0 bg-gradient-to-l from-yellow-600 via-amber-600 to-amber-700 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20 shadow-lg border-b border-l border-yellow-300 flex items-center gap-2">
+                        <img src={EXPEDITION_ICONS.bossBadge} alt="Boss" className="w-4 h-4 object-contain" />
+                        BOSS DE ZONA
                     </div>
                 </>
             )}
@@ -321,11 +335,13 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
 
                 <div className="text-xs text-slate-500 mb-4 flex justify-between items-center">
                     <span>Nvl {enemy.min_level}-{enemy.max_level}</span>
-                    <span className={`${enemy.is_boss ? 'text-red-400 font-black tracking-wider' : tierConfig.color}`}>
-                        {enemy.is_boss ? '💀 INFERNAL' : tierConfig.label}
+                    <span className={`${enemy.is_boss ? 'text-red-400 font-black tracking-wider' : tierConfig.color} flex items-center gap-2`}>
+                        {enemy.is_boss && (
+                            <img src={EXPEDITION_ICONS.skull} alt="Dificultad" className="w-7 h-7 object-contain drop-shadow-[0_0_8px_rgba(248,113,113,0.7)]" />
+                        )}
+                        {enemy.is_boss ? 'INFERNAL' : tierConfig.label}
                     </span>
                 </div>
-
                 <div className="mt-auto">
                     <button
                         onClick={onAttack}
@@ -338,8 +354,13 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
                                     : 'bg-gradient-to-r from-amber-700 to-amber-600 text-white shadow-lg hover:scale-[1.02]'
                             }`}
                     >
-                        {disabled ? 'Descansando...' : <><Sword size={14} /> {enemy.is_boss ? 'DESAFIAR JEFE' : 'Atacar (5E)'}</>}
-                    </button>
+                                {disabled ? 'Descansando...' : (
+                                    <>
+                                        <img src={EXPEDITION_ICONS.attack} alt="Atacar" className="w-6 h-6 object-contain drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" />
+                                        {enemy.is_boss ? 'DESAFIAR JEFE' : 'Atacar (5E)'}
+                                    </>
+                                )}
+                            </button>
                 </div>
             </div>
         </div>

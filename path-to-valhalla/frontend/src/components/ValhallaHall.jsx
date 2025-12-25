@@ -1,6 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { Scroll, Clock, CheckCircle, Sword, Skull, RefreshCw, X, AlertTriangle, Calendar, CalendarDays, Award } from 'lucide-react';
+﻿import React, { useState, useEffect } from 'react';
+import { Clock, CheckCircle, X, AlertTriangle } from 'lucide-react';
 import { apiUrl } from '../constants/api';
+
+const VALHALLA_ICONS = {
+    gold: '/icons/valhalla/gold_coin.png',
+    silver: '/icons/valhalla/silver_coin.png',
+    copper: '/icons/valhalla/copper_coin.png',
+    headerActive: '/icons/valhalla/header_active.png',
+    headerBoard: '/icons/valhalla/header_board.png',
+    headerWeekly: '/icons/valhalla/header_weekly.png',
+    inProgress: '/icons/valhalla/in_progress.png',
+    refresh: '/icons/valhalla/refresh.png',
+    rewardXp: '/icons/valhalla/reward_xp.png',
+    tabDaily: '/icons/valhalla/tab_daily.png',
+    tabWeekly: '/icons/valhalla/tab_weekly.png',
+};
+
+// Tabla de XP (igual que TopBar/Dashboard)
+const XP_TABLE = [
+    0, // Nivel 0 no existe
+    15, 40, 65, 90, 115, 140, 165, 190, 215, 240,
+    265, 290, 315, 340, 365, 390, 415, 440, 465, 490,
+    515, 540, 565, 595, 625, 655, 685, 720, 755, 790,
+    830, 870, 915, 960, 1010, 1060, 1115, 1170, 1230, 1290,
+    1355, 1420, 1490, 1565, 1645, 1725, 1810, 1900, 1995, 2095,
+    2200, 2310, 2425, 2545, 2670, 2805, 2945, 3090, 3245, 3405,
+    3575, 3755, 3940, 4135, 4340, 4555, 4780, 5020, 5270, 5535,
+    5810, 6100, 6405, 6725, 7060, 7415, 7785, 8175, 8585, 9015,
+    9465, 9940, 10435, 10955, 11500, 12075, 12680, 13315, 13980, 14680,
+    15415, 16185, 16995, 17845, 18735, 19670, 20655, 21685, 22770, 23910
+];
+const ODIN_LEVEL_XP = 25000;
+
+const normalizeUserLevel = (userData) => {
+    if (!userData) return userData;
+    let level = userData.level || 1;
+    let experience = userData.experience || 0;
+    // Repartir experiencia sobrante subiendo niveles en cascada
+    while (true) {
+        const required = level >= 100 ? ODIN_LEVEL_XP : (XP_TABLE[level] || 999999);
+        if (experience < required) break;
+        experience -= required;
+        level += 1;
+    }
+    return { ...userData, level, experience };
+};
 
 const ValhallaHall = ({ user, onUpdateUser }) => {
     const [loading, setLoading] = useState(true);
@@ -62,7 +106,11 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
         if (data.success) {
             setAlertData({ type: 'success', msg: data.message });
             fetch(apiUrl('/api/auth/profile'), { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
-                .then(r => r.json()).then(d => onUpdateUser(d.user));
+                .then(r => r.json())
+                .then(d => {
+                    const updated = normalizeUserLevel(d.user);
+                    onUpdateUser(updated);
+                });
             loadData(); 
         } else {
             setAlertData({ type: 'error', msg: data.message });
@@ -95,10 +143,12 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
                         <h2 className="text-4xl font-serif text-amber-500 uppercase tracking-widest drop-shadow-md">Salón de Valhallus</h2>
                         <div className="flex gap-4 mt-4">
                             <button onClick={() => setActiveTab('daily')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold uppercase transition-colors border-b-2 ${activeTab === 'daily' ? 'border-amber-500 text-amber-500' : 'border-transparent text-slate-500 hover:text-white'}`}>
-                                <CalendarDays size={16} /> Diarias
+                                <img src={VALHALLA_ICONS.tabDaily} alt="Diarias" className="w-5 h-5 object-contain" />
+                                Diarias
                             </button>
                             <button onClick={() => setActiveTab('weekly')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold uppercase transition-colors border-b-2 ${activeTab === 'weekly' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-500 hover:text-white'}`}>
-                                <Calendar size={16} /> Semanales
+                                <img src={VALHALLA_ICONS.tabWeekly} alt="Semanales" className="w-5 h-5 object-contain" />
+                                Semanales
                             </button>
                         </div>
                     </div>
@@ -117,7 +167,10 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
                         {/* 1. Misiones Activas Diarias */}
                         <div>
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-lg font-bold text-slate-300 uppercase flex items-center gap-2"><Sword size={18} className="text-green-500"/> Contratos Activos</h3>
+                                <h3 className="text-lg font-bold text-slate-300 uppercase flex items-center gap-2">
+                                    <img src={VALHALLA_ICONS.headerActive} alt="Contratos" className="w-5 h-5 object-contain" />
+                                    Contratos Activos
+                                </h3>
                                 <span className="text-xs text-slate-500">Espacios: <span className="text-white">{dailyActive.length} / {maxSlots}</span></span>
                             </div>
                             
@@ -133,13 +186,16 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
                         {/* 2. Tablón de Disponibles */}
                         <div>
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-lg font-bold text-slate-300 uppercase flex items-center gap-2"><Scroll size={18} className="text-amber-500"/> Tablón de Solicitudes</h3>
+                                <h3 className="text-lg font-bold text-slate-300 uppercase flex items-center gap-2">
+                                    <img src={VALHALLA_ICONS.headerBoard} alt="Tablon" className="w-5 h-5 object-contain" />
+                                    Tablon de Solicitudes
+                                </h3>
                                 <button 
                                     onClick={handleRefresh} 
                                     disabled={globalCooldown > 0}
                                     className={`px-3 py-1 rounded text-xs font-bold uppercase flex items-center gap-2 transition-colors border ${globalCooldown > 0 ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed' : 'bg-slate-800 text-amber-500 border-amber-600 hover:text-white'}`}
                                 >
-                                    <RefreshCw size={12} /> Refrescar
+                                    <img src={VALHALLA_ICONS.refresh} alt="Refrescar" className="w-4 h-4 object-contain" /> Refrescar
                                 </button>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -150,11 +206,29 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
                                             <span className="text-[10px] bg-black px-1.5 rounded text-slate-500 border border-slate-800">NVL {quest.min_level}</span>
                                         </div>
                                         <p className="text-xs text-slate-500 mt-2 line-clamp-2 h-8">{quest.description}</p>
-                                        <div className="mt-3 pt-3 border-t border-slate-800/50 flex gap-2 text-[10px] font-mono text-slate-400 flex-wrap">
-                                            <span className="text-purple-300">{quest.reward_xp} XP</span>
-                                            {quest.reward_gold > 0 && <span className="text-yellow-500">{quest.reward_gold}g</span>}
-                                            {quest.reward_silver > 0 && <span className="text-slate-300">{quest.reward_silver}s</span>}
-                                            {quest.reward_copper > 0 && <span className="text-orange-400">{quest.reward_copper}c</span>}
+                                        <div className="mt-3 pt-3 border-t border-slate-800/50 flex gap-3 text-[10px] font-mono text-slate-400 flex-wrap items-center">
+                                            <span className="flex items-center gap-1 text-purple-300">
+                                                <img src={VALHALLA_ICONS.rewardXp} alt="XP" className="w-4 h-4 object-contain" />
+                                                {quest.reward_xp}
+                                            </span>
+                                            {quest.reward_gold > 0 && (
+                                                <span className="flex items-center gap-1 text-yellow-500">
+                                                    <img src={VALHALLA_ICONS.gold} alt="Oro" className="w-4 h-4 object-contain" />
+                                                    {quest.reward_gold}
+                                                </span>
+                                            )}
+                                            {quest.reward_silver > 0 && (
+                                                <span className="flex items-center gap-1 text-slate-300">
+                                                    <img src={VALHALLA_ICONS.silver} alt="Plata" className="w-4 h-4 object-contain" />
+                                                    {quest.reward_silver}
+                                                </span>
+                                            )}
+                                            {quest.reward_copper > 0 && (
+                                                <span className="flex items-center gap-1 text-orange-400">
+                                                    <img src={VALHALLA_ICONS.copper} alt="Cobre" className="w-4 h-4 object-contain" />
+                                                    {quest.reward_copper}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -167,7 +241,7 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
                 {activeTab === 'weekly' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2">
                         <div className="bg-purple-900/10 border border-purple-900/50 p-4 rounded-lg mb-6 flex items-start gap-4">
-                            <Award className="text-purple-400 shrink-0" size={32} />
+                            <img src={VALHALLA_ICONS.headerWeekly} alt="Desafíos" className="w-10 h-10 object-contain" />
                             <div>
                                 <h3 className="text-purple-300 font-bold uppercase text-sm">Desafíos de la Semana</h3>
                                 <p className="text-xs text-slate-400 mt-1">Estas misiones se activan automáticamente. Complétalas para obtener grandes recompensas. Se reinician cada semana.</p>
@@ -205,11 +279,14 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
 
                         <div className="bg-slate-800 p-3 rounded mb-6">
                             <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-1">Recompensas</h4>
-                            <div className="flex flex-wrap gap-3 text-xs">
-                                <span className="font-bold text-purple-400">+ {selectedQuest.reward_xp} XP</span>
-                                {selectedQuest.reward_gold > 0 && <span className="font-bold text-yellow-500">+ {selectedQuest.reward_gold} Oro</span>}
-                                {selectedQuest.reward_silver > 0 && <span className="font-bold text-slate-300">+ {selectedQuest.reward_silver} Plata</span>}
-                                {selectedQuest.reward_copper > 0 && <span className="font-bold text-orange-500">+ {selectedQuest.reward_copper} Cobre</span>}
+                            <div className="flex flex-wrap gap-3 text-xs items-center">
+                                <span className="font-bold text-purple-400 flex items-center gap-1">
+                                    <img src={VALHALLA_ICONS.rewardXp} alt="XP" className="w-4 h-4 object-contain" />
+                                    + {selectedQuest.reward_xp}
+                                </span>
+                                {selectedQuest.reward_gold > 0 && <span className="font-bold text-yellow-500 flex items-center gap-1"><img src={VALHALLA_ICONS.gold} alt="Oro" className="w-4 h-4 object-contain" /> + {selectedQuest.reward_gold}</span>}
+                                {selectedQuest.reward_silver > 0 && <span className="font-bold text-slate-300 flex items-center gap-1"><img src={VALHALLA_ICONS.silver} alt="Plata" className="w-4 h-4 object-contain" /> + {selectedQuest.reward_silver}</span>}
+                                {selectedQuest.reward_copper > 0 && <span className="font-bold text-orange-500 flex items-center gap-1"><img src={VALHALLA_ICONS.copper} alt="Cobre" className="w-4 h-4 object-contain" /> + {selectedQuest.reward_copper}</span>}
                             </div>
                         </div>
 
@@ -272,12 +349,28 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
             </div>
 
             <div className="flex justify-between items-center mt-auto">
-                <div className="flex gap-2 text-[10px] font-mono text-slate-400">
-                    <span>XP: {quest.reward_xp}</span>
-                    {/* Mostrar solo la moneda más alta para ahorrar espacio en la tarjeta pequeña */}
-                    {quest.reward_gold > 0 ? <span className="text-yellow-500">{quest.reward_gold}g</span> : 
-                     quest.reward_silver > 0 ? <span className="text-slate-300">{quest.reward_silver}s</span> : 
-                     <span className="text-orange-400">{quest.reward_copper}c</span>}
+                <div className="flex gap-3 text-[10px] font-mono text-slate-400 items-center">
+                    <span className="flex items-center gap-1">
+                        <img src={VALHALLA_ICONS.rewardXp} alt="XP" className="w-4 h-4 object-contain" />
+                        {quest.reward_xp}
+                    </span>
+                    {/* Mostrar solo la moneda m�s alta para ahorrar espacio en la tarjeta peque�a */}
+                    {quest.reward_gold > 0 ? (
+                        <span className="text-yellow-500 flex items-center gap-1">
+                            <img src={VALHALLA_ICONS.gold} alt="Oro" className="w-4 h-4 object-contain" />
+                            {quest.reward_gold}
+                        </span>
+                    ) : quest.reward_silver > 0 ? (
+                        <span className="text-slate-300 flex items-center gap-1">
+                            <img src={VALHALLA_ICONS.silver} alt="Plata" className="w-4 h-4 object-contain" />
+                            {quest.reward_silver}
+                        </span>
+                    ) : (
+                        <span className="text-orange-400 flex items-center gap-1">
+                            <img src={VALHALLA_ICONS.copper} alt="Cobre" className="w-4 h-4 object-contain" />
+                            {quest.reward_copper}
+                        </span>
+                    )}
                 </div>
                 
                 <button 
@@ -288,7 +381,12 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
                         ? 'bg-green-700 hover:bg-green-600 text-white shadow-lg cursor-pointer' 
                         : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'}`}
                 >
-                    {isComplete ? 'Reclamar' : (isWeekly ? 'En Progreso' : 'Pendiente')}
+                    {isComplete ? 'Reclamar' : isWeekly ? (
+                        <span className="flex items-center gap-1">
+                            <img src={VALHALLA_ICONS.inProgress} alt="En progreso" className="w-4 h-4 object-contain" />
+                            En Progreso
+                        </span>
+                    ) : 'Pendiente'}
                 </button>
             </div>
         </div>

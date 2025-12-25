@@ -667,7 +667,51 @@ const Dashboard = ({ user, onUpdateUser }) => {
                 <div className="relative z-10 w-full h-[700px] bg-slate-900/80 backdrop-blur-md border border-purple-500/30 rounded-lg p-6 animate-in fade-in duration-300 flex flex-col">
                     <div className="mb-8 p-4 bg-black/40 border border-purple-900/50 rounded-lg">
                         <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-purple-300 uppercase tracking-widest">Barra de Batalla (Slots)</h3><span className="text-xs text-slate-500">{equippedSkills.length} / {unlockedSlots} Equipados</span></div>
-                        <div className="flex gap-4 justify-center">{[...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => { const isUnlocked = i < unlockedSlots; const skill = equippedSkills[i]; return (<div key={i} className={`w-16 h-16 rounded-lg border-2 flex items-center justify-center relative transition-all ${!isUnlocked ? 'bg-slate-950 border-slate-800 opacity-50' : skill ? 'bg-black border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105' : 'bg-black/50 border-slate-700 border-dashed'}`} onClick={() => skill && handleToggleEquip(skill.player_skill_id)}>{!isUnlocked ? (<div className="flex flex-col items-center"><Lock size={16} className="text-slate-600" /><span className="text-[9px] text-slate-600 mt-1">LVL {i === 2 ? 10 : i === 3 ? 50 : 100}</span></div>) : skill ? (<img src={skill.image_url} className="w-full h-full object-cover rounded" title="Click para quitar" />) : (<span className="text-slate-600 text-xs">VACÍO</span>)}</div>) })}</div>
+                        <div className="flex gap-4 justify-center">
+                            {[...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => {
+                                const isUnlocked = i < unlockedSlots;
+                                const skill = equippedSkills[i];
+                                const requiredLvl = i === 2 ? 10 : i === 3 ? 50 : 100;
+
+                                return (
+                                    <div key={i} className="flex flex-col items-center gap-1">
+                                        <div
+                                            className={`w-[4.5rem] h-[4.5rem] rounded-lg border-2 flex items-center justify-center relative transition-all ${
+                                                !isUnlocked
+                                                    ? 'bg-slate-950 border-slate-800 opacity-80'
+                                                    : skill
+                                                        ? 'bg-black border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105'
+                                                        : 'bg-black/50 border-slate-700'
+                                            }`}
+                                            onClick={() => skill && handleToggleEquip(skill.player_skill_id)}
+                                        >
+                                            {!isUnlocked ? (
+                                                <img
+                                                    src="/icons/ui/slot_locked.png"
+                                                    alt="Slot bloqueado"
+                                                    className="w-14 h-14 object-contain opacity-90"
+                                                />
+                                            ) : skill ? (
+                                                <img
+                                                    src={skill.image_url}
+                                                    className="w-full h-full object-cover rounded"
+                                                    title="Click para quitar"
+                                                />
+                                            ) : (
+                                                <img
+                                                    src="/icons/ui/slot_empty.png"
+                                                    alt="Slot vacío"
+                                                    className="w-14 h-14 object-contain opacity-90"
+                                                />
+                                            )}
+                                        </div>
+                                        {!isUnlocked && (
+                                            <span className="text-[10px] text-slate-500">LVL {requiredLvl}</span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                     <h2 className="text-2xl font-serif text-purple-400 mb-6 flex items-center gap-3"><img src="/icons/tabs/tab_grimoire.png" className="w-8 h-8" /> Grimorio de Poderes</h2>
                     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">{mySkills.length === 0 ? (<div className="flex flex-col items-center justify-center h-48 text-slate-500"><img src="/icons/tabs/tab_grimoire.png" className="w-16 h-16 opacity-30 mb-4" /><p>No hay habilidades disponibles.</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{mySkills.map((skill) => (<div key={skill.player_skill_id} onClick={() => handleToggleEquip(skill.player_skill_id)} className={`relative group bg-slate-950 border rounded-xl overflow-hidden transition-all cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] ${skill.is_equipped ? 'border-purple-500 ring-1 ring-purple-500 bg-purple-900/10' : 'border-purple-900/30 hover:border-purple-500/60'}`}><div className="flex p-4 gap-4"><div className={`w-16 h-16 rounded-lg bg-black border shrink-0 overflow-hidden relative ${skill.is_equipped ? 'border-purple-400' : 'border-purple-500/30'}`}>{skill.image_url ? (<img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-purple-500"><Zap /></div>)}{skill.is_equipped && (<div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center backdrop-blur-[1px]"><span className="text-[10px] font-bold text-white bg-purple-600 px-1 rounded">EQUIPADO</span></div>)}</div><div><h3 className={`text-lg font-bold transition-colors ${skill.is_equipped ? 'text-purple-300' : 'text-slate-300 group-hover:text-white'}`}>{skill.name}</h3><p className="text-xs text-slate-400 mt-1 line-clamp-2">{skill.description}</p></div></div><div className="bg-black/40 px-4 py-2 flex justify-between text-xs border-t border-purple-900/30"><div className="text-blue-400 font-mono">MP: {skill.energy_cost}</div>{skill.damage_min > 0 && (<div className="text-red-400 font-bold">DMG: {skill.damage_min}</div>)}{skill.heal_amount > 0 && (<div className="text-green-400 font-bold">HEAL: {skill.heal_amount}</div>)}</div></div>))}</div>)}</div>
