@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Coins, Gem, LogOut, Menu, PanelLeft, PanelRightClose } from 'lucide-react';
+import { LogOut, Menu, PanelLeft, PanelRightClose } from 'lucide-react'; // Quitamos Coins y Gem, ya no se usan
 import { RACES } from '../../constants/races';
 
-// --- TABLA DE EXPERIENCIA (Debe coincidir con el Backend) ---
+// --- TABLA DE EXPERIENCIA (Intacta) ---
 const XP_TABLE = [
     0, // Nivel 0 no existe
     15, 40, 65, 90, 115, 140, 165, 190, 215, 240,
@@ -17,6 +17,14 @@ const XP_TABLE = [
     15415, 16185, 16995, 17845, 18735, 19670, 20655, 21685, 22770, 23910
 ];
 const ODIN_LEVEL_XP = 25000;
+
+// --- RUTAS DE ICONOS DE MONEDA ---
+const CURRENCY_ICONS = {
+    gold: '/icons/currency/gold.png',
+    silver: '/icons/currency/silver.png',
+    copper: '/icons/currency/copper.png',
+    onix: '/icons/currency/onix.png'
+};
 
 const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, isSidebarCompact }) => {
   // Estado para forzar la actualización del timer cada segundo
@@ -33,30 +41,25 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
   const maxHp = user.calculatedMaxHp || ((user.stats?.constitution || 10) * 20);
   const currentHp = user.current_hp;
   const currentXp = user.experience || 0;
-  
-  // --- CORRECCIÓN AQUÍ: Usamos la Tabla en lugar de multiplicar por 1000 ---
   const maxXp = user.level >= 100 ? ODIN_LEVEL_XP : (XP_TABLE[user.level] || 99999);
   
   const bgUrl = user.active_background_url || "https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=2544&auto=format&fit=crop";
 
   // --- LÓGICA DE TIEMPO RESTANTE ---
   const getTimeUntilRegen = (type, currentVal, maxVal) => {
-    if (currentVal >= maxVal) return null; // Si está lleno, no mostrar timer
+    if (currentVal >= maxVal) return null;
     if (!user.last_regen_at) return null;
 
     const now = new Date();
     const last = new Date(user.last_regen_at);
-    // Diferencia en segundos desde la última vez que el servidor regeneró
     const diffSeconds = Math.max(0, (now - last) / 1000);
 
-    let interval = 10; // HP (Default)
-    if (type === 'energy') interval = 120; // 2 minutos
-    if (type === 'valor') interval = 1800; // 30 minutos
+    let interval = 10; // HP
+    if (type === 'energy') interval = 120;
+    if (type === 'valor') interval = 1800;
 
-    // El tiempo restante es el intervalo MENOS el "sobrante" del ciclo actual
     const remaining = interval - (diffSeconds % interval);
-
-    if (remaining < 0) return "00:00"; // Prevención visual
+    if (remaining < 0) return "00:00";
 
     const m = Math.floor(remaining / 60);
     const s = Math.floor(remaining % 60);
@@ -76,7 +79,7 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
     return raceData.images[user.gender || 'male'];
   };
 
-  // --- COMPONENTE DE BARRA MEJORADO ---
+  // --- COMPONENTE DE BARRA ---
   const StatBar = ({ colorClass, value, max, label, type }) => {
     const timerText = type ? getTimeUntilRegen(type, value, max) : null;
 
@@ -143,22 +146,40 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
         <StatBar value={user.valor} max={5} label="Valor" colorClass="bg-orange-500" type="valor" />
       </div>
 
-      {/* BOTÓN TIENDA */}
+      {/* BOTÓN TIENDA (Icono PNG) */}
       <button onClick={onOpenShop} className="relative z-20 flex items-center gap-2 bg-gradient-to-r from-purple-900/80 to-slate-900 border border-purple-500/50 px-4 py-1.5 rounded-full hover:scale-105 transition-transform group shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-pulse hover:animate-none cursor-pointer mx-auto md:mx-4">
         <div className="relative">
-          <Gem size={14} className="text-purple-400 group-hover:text-white transition-colors" />
+          <img src={CURRENCY_ICONS.onix} alt="Shop" className="w-5 h-5 object-contain drop-shadow-[0_0_5px_rgba(168,85,247,0.8)]" />
           <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span></span>
         </div>
         <span className="text-xs font-bold text-purple-200 group-hover:text-white uppercase tracking-wider hidden md:inline">Tienda Ónix</span>
       </button>
 
-      {/* SECCIÓN DERECHA: ECONOMÍA */}
+      {/* SECCIÓN DERECHA: ECONOMÍA (Iconos PNG) */}
       <div className="relative z-10 flex items-center gap-4 ml-auto bg-black/40 px-4 py-2 rounded border border-white/5 shadow-inner">
-        <div className="flex items-center gap-1.5" title="Oro"><Coins size={14} className="text-amber-400 fill-amber-400/20" /><span className="text-amber-400 font-bold text-sm">{user.gold}</span></div>
-        <div className="flex items-center gap-1.5" title="Plata"><div className="w-3 h-3 rounded-full bg-slate-400 border border-slate-300 shadow-[0_0_5px_white]"></div><span className="text-slate-300 font-bold text-sm">{user.silver}</span></div>
-        <div className="flex items-center gap-1.5" title="Cobre"><div className="w-3 h-3 rounded-full bg-orange-700 border border-orange-500 shadow-[0_0_5px_orange]"></div><span className="text-orange-500 font-bold text-sm">{user.copper}</span></div>
-        <div className="h-4 w-px bg-white/10 mx-1"></div>
-        <div className="flex items-center gap-1.5" title="Onix"><Gem size={14} className="text-purple-400" /><span className="text-purple-300 font-bold text-sm">{user.onix || 0}</span></div>
+        {/* ORO */}
+        <div className="flex items-center gap-2" title="Oro">
+            <img src={CURRENCY_ICONS.gold} alt="Oro" className="w-5 h-5 object-contain drop-shadow-md" />
+            <span className="text-amber-400 font-bold text-sm">{user.gold}</span>
+        </div>
+        {/* PLATA */}
+        <div className="flex items-center gap-2" title="Plata">
+            <img src={CURRENCY_ICONS.silver} alt="Plata" className="w-5 h-5 object-contain drop-shadow-md" />
+            <span className="text-slate-300 font-bold text-sm">{user.silver}</span>
+        </div>
+        {/* COBRE */}
+        <div className="flex items-center gap-2" title="Cobre">
+            <img src={CURRENCY_ICONS.copper} alt="Cobre" className="w-5 h-5 object-contain drop-shadow-md" />
+            <span className="text-orange-500 font-bold text-sm">{user.copper}</span>
+        </div>
+        
+        <div className="h-6 w-px bg-white/10 mx-1"></div>
+        
+        {/* ONIX */}
+        <div className="flex items-center gap-2" title="Onix">
+            <img src={CURRENCY_ICONS.onix} alt="Onix" className="w-5 h-5 object-contain drop-shadow-[0_0_5px_rgba(168,85,247,0.6)]" />
+            <span className="text-purple-300 font-bold text-sm">{user.onix || 0}</span>
+        </div>
       </div>
 
       <button onClick={onLogout} className="relative z-10 ml-4 p-2 text-slate-500 hover:text-red-400 transition-colors" title="Cerrar Sesión"><LogOut size={18} /></button>

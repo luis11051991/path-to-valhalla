@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-    User, BookOpen, Trophy, BarChart2, Mail,
-    Package, Map, Skull, ArrowUpCircle, Scroll,
-    Swords, Hammer, Landmark, Gavel, Shield,
-    Users, Calendar, Crown, X, Lock 
-} from 'lucide-react';
+import { X, Lock } from 'lucide-react'; // Mantenemos solo los iconos de utilidad
 
 const Sidebar = ({ user, onNavigate, currentView, isOpen, isCompact, isMobile, onCloseMobile, onToggleCompact }) => {
 
@@ -32,7 +27,8 @@ const Sidebar = ({ user, onNavigate, currentView, isOpen, isCompact, isMobile, o
         )
     );
 
-    const MenuLink = ({ icon: Icon, label, active, disabled, locked, onClick }) => (
+    // Modificado para aceptar una RUTA de imagen (iconPath) en lugar de un Componente
+    const MenuLink = ({ iconPath, label, active, disabled, locked, onClick }) => (
         <div className="relative group">
             <button
                 disabled={disabled}
@@ -51,7 +47,13 @@ const Sidebar = ({ user, onNavigate, currentView, isOpen, isCompact, isMobile, o
                     ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'}
                 `}
             >
-                <Icon size={18} className={active ? 'text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]' : disabled ? 'text-slate-600' : 'text-slate-500 group-hover:text-amber-200'} />
+                {/* RENDERIZADO DE IMAGEN PNG */}
+                <img 
+                    src={iconPath} 
+                    alt={label}
+                    className={`w-6 h-6 object-contain transition-transform group-hover:scale-110 ${active ? 'drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]' : 'opacity-70 group-hover:opacity-100'}`} 
+                />
+
                 {showLabels ? (
                     <>
                         <span className={`font-sans text-xs uppercase tracking-wide ${active ? 'font-bold' : 'font-medium'}`}>{label}</span>
@@ -77,49 +79,43 @@ const Sidebar = ({ user, onNavigate, currentView, isOpen, isCompact, isMobile, o
                 </div>
 
                 <nav className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-900/50 scrollbar-track-transparent py-2">
+                    
                     <SectionHeader title="Héroe" />
-                    <MenuLink icon={User} label="Visión General" active={currentView === 'dashboard'} onClick={() => handleNavigate('dashboard')} />
-                    <MenuLink icon={Package} label="Paquetes" active={currentView === 'packages'} onClick={() => handleNavigate('packages')} />
-                    <MenuLink icon={BookOpen} label="Bestiario" />
-                    <MenuLink icon={Trophy} label="Logros" />
-                    <MenuLink icon={BarChart2} label="Estadísticas" />
-                    <MenuLink icon={Mail} label="Mensajería" />
+                    <MenuLink iconPath="/icons/sidebar/hero_overview.png" label="Visión General" active={currentView === 'dashboard'} onClick={() => handleNavigate('dashboard')} />
+                    <MenuLink iconPath="/icons/sidebar/hero_packages.png" label="Paquetes" active={currentView === 'packages'} onClick={() => handleNavigate('packages')} />
+                    <MenuLink iconPath="/icons/sidebar/hero_bestiary.png" label="Bestiario" />
+                    <MenuLink iconPath="/icons/sidebar/hero_achievements.png" label="Logros" />
+                    <MenuLink iconPath="/icons/sidebar/hero_stats.png" label="Estadísticas" />
+                    <MenuLink iconPath="/icons/sidebar/hero_messages.png" label="Mensajería" />
 
                     <SectionHeader title="Aventura" />
-                    <MenuLink icon={Map} label="Expediciones" active={currentView === 'expeditions'} onClick={() => handleNavigate('expeditions')} />
-                    <MenuLink icon={Skull} label="Mazmorras" />
-                    <MenuLink icon={ArrowUpCircle} label="Torre Infinita" disabled />
-                    
-                    {/* --- NUEVO: SALÓN DE VALHALLUS --- */}
-                    <MenuLink 
-                        icon={Scroll} 
-                        label="Salón de Valhallus" 
-                        active={currentView === 'valhalla_hall'}
-                        onClick={() => handleNavigate('valhalla_hall')}
-                    />
+                    <MenuLink iconPath="/icons/sidebar/adv_expeditions.png" label="Expediciones" active={currentView === 'expeditions'} onClick={() => handleNavigate('expeditions')} />
+                    <MenuLink iconPath="/icons/sidebar/adv_dungeons.png" label="Mazmorras" />
+                    <MenuLink iconPath="/icons/sidebar/adv_tower.png" label="Torre Infinita" disabled />
+                    <MenuLink iconPath="/icons/sidebar/adv_valhalla.png" label="Salón de Valhallus" active={currentView === 'valhalla_hall'} onClick={() => handleNavigate('valhalla_hall')} />
 
                     <SectionHeader title="Combate" />
-                    <MenuLink icon={Swords} label="Coliseo" />
+                    <MenuLink iconPath="/icons/sidebar/combat_coliseum.png" label="Coliseo" />
 
                     <SectionHeader title="Ciudad" />
                     <MenuLink 
-                        icon={Hammer} 
+                        iconPath="/icons/sidebar/city_workshop.png" 
                         label="Taller" 
                         active={currentView === 'workshop'}
                         onClick={() => handleNavigate('workshop')}
                         disabled={user?.level < 5}
                         locked={user?.level < 5}
                     />
-                    <MenuLink icon={Landmark} label="Banco" />
-                    <MenuLink icon={Gavel} label="Mercado" active={currentView === 'market'} onClick={() => handleNavigate('market')} />
-                    <MenuLink icon={Shield} label="Armero" />
+                    <MenuLink iconPath="/icons/sidebar/city_bank.png" label="Banco" />
+                    <MenuLink iconPath="/icons/sidebar/city_market.png" label="Mercado" active={currentView === 'market'} onClick={() => handleNavigate('market')} />
+                    {/*<MenuLink iconPath="/icons/sidebar/city_armorsmith.png" label="Armero" />*/}
 
                     <SectionHeader title="Social" />
-                    <MenuLink icon={Users} label="Alianza" />
-                    <MenuLink icon={Calendar} label="Agenda" />
+                    <MenuLink iconPath="/icons/sidebar/social_alliance.png" label="Alianza" />
+                    <MenuLink iconPath="/icons/sidebar/social_calendar.png" label="Agenda" />
 
                     <SectionHeader title="Premium" />
-                    <MenuLink icon={Crown} label="Tienda VIP" />
+                    <MenuLink iconPath="/icons/sidebar/shop_vip.png" label="Tienda VIP" />
                     <div className="h-10"></div>
                 </nav>
 

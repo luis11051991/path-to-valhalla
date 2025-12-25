@@ -9,6 +9,7 @@ import Workshop from './components/Workshop';
 import ValhallaHall from './components/ValhallaHall'; // <--- 1. NUEVO IMPORT
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
+import OnixShopModal from './components/OnixShopModal';
 import { apiUrl } from './constants/api';
 
 function App() {
@@ -97,62 +98,64 @@ function App() {
       )}
 
       {view === 'game' && user && (
-        <GameLayout
-          user={user}
-          onLogout={handleLogout}
-          onOpenShop={openShop}
-          onNavigate={handleNavigate} 
-          currentView={gameView}      
-        >
-          {/* RENDERIZADO CONDICIONAL */}
-          
-          {gameView === 'dashboard' && (
-            <Dashboard
-              user={user}
-              isShopOpen={isShopOpen}
-              onCloseShop={closeShop}
-              onUpdateUser={handleUserUpdate}
-            />
-          )}
-
-          {gameView === 'expeditions' && (
-            <Expeditions
-              user={user}
-              onUpdateUser={handleUserUpdate}
-            />
-          )}
-
-          {gameView === 'packages' && (
-            <Packages 
+        <>
+          <GameLayout
+            user={user}
+            onLogout={handleLogout}
+            onOpenShop={openShop}
+            onNavigate={handleNavigate} 
+            currentView={gameView}      
+          >
+            {/* RENDERIZADO CONDICIONAL */}
+            
+            {gameView === 'dashboard' && (
+              <Dashboard
                 user={user}
-                token={localStorage.getItem('token')}
                 onUpdateUser={handleUserUpdate}
-            />
-          )}
+              />
+            )}
 
-          {gameView === 'market' && (
-            <Market 
-              user={user}
-              onUpdateUser={handleUserUpdate}
-            />
-          )}
+            {gameView === 'expeditions' && (
+              <Expeditions
+                user={user}
+                onUpdateUser={handleUserUpdate}
+              />
+            )}
 
-          {gameView === 'workshop' && (
-            <Workshop 
-              user={user}
-              onUpdateUser={handleUserUpdate}
-            />
-          )}
+            {gameView === 'packages' && (
+              <Packages 
+                  user={user}
+                  token={localStorage.getItem('token')}
+                  onUpdateUser={handleUserUpdate}
+              />
+            )}
 
-          {/* --- 2. RENDERIZAR VALHALLA HALL --- */}
-          {gameView === 'valhalla_hall' && (
-            <ValhallaHall 
-              user={user}
-              onUpdateUser={handleUserUpdate}
-            />
-          )}
+            {gameView === 'market' && (
+              <Market 
+                user={user}
+                onUpdateUser={handleUserUpdate}
+              />
+            )}
 
-        </GameLayout>
+            {gameView === 'workshop' && (
+              <Workshop 
+                user={user}
+                onUpdateUser={handleUserUpdate}
+              />
+            )}
+
+            {/* --- 2. RENDERIZAR VALHALLA HALL --- */}
+            {gameView === 'valhalla_hall' && (
+              <ValhallaHall 
+                user={user}
+                onUpdateUser={handleUserUpdate}
+              />
+            )}
+
+          </GameLayout>
+
+          <OnixShopModal isOpen={isShopOpen} onClose={closeShop} />
+        </>
       )}
 
     </div>

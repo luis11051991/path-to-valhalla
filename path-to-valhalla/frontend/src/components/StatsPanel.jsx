@@ -1,42 +1,36 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Shield, Zap, Heart, Sword, Brain, Clover, Check, RefreshCw, ArrowRight } from 'lucide-react';
+import { Check, RefreshCw, ArrowRight } from 'lucide-react'; // Solo iconos de utilidad (botones)
 
-// --- CONFIGURACIÓN: AQUÍ DEFINIMOS LO QUE HACE CADA STAT ---
+// --- CONFIGURACIÓN: DEFINICIÓN DE IMÁGENES Y DESCRIPCIONES ---
 const STAT_CONFIG = {
     strength: { 
         label: 'Fuerza', 
-        icon: Sword, 
-        color: 'text-red-400', 
+        iconPath: '/icons/stats/strength.png', 
         desc: '1 Punto = +2 Daño Físico' 
     },
     dexterity: { 
         label: 'Destreza', 
-        icon: Zap, 
-        color: 'text-yellow-400', 
+        iconPath: '/icons/stats/dexterity.png', 
         desc: '1 Punto = +0.25% Crítico (Max 25%)' 
     },
     constitution: { 
         label: 'Constitución', 
-        icon: Shield, 
-        color: 'text-blue-400', 
+        iconPath: '/icons/stats/constitution.png', 
         desc: '1 Punto = +20 Vida y +0.5 Defensa' 
     },
     intelligence: { 
         label: 'Inteligencia', 
-        icon: Brain, 
-        color: 'text-purple-400', 
+        iconPath: '/icons/stats/intelligence.png', 
         desc: '1 Punto = +0.5% Curación y +0.25% Skill Dmg' 
     },
     luck: { 
         label: 'Suerte', 
-        icon: Clover, 
-        color: 'text-green-400', 
+        iconPath: '/icons/stats/luck.png', 
         desc: '1 Punto = +0.25% Bloqueo (Max 25%)' 
     },
     charisma: { 
         label: 'Carisma', 
-        icon: Heart, 
-        color: 'text-pink-400', 
+        iconPath: '/icons/stats/charisma.png', 
         desc: 'Mejora precios y eventos' 
     }
 };
@@ -121,7 +115,9 @@ const StatsPanel = ({ stats, bonuses, availablePoints, onSave }) => {
                         <div key={key} className="flex items-center justify-between group h-8">
                             {/* Nombre e Icono */}
                             <div className="flex items-center gap-2 w-5/12" title={config.desc}>
-                                <config.icon size={14} className={config.color} />
+                                {/* REEMPLAZO: Imagen PNG en lugar de Componente Lucide */}
+                                <img src={config.iconPath} alt={config.label} className="w-4 h-4 object-contain" />
+                                
                                 <span className="text-xs font-bold text-slate-300">{config.label}</span>
                                 {/* Descripción flotante al pasar el mouse */}
                                 <span className="text-[9px] text-slate-500 hidden group-hover:inline opacity-0 group-hover:opacity-100 transition-opacity ml-1">
