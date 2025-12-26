@@ -351,7 +351,7 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
     );
 };
 
-// --- COMPONENTE MODAL DE BATALLA (LOG CENTRADO, ARTE LATERAL) ---
+// --- COMPONENTE MODAL DE BATALLA ---
 const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, playerStats, zoneImage }) => {
     const [visibleLines, setVisibleLines] = useState([]);
     const [currentHp, setCurrentHp] = useState({ player: result.initialPlayerHp, enemy: result.initialEnemyHp });
@@ -397,30 +397,28 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
             player: result.finalPlayerHp,
             enemy: result.isWin ? 0 : (result.log[result.log.length - 2]?.enemyHp || 0)
         });
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        if (scrollRef.current) setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
     };
 
     const playerPct = Math.max(0, (currentHp.player / result.initialPlayerHp) * 100);
     const enemyPct = Math.max(0, (currentHp.enemy / result.initialEnemyHp) * 100);
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-slate-950 animate-in fade-in duration-300">
 
-            {/* 1. ARENA VISUAL (SUPERIOR - 55%) */}
+            {/* BOTÓN SKIP ABSOLUTO */}
+            {!isFinished && (
+                <button 
+                    onClick={handleSkip}
+                    className="absolute top-24 right-8 z-[200] bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white px-6 py-2 rounded-full border-2 border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.8)] flex items-center gap-2 transition-all hover:scale-105 active:scale-95 group"
+                >
+                    <FastForward size={20} className="fill-white group-hover:rotate-180 transition-transform" /> 
+                    <span className="text-xs font-black uppercase tracking-widest drop-shadow-md">OMITIR</span>
+                </button>
+            )}
+
+            {/* 1. ARENA VISUAL (SUPERIOR - 55%) - AHORA CENTRADO MATEMÁTICAMENTE */}
             <div className="h-[55%] relative flex items-center justify-center border-b-4 border-amber-900 shadow-2xl pt-16 overflow-hidden">
-                
-                {/* BOTÓN SKIP */}
-                {!isFinished && (
-                    <button 
-                        onClick={handleSkip}
-                        className="absolute top-4 right-4 z-50 bg-black/60 hover:bg-amber-600/80 text-white px-4 py-2 rounded-full border border-white/20 backdrop-blur-sm flex items-center gap-2 transition-all hover:scale-105 shadow-lg group"
-                    >
-                        <FastForward size={18} className="group-hover:text-amber-200" /> 
-                        <span className="text-xs font-bold uppercase">Omitir Batalla</span>
-                    </button>
-                )}
-
-                {/* FONDO DINÁMICO */}
                 <div className="absolute inset-0 z-0">
                     <img
                         src={zoneImage || '/backgrounds/arena_bg.png'}
@@ -430,7 +428,8 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
                 </div>
 
-                <div className="relative z-10 flex items-center gap-4 md:gap-12 w-full max-w-5xl px-4 justify-between">
+                {/* Usamos justify-center y gap fijo para simetría perfecta */}
+                <div className="relative z-10 flex items-center justify-center gap-8 md:gap-16 w-full px-4">
                     {/* LADO JUGADOR */}
                     <div className="flex items-center gap-4 animate-in slide-in-from-left duration-500">
                         <div className="hidden md:flex flex-col gap-2 text-right bg-black/60 p-3 rounded-lg border-r-2 border-amber-600 backdrop-blur-md shadow-lg">
@@ -490,77 +489,70 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
             {/* 2. LOG DE BATALLA Y MULTITUD (INFERIOR - 45%) */}
             <div className="h-[45%] flex flex-col bg-slate-950 relative overflow-hidden">
                 
-                {/* --- MULTITUD ALENTANDO (LADOS) --- */}
-                {/* VIKINGOS (IZQUIERDA) - ANCHO 30% Y VISIBLES */}
-                <div className="absolute bottom-0 left-0 h-full w-[30%] z-0">
-                     <img 
-                        src="/decors/battle/vikings_cheer.png" 
-                        className="w-full h-full object-cover object-top opacity-80" 
-                        alt="Vikings" 
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-950" />
-                </div>
-
-                {/* MOBS (DERECHA) - ANCHO 30% Y VISIBLES */}
-                <div className="absolute bottom-0 right-0 h-full w-[30%] z-0">
-                    <img 
-                        src="/decors/battle/mobs_cheer.png" 
-                        className="w-full h-full object-cover object-top opacity-80 scale-x-[-1]" 
-                        alt="Mobs" 
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-950" />
-                </div>
+                {/* --- MULTITUD ALENTANDO (LADOS) - ANCHO AUMENTADO AL 35% --- */}
+                <img 
+                    src="/decors/battle/vikings_cheer.png" 
+                    className="absolute bottom-0 left-0 h-full w-[35%] object-cover object-bottom opacity-60 pointer-events-none z-0" 
+                    alt="Vikings" 
+                />
+                <img 
+                    src="/decors/battle/mobs_cheer.png" 
+                    className="absolute bottom-0 right-0 h-full w-[35%] object-cover object-bottom opacity-60 pointer-events-none z-0 scale-x-[-1]" 
+                    alt="Mobs" 
+                />
 
                 <div className="absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
 
-                {/* --- CONTENEDOR LOG CENTRAL (ESTRECHO Y OPACO) --- */}
-                <div className="flex-1 overflow-hidden relative z-10 p-6 flex justify-center items-end pb-12">
-                    <div 
-                        className="w-full max-w-xl bg-slate-950 border-2 border-blue-900/50 rounded-xl p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] h-full overflow-y-auto custom-scrollbar flex flex-col"
-                        ref={scrollRef}
-                    >
-                        <div className="space-y-2 font-mono text-sm">
-                            {visibleLines.map((line, idx) => (
-                                <div key={idx} className={`py-2 px-4 rounded ${getLogStyle(line.type)} animate-in slide-in-from-bottom-2`}>
-                                    {line.msg}
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* MENSAJE DE VICTORIA/DERROTA (DENTRO DEL LOG) */}
-                        {isFinished && (
-                            <div className="mt-8 p-6 text-center animate-in zoom-in duration-500 bg-black/60 rounded-xl border border-slate-700 shadow-lg mx-auto w-fit">
-                                {result.isWin ? (
-                                    <div className="text-green-400 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
-                                        <Trophy size={48} className="text-yellow-400 mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" /> ¡VICTORIA!
+                {/* --- CONTENEDOR LOG (Flexible) --- */}
+                <div className="flex-1 flex flex-col relative z-10 overflow-hidden">
+                    <div className="flex-1 flex justify-center overflow-hidden px-6 pb-1 pt-0">
+                        <div 
+                            className="w-full max-w-xl bg-slate-950 border-2 border-blue-900/50 rounded-xl p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] h-full overflow-y-auto custom-scrollbar flex flex-col"
+                            ref={scrollRef}
+                        >
+                            <div className="space-y-2 font-mono text-sm text-slate-300">
+                                {visibleLines.map((line, idx) => (
+                                    <div key={idx} className={`py-2 px-4 rounded ${getLogStyle(line.type)} animate-in slide-in-from-bottom-2`}>
+                                        {line.msg}
                                     </div>
-                                ) : (
-                                    <div className="text-red-500 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
-                                        <Skull size={48} className="text-red-600 mb-2 drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]" /> DERROTA
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* BOTONERA FINAL (ABSOLUTA EN EL FONDO) */}
-                {isFinished && (
-                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-slate-900/90 border-t border-amber-900/30 flex flex-col items-center animate-in slide-in-from-bottom backdrop-blur z-30">
-                        {result.isWin && (
-                            <div className="flex flex-wrap gap-2 justify-center mb-4">
-                                <RewardBadge label={`${result.rewards.xp} XP`} color="text-purple-300" />
-                                <RewardBadge label={`${result.rewards.copper} Cobre`} color="text-yellow-300" />
-                                {result.rewards.items?.map((item, i) => (
-                                    <RewardBadge key={i} label={`${item.qty}x ${item.name}`} color="text-white" icon />
                                 ))}
                             </div>
-                        )}
-                        <button onClick={onClose} className="w-full max-w-md py-4 bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-bold uppercase rounded shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all transform hover:scale-105">
-                            {result.isWin ? 'Recoger Botín' : 'Volver al Mapa'}
-                        </button>
+
+                            {/* MENSAJE DE VICTORIA/DERROTA (DENTRO DEL LOG) */}
+                            {isFinished && (
+                                <div className="mt-8 p-6 text-center animate-in zoom-in duration-500 bg-black/60 rounded-xl border border-slate-700 shadow-lg mx-auto w-fit">
+                                    {result.isWin ? (
+                                        <div className="text-green-400 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
+                                            <Trophy size={48} className="text-yellow-400 mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" /> ¡VICTORIA!
+                                        </div>
+                                    ) : (
+                                        <div className="text-red-500 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
+                                            <Skull size={48} className="text-red-600 mb-2 drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]" /> DERROTA
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                )}
+
+                    {/* BOTONERA FINAL */}
+                    {isFinished && (
+                        <div className="p-4 bg-slate-900/95 border-t border-amber-900/30 flex flex-col items-center animate-in slide-in-from-bottom shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20 shrink-0">
+                            {result.isWin && (
+                                <div className="flex flex-wrap gap-2 justify-center mb-4">
+                                    <RewardBadge label={`${result.rewards.xp} XP`} color="text-purple-300" />
+                                    <RewardBadge label={`${result.rewards.copper} Cobre`} color="text-yellow-300" />
+                                    {result.rewards.items?.map((item, i) => (
+                                        <RewardBadge key={i} label={`${item.qty}x ${item.name}`} color="text-white" icon />
+                                    ))}
+                                </div>
+                            )}
+                            <button onClick={onClose} className="w-full max-w-md py-4 bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-bold uppercase rounded shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all transform hover:scale-105">
+                                {result.isWin ? 'Recoger Botín' : 'Volver al Mapa'}
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
