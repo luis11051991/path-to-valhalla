@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Sword, Shield, Skull, Trophy, Lock, Clock, Crosshair, Ban } from 'lucide-react';
+import { Sword, Shield, Skull, Trophy, Lock, Clock, Crosshair, Ban, FastForward } from 'lucide-react';
 import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
 
@@ -170,7 +170,6 @@ const Expeditions = ({ user, onUpdateUser }) => {
         return raceData ? (raceData.images[user.gender] || raceData.images.male) : "https://via.placeholder.com/300?text=Hero";
     };
 
-    // Nuevo Helper para el Fondo del Jugador
     const getPlayerBackground = () => {
         if (user.active_background_url) return user.active_background_url;
         const raceData = RACES.find(r => r.id === user.race);
@@ -259,7 +258,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
                         user={user}
                         baseEnemy={currentEnemy}
                         playerImage={getAvatarImage()}
-                        playerBg={getPlayerBackground()} // NUEVO: Pasamos el fondo del jugador
+                        playerBg={getPlayerBackground()}
                         playerStats={playerStats}
                         zoneImage={selectedZone?.image_url}
                         onClose={() => { setView('ENEMIES'); setBattleResult(null); setCurrentEnemy(null); }}
@@ -270,9 +269,8 @@ const Expeditions = ({ user, onUpdateUser }) => {
     );
 };
 
-// --- COMPONENTE CARTA ENEMIGO (V2: BOSS LEGENDARIO) ---
+// --- COMPONENTE CARTA ENEMIGO ---
 const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
-    // Configuración de Dificultad basada en TU base de datos
     const DIFFICULTY_CONFIG = {
         1: { label: 'Fácil', color: 'text-green-400', border: 'border-green-900/30' },
         2: { label: 'Medio', color: 'text-yellow-400', border: 'border-yellow-900/30' },
@@ -281,28 +279,17 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
     };
 
     const tierConfig = DIFFICULTY_CONFIG[enemy.difficulty_tier] || DIFFICULTY_CONFIG[1];
-
-    // Clases dinámicas: Si es Boss, usa dorado y brillos. Si no, usa el borde del tier.
     const containerClasses = enemy.is_boss
         ? "border-2 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.4)] scale-105 z-10 ring-1 ring-yellow-200/50"
         : `border border-slate-700 hover:border-amber-500 ${tierConfig.border}`;
 
     return (
         <div className={`relative bg-slate-900/95 transition-all group overflow-hidden flex flex-col backdrop-blur-md rounded-xl ${containerClasses}`}>
-
-            {/* --- EFECTOS ESPECIALES SOLO PARA BOSS --- */}
             {enemy.is_boss && (
                 <>
-                    {/* Brillo de fondo animado */}
                     <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/10 via-transparent to-amber-500/10 animate-pulse pointer-events-none" />
-
-                    {/* Decoración Esquina Superior Izquierda */}
                     <div className="absolute -top-10 -left-10 w-20 h-20 bg-yellow-500/40 blur-xl rounded-full pointer-events-none" />
-
-                    {/* Decoración Esquina Inferior Derecha */}
                     <div className="absolute -bottom-10 -right-10 w-20 h-20 bg-red-600/40 blur-xl rounded-full pointer-events-none" />
-
-                    {/* Etiqueta BOSS Dorada */}
                     <div className="absolute top-0 right-0 bg-gradient-to-l from-yellow-600 via-amber-600 to-amber-700 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20 shadow-lg border-b border-l border-yellow-300 flex items-center gap-2">
                         <img src={EXPEDITION_ICONS.bossBadge} alt="Boss" className="w-4 h-4 object-contain" />
                         BOSS DE ZONA
@@ -310,14 +297,12 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
                 </>
             )}
 
-            {/* Etiqueta para enemigos normales */}
             {!enemy.is_boss && (
                 <div className={`absolute top-0 right-0 bg-black/60 px-2 py-1 rounded-bl-lg z-20 text-[10px] font-bold uppercase ${tierConfig.color}`}>
                     {tierConfig.label}
                 </div>
             )}
 
-            {/* IMAGEN DEL ENEMIGO */}
             <div className={`h-48 overflow-hidden relative ${enemy.is_boss ? 'bg-gradient-to-b from-amber-900/20 to-black/80' : 'bg-black/50'}`}>
                 <img
                     src={enemy.image_url}
@@ -327,7 +312,6 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
                 />
             </div>
 
-            {/* INFO Y BOTONES */}
             <div className="p-4 flex-1 flex flex-col relative z-10">
                 <h3 className={`font-bold text-lg leading-tight mb-1 truncate ${enemy.is_boss ? 'text-amber-400 drop-shadow-md' : 'text-slate-200'}`}>
                     {enemy.name}
@@ -354,46 +338,41 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
                                     : 'bg-gradient-to-r from-amber-700 to-amber-600 text-white shadow-lg hover:scale-[1.02]'
                             }`}
                     >
-                                {disabled ? 'Descansando...' : (
-                                    <>
-                                        <img src={EXPEDITION_ICONS.attack} alt="Atacar" className="w-6 h-6 object-contain drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" />
-                                        {enemy.is_boss ? 'DESAFIAR JEFE' : 'Atacar (5E)'}
-                                    </>
-                                )}
-                            </button>
+                        {disabled ? 'Descansando...' : (
+                            <>
+                                <img src={EXPEDITION_ICONS.attack} alt="Atacar" className="w-6 h-6 object-contain drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" />
+                                {enemy.is_boss ? 'DESAFIAR JEFE' : 'Atacar (5E)'}
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
         </div>
     );
 };
 
-// --- COMPONENTE MODAL DE BATALLA ---
+// --- COMPONENTE MODAL DE BATALLA (LOG CENTRADO, ARTE LATERAL) ---
 const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, playerStats, zoneImage }) => {
     const [visibleLines, setVisibleLines] = useState([]);
     const [currentHp, setCurrentHp] = useState({ player: result.initialPlayerHp, enemy: result.initialEnemyHp });
     const [isFinished, setIsFinished] = useState(false);
     const scrollRef = useRef(null);
+    const timerRef = useRef(null); 
 
     useEffect(() => {
         let idx = 0;
         const log = result.log || [];
 
-        // Aseguramos que las barras empiecen llenas o en su estado inicial correcto
-        // Nota: Asegúrate de haber reiniciado el Backend con el cambio anterior para recibir 'initialEnemyHp'
         setCurrentHp({
-            player: result.initialPlayerHp || result.finalPlayerHp,
-            enemy: result.initialEnemyHp || 100 // Fallback por si acaso
+            player: result.initialPlayerHp,
+            enemy: result.initialEnemyHp
         });
 
-        const interval = setInterval(() => {
+        timerRef.current = setInterval(() => {
             if (idx < log.length) {
                 const line = log[idx];
                 if (line) {
                     setVisibleLines(prev => [...prev, line]);
-
-                    // --- CORRECCIÓN AQUÍ ---
-                    // Actualizamos el estado basándonos en qué dato trae la línea actual.
-                    // Si la línea no trae dato de HP, mantenemos el valor anterior (prev.player o prev.enemy)
                     setCurrentHp(prev => ({
                         player: line.playerHp !== undefined ? line.playerHp : prev.player,
                         enemy: line.enemyHp !== undefined ? line.enemyHp : prev.enemy
@@ -403,12 +382,23 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                 if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
             } else {
                 setIsFinished(true);
-                clearInterval(interval);
+                clearInterval(timerRef.current);
             }
-        }, 600); // Velocidad de la animación (600ms entre turnos)
+        }, 600); 
 
-        return () => clearInterval(interval);
+        return () => clearInterval(timerRef.current);
     }, [result]);
+
+    const handleSkip = () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setVisibleLines(result.log);
+        setIsFinished(true); 
+        setCurrentHp({
+            player: result.finalPlayerHp,
+            enemy: result.isWin ? 0 : (result.log[result.log.length - 2]?.enemyHp || 0)
+        });
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    };
 
     const playerPct = Math.max(0, (currentHp.player / result.initialPlayerHp) * 100);
     const enemyPct = Math.max(0, (currentHp.enemy / result.initialEnemyHp) * 100);
@@ -416,9 +406,21 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
     return (
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 animate-in fade-in duration-300">
 
-            {/* 1. ARENA VISUAL */}
+            {/* 1. ARENA VISUAL (SUPERIOR - 55%) */}
             <div className="h-[55%] relative flex items-center justify-center border-b-4 border-amber-900 shadow-2xl pt-16 overflow-hidden">
-                {/* FONDO DINÁMICO DE LA ZONA */}
+                
+                {/* BOTÓN SKIP */}
+                {!isFinished && (
+                    <button 
+                        onClick={handleSkip}
+                        className="absolute top-4 right-4 z-50 bg-black/60 hover:bg-amber-600/80 text-white px-4 py-2 rounded-full border border-white/20 backdrop-blur-sm flex items-center gap-2 transition-all hover:scale-105 shadow-lg group"
+                    >
+                        <FastForward size={18} className="group-hover:text-amber-200" /> 
+                        <span className="text-xs font-bold uppercase">Omitir Batalla</span>
+                    </button>
+                )}
+
+                {/* FONDO DINÁMICO */}
                 <div className="absolute inset-0 z-0">
                     <img
                         src={zoneImage || '/backgrounds/arena_bg.png'}
@@ -429,7 +431,6 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                 </div>
 
                 <div className="relative z-10 flex items-center gap-4 md:gap-12 w-full max-w-5xl px-4 justify-between">
-
                     {/* LADO JUGADOR */}
                     <div className="flex items-center gap-4 animate-in slide-in-from-left duration-500">
                         <div className="hidden md:flex flex-col gap-2 text-right bg-black/60 p-3 rounded-lg border-r-2 border-amber-600 backdrop-blur-md shadow-lg">
@@ -442,9 +443,7 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
 
                         <div className="w-36 md:w-56 bg-slate-900 border-2 border-amber-600 rounded-lg shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
                             <div className="h-40 md:h-56 bg-slate-800 relative">
-                                {/* AQUÍ ESTÁ EL CAMBIO: FONDO DEL JUGADOR DETRÁS DEL AVATAR */}
                                 {playerBg && <img src={playerBg} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="User Bg" />}
-
                                 <img src={playerImage} className="relative z-10 w-full h-full object-contain object-bottom" alt="Hero" />
                                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900 to-transparent h-10 z-20" />
                             </div>
@@ -485,39 +484,69 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                             <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${baseEnemy?.block_chance}%`} color="text-blue-400" align="left" />
                         </div>
                     </div>
-
                 </div>
             </div>
 
-            {/* 2. LOG DE BATALLA */}
-            <div className="h-[45%] flex flex-col bg-slate-950 relative">
-                <div className="absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
-
-                <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-2 font-mono text-sm max-w-4xl mx-auto w-full">
-                    {visibleLines.map((line, idx) => (
-                        <div key={idx} className={`py-2 px-4 rounded ${getLogStyle(line.type)} animate-in slide-in-from-bottom-2`}>
-                            {line.msg}
-                        </div>
-                    ))}
-
-                    {isFinished && (
-                        <div className="mt-8 p-6 text-center animate-in zoom-in duration-500 bg-slate-900/50 rounded-xl border border-slate-800 shadow-xl max-w-sm mx-auto">
-                            {result.isWin ? (
-                                <div className="text-green-400 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
-                                    <Trophy size={48} className="text-yellow-400 mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" /> ¡VICTORIA!
-                                </div>
-                            ) : (
-                                <div className="text-red-500 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
-                                    <Skull size={48} className="text-red-600 mb-2 drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]" /> DERROTA
-                                </div>
-                            )}
-                        </div>
-                    )}
+            {/* 2. LOG DE BATALLA Y MULTITUD (INFERIOR - 45%) */}
+            <div className="h-[45%] flex flex-col bg-slate-950 relative overflow-hidden">
+                
+                {/* --- MULTITUD ALENTANDO (LADOS) --- */}
+                {/* VIKINGOS (IZQUIERDA) - ANCHO 30% Y VISIBLES */}
+                <div className="absolute bottom-0 left-0 h-full w-[30%] z-0">
+                     <img 
+                        src="/decors/battle/vikings_cheer.png" 
+                        className="w-full h-full object-cover object-top opacity-80" 
+                        alt="Vikings" 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-950" />
                 </div>
 
-                {/* BOTONERA FINAL */}
+                {/* MOBS (DERECHA) - ANCHO 30% Y VISIBLES */}
+                <div className="absolute bottom-0 right-0 h-full w-[30%] z-0">
+                    <img 
+                        src="/decors/battle/mobs_cheer.png" 
+                        className="w-full h-full object-cover object-top opacity-80 scale-x-[-1]" 
+                        alt="Mobs" 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-950" />
+                </div>
+
+                <div className="absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
+
+                {/* --- CONTENEDOR LOG CENTRAL (ESTRECHO Y OPACO) --- */}
+                <div className="flex-1 overflow-hidden relative z-10 p-6 flex justify-center items-end pb-12">
+                    <div 
+                        className="w-full max-w-xl bg-slate-950 border-2 border-blue-900/50 rounded-xl p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] h-full overflow-y-auto custom-scrollbar flex flex-col"
+                        ref={scrollRef}
+                    >
+                        <div className="space-y-2 font-mono text-sm">
+                            {visibleLines.map((line, idx) => (
+                                <div key={idx} className={`py-2 px-4 rounded ${getLogStyle(line.type)} animate-in slide-in-from-bottom-2`}>
+                                    {line.msg}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* MENSAJE DE VICTORIA/DERROTA (DENTRO DEL LOG) */}
+                        {isFinished && (
+                            <div className="mt-8 p-6 text-center animate-in zoom-in duration-500 bg-black/60 rounded-xl border border-slate-700 shadow-lg mx-auto w-fit">
+                                {result.isWin ? (
+                                    <div className="text-green-400 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
+                                        <Trophy size={48} className="text-yellow-400 mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" /> ¡VICTORIA!
+                                    </div>
+                                ) : (
+                                    <div className="text-red-500 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
+                                        <Skull size={48} className="text-red-600 mb-2 drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]" /> DERROTA
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* BOTONERA FINAL (ABSOLUTA EN EL FONDO) */}
                 {isFinished && (
-                    <div className="p-4 bg-slate-900 border-t border-amber-900/30 shrink-0 flex flex-col items-center animate-in slide-in-from-bottom bg-opacity-90 backdrop-blur">
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-slate-900/90 border-t border-amber-900/30 flex flex-col items-center animate-in slide-in-from-bottom backdrop-blur z-30">
                         {result.isWin && (
                             <div className="flex flex-wrap gap-2 justify-center mb-4">
                                 <RewardBadge label={`${result.rewards.xp} XP`} color="text-purple-300" />
@@ -561,7 +590,5 @@ const getLogStyle = (type) => {
         default: return "text-slate-300";
     }
 };
-
-
 
 export default Expeditions;
