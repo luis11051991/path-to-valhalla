@@ -113,7 +113,7 @@ exports.startBattle = async (req, res) => {
 
             if (enemy.current_hp <= 0) {
                 isWin = true;
-                log.push({ type: 'info', msg: "Â¡Victoria!" });
+                log.push({ type: 'info', msg: "¡Victoria!" });
                 break;
             }
 
@@ -192,7 +192,7 @@ exports.startBattle = async (req, res) => {
                     currentStatPoints += 5;
                     leveledUp = true;
                     player.current_hp = 100 + (totalCon * 20); 
-                    log.push({ type: 'info', msg: `Â¡LEVEL UP! Ahora eres nivel ${currentLevel}` });
+                    log.push({ type: 'info', msg: `¡LEVEL UP! Ahora eres nivel ${currentLevel}` });
                 } else { break; }
             }
 
