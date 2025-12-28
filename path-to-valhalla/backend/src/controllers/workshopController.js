@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 
 // Curva de XP de Profesión
-const PROF_XP_TABLE = [0, 100, 300, 600, 1000, 1500, 2200, 3000, 4000, 5500];
+const PROF_XP_REQUIREMENTS = [0, 100, 300, 600, 1000, 1500, 2200, 3000, 4000, 5500];
 
 // --- HELPER: RNG para Stats (Convertir rangos en números fijos) ---
 const generateRandomStats = (templateStats) => {
@@ -80,7 +80,7 @@ exports.getWorkshopData = async (req, res) => {
             profession: player.profession,
             level: player.profession_level || 1,
             xp: player.profession_xp || 0,
-            nextLevelXp: PROF_XP_TABLE[player.profession_level || 1] || 99999,
+            nextLevelXp: PROF_XP_REQUIREMENTS[player.profession_level || 1] || 99999,
             recipes 
         });
 
@@ -116,7 +116,7 @@ exports.craftItem = async (req, res) => {
         let currentXp = player.profession_xp || 0;
         let currentLevel = player.profession_level || 1;
         let newXp = currentXp + recipe.xp_reward;
-        const requiredXp = PROF_XP_TABLE[currentLevel] || 99999;
+        const requiredXp = PROF_XP_REQUIREMENTS[currentLevel] || 99999;
         
         if (newXp >= requiredXp) {
             newXp -= requiredXp;

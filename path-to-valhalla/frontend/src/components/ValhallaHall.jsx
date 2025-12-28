@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, X, AlertTriangle } from 'lucide-react';
 import { apiUrl } from '../constants/api';
+import { getRequiredXp } from '../shared/level_xp';
 
 const VALHALLA_ICONS = {
     gold: '/icons/valhalla/gold_coin.png',
@@ -16,29 +17,13 @@ const VALHALLA_ICONS = {
     tabWeekly: '/icons/valhalla/tab_weekly.png',
 };
 
-// Tabla de XP (igual que TopBar/Dashboard)
-const XP_TABLE = [
-    0, // Nivel 0 no existe
-    15, 40, 65, 90, 115, 140, 165, 190, 215, 240,
-    265, 290, 315, 340, 365, 390, 415, 440, 465, 490,
-    515, 540, 565, 595, 625, 655, 685, 720, 755, 790,
-    830, 870, 915, 960, 1010, 1060, 1115, 1170, 1230, 1290,
-    1355, 1420, 1490, 1565, 1645, 1725, 1810, 1900, 1995, 2095,
-    2200, 2310, 2425, 2545, 2670, 2805, 2945, 3090, 3245, 3405,
-    3575, 3755, 3940, 4135, 4340, 4555, 4780, 5020, 5270, 5535,
-    5810, 6100, 6405, 6725, 7060, 7415, 7785, 8175, 8585, 9015,
-    9465, 9940, 10435, 10955, 11500, 12075, 12680, 13315, 13980, 14680,
-    15415, 16185, 16995, 17845, 18735, 19670, 20655, 21685, 22770, 23910
-];
-const ODIN_LEVEL_XP = 25000;
-
 const normalizeUserLevel = (userData) => {
     if (!userData) return userData;
     let level = userData.level || 1;
     let experience = userData.experience || 0;
     // Repartir experiencia sobrante subiendo niveles en cascada
     while (true) {
-        const required = level >= 100 ? ODIN_LEVEL_XP : (XP_TABLE[level] || 999999);
+        const required = getRequiredXp(level);
         if (experience < required) break;
         experience -= required;
         level += 1;
@@ -354,7 +339,7 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
                         <img src={VALHALLA_ICONS.rewardXp} alt="XP" className="w-4 h-4 object-contain" />
                         {quest.reward_xp}
                     </span>
-                    {/* Mostrar solo la moneda m�s alta para ahorrar espacio en la tarjeta peque�a */}
+                    {/* Mostrar solo la moneda m?s alta para ahorrar espacio en la tarjeta peque?a */}
                     {quest.reward_gold > 0 ? (
                         <span className="text-yellow-500 flex items-center gap-1">
                             <img src={VALHALLA_ICONS.gold} alt="Oro" className="w-4 h-4 object-contain" />
@@ -394,3 +379,5 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
 };
 
 export default ValhallaHall;
+
+

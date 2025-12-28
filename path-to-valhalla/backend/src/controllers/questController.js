@@ -1,6 +1,6 @@
 ﻿const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
-const { getXpRequiredForLevel } = require('../constants/levels');
+const { getRequiredXp } = require('../shared/level_xp');
 
 // ConfiguraciÃ³n
 const getMaxQuestSlots = (level) => {
@@ -221,7 +221,7 @@ exports.completeQuest = async (req, res) => {
         // Aplicar XP y subir nivel (5 puntos por nivel como en expediciones)
         currentXp += (userQuest.reward_xp || 0);
         while (true) {
-            const needed = getXpRequiredForLevel(currentLevel);
+            const needed = getRequiredXp(currentLevel);
             if (currentXp >= needed) {
                 currentXp -= needed;
                 currentLevel += 1;

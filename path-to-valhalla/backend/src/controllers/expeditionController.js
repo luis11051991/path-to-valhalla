@@ -1,15 +1,9 @@
-const pool = require('../config/db');
+﻿const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { processRegeneration } = require('../utils/regenUtils');
 
-// IMPORTANTE: Asegúrate de haber creado el archivo constants/levels.js
-let getXpRequiredForLevel;
-try {
-    const levels = require('../constants/levels');
-    getXpRequiredForLevel = levels.getXpRequiredForLevel;
-} catch (error) {
-    getXpRequiredForLevel = (lvl) => lvl * 100; 
-}
+// XP rules live in the shared module
+const { getRequiredXp } = require('../shared/level_xp');
 
 const generateRandomStats = (templateStats) => {
     const finalStats = {};
@@ -72,15 +66,15 @@ exports.startBattle = async (req, res) => {
         const enemyRes = await client.query('SELECT * FROM enemies WHERE id = $1', [enemyId]);
         const zoneRes = await client.query('SELECT * FROM expeditions WHERE id = $1', [zoneId]);
 
-        if (!playerRes.rows[0] || !enemyRes.rows[0]) throw new Error("Datos inválidos");
+        if (!playerRes.rows[0] || !enemyRes.rows[0]) throw new Error("Datos invÃ¡lidos");
 
         const player = playerRes.rows[0];
         const baseEnemy = enemyRes.rows[0];
         const zone = zoneRes.rows[0];
 
         if (player.level < zone.level_required) throw new Error(`Nivel insuficiente.`);
-        if (player.energy < 5) throw new Error("Energía insuficiente.");
-        if (player.current_hp <= 5) throw new Error("Estás muy herido.");
+        if (player.energy < 5) throw new Error("EnergÃ­a insuficiente.");
+        if (player.current_hp <= 5) throw new Error("EstÃ¡s muy herido.");
 
         const itemsRes = await client.query(`SELECT pi.*, it.base_stats FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 AND pi.is_equipped = true`, [userId]);
 
@@ -119,7 +113,7 @@ exports.startBattle = async (req, res) => {
 
             if (enemy.current_hp <= 0) {
                 isWin = true;
-                log.push({ type: 'info', msg: "¡Victoria!" });
+                log.push({ type: 'info', msg: "Â¡Victoria!" });
                 break;
             }
 
@@ -135,7 +129,7 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- ACTUALIZACIÓN DE MISIONES (LÓGICA MEJORADA) ---
+        // --- ACTUALIZACIÃ“N DE MISIONES (LÃ“GICA MEJORADA) ---
         let questLogs = [];
         if (isWin) {
             // Buscamos TODAS las misiones activas
@@ -161,7 +155,7 @@ exports.startBattle = async (req, res) => {
                             progress[req.target_id] = currentCount + 1;
                             updated = true;
                             // Agregamos al log de batalla
-                            questLogs.push(`📜 ${quest.title}: ${req.name} (${progress[req.target_id]}/${targetCount})`);
+                            questLogs.push(`ðŸ“œ ${quest.title}: ${req.name} (${progress[req.target_id]}/${targetCount})`);
                         }
                     }
                 }
@@ -191,14 +185,14 @@ exports.startBattle = async (req, res) => {
             currentXp += xpGain;
 
             while (true) {
-                const xpNeeded = getXpRequiredForLevel(currentLevel);
+                const xpNeeded = getRequiredXp(currentLevel);
                 if (currentXp >= xpNeeded) {
                     currentXp -= xpNeeded;
                     currentLevel++;
                     currentStatPoints += 5;
                     leveledUp = true;
                     player.current_hp = 100 + (totalCon * 20); 
-                    log.push({ type: 'info', msg: `¡LEVEL UP! Ahora eres nivel ${currentLevel}` });
+                    log.push({ type: 'info', msg: `Â¡LEVEL UP! Ahora eres nivel ${currentLevel}` });
                 } else { break; }
             }
 
@@ -265,3 +259,5 @@ exports.startBattle = async (req, res) => {
         client.release();
     }
 };
+
+
