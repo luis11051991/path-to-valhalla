@@ -4,6 +4,7 @@ const { processRegeneration } = require('../utils/regenUtils');
 
 // XP rules live in the shared module
 const { getRequiredXp } = require('../shared/level_xp');
+const { computeEnemyXp, computeEnemyLevel } = require('../shared/xp_rewards');
 
 const generateRandomStats = (templateStats) => {
     const finalStats = {};
@@ -44,7 +45,11 @@ exports.getZoneEnemies = async (req, res) => {
     const { zoneId } = req.params;
     try {
         const enemiesRes = await pool.query(`SELECT * FROM enemies WHERE zone_id = $1 AND is_hidden = false ORDER BY difficulty_tier ASC, min_level ASC`, [zoneId]);
-        res.json({ success: true, enemies: enemiesRes.rows });
+        const enemies = enemiesRes.rows.map(e => ({
+            ...e,
+            computed_xp_reward: computeEnemyXp({ enemy: e, playerLevel: computeEnemyLevel(e) })
+        }));
+        res.json({ success: true, enemies });
     } catch (err) { res.status(500).json({ message: 'Error cargando enemigos.' }); }
 };
 
@@ -180,7 +185,7 @@ exports.startBattle = async (req, res) => {
         let leveledUp = false;
 
         if (isWin) {
-            const xpGain = baseEnemy.xp_reward || 10;
+            const xpGain = baseEnemy.xp_reward ?? computeEnemyXp({ enemy: baseEnemy, playerLevel: currentLevel });
             rewards.xp = xpGain;
             currentXp += xpGain;
 
