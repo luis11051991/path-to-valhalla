@@ -5,33 +5,20 @@ const { processRegeneration } = require('../utils/regenUtils');
 // XP rules live in the shared module
 const { getRequiredXp } = require('../shared/level_xp');
 const { computeEnemyXp, computeEnemyLevel } = require('../shared/xp_rewards');
+const { generateEnemyInstance, randomInt, seededRandom } = require('../shared/enemy_generator');
 
-const generateRandomStats = (templateStats) => {
+const generateRandomStats = (templateStats, rng) => {
     const finalStats = {};
     if (!templateStats) return {};
     for (const [key, value] of Object.entries(templateStats)) {
         if (Array.isArray(value) && value.length === 2) {
-            finalStats[key] = Math.floor(Math.random() * (value[1] - value[0] + 1)) + value[0];
+            const roll = rng ? rng() : Math.random();
+            finalStats[key] = Math.floor(roll * (value[1] - value[0] + 1)) + value[0];
         } else {
             finalStats[key] = value;
         }
     }
     return finalStats;
-};
-
-const resolveEnemyStats = (enemy) => {
-    const stats = enemy.stats || {};
-    const resolved = { ...stats };
-    for (const [key, val] of Object.entries(stats)) {
-        if (Array.isArray(val) && val.length === 2) {
-            resolved[key] = Math.floor(Math.random() * (val[1] - val[0] + 1)) + val[0];
-        } else {
-            resolved[key] = val;
-        }
-    }
-    const hp = Math.floor(Math.random() * (enemy.hp_max - enemy.hp_min + 1)) + enemy.hp_min;
-    const dmg = Math.floor(Math.random() * (enemy.damage_max - enemy.damage_min + 1)) + enemy.damage_min;
-    return { ...resolved, max_hp: hp, current_hp: hp, damage: dmg };
 };
 
 exports.getExpeditions = async (req, res) => {
@@ -47,7 +34,7 @@ exports.getZoneEnemies = async (req, res) => {
         const enemiesRes = await pool.query(`SELECT * FROM enemies WHERE zone_id = $1 AND is_hidden = false ORDER BY difficulty_tier ASC, min_level ASC`, [zoneId]);
         const enemies = enemiesRes.rows.map(e => ({
             ...e,
-            computed_xp_reward: computeEnemyXp({ enemy: e, playerLevel: computeEnemyLevel(e) })
+            computed_xp_reward: computeEnemyXp({ enemy: e, playerLevel: computeEnemyLevel(e), enemyLevel: computeEnemyLevel(e) })
         }));
         res.json({ success: true, enemies });
     } catch (err) { res.status(500).json({ message: 'Error cargando enemigos.' }); }
@@ -97,11 +84,23 @@ exports.startBattle = async (req, res) => {
         const totalCon = (player.stats.constitution || 0) + bonuses.constitution;
         const totalArmor = bonuses.armor;
 
-        const enemy = resolveEnemyStats(baseEnemy);
+        const enemyInstance = generateEnemyInstance(baseEnemy, userId, zoneId);
         const playerMaxHp = 100 + (totalCon * 20);
         player.current_hp = Math.min(player.current_hp, playerMaxHp);
 
         const initialPlayerHp = player.current_hp;
+        const enemyDamageRng = seededRandom(`${userId}-${baseEnemy.id}-${zoneId}-dmg`);
+        const enemy = {
+            max_hp: enemyInstance.hp_max || enemyInstance.hp,
+            current_hp: enemyInstance.hp_current || enemyInstance.hp,
+            armor: enemyInstance.armor,
+            damage_min: enemyInstance.damage_min,
+            damage_max: enemyInstance.damage_max,
+            crit_chance: enemyInstance.crit_chance || 0,
+            block_chance: enemyInstance.block_chance || 0,
+            is_elite_minor: enemyInstance.is_elite_minor,
+            level: enemyInstance.level
+        };
         const initialEnemyHp = enemy.max_hp;
 
         let log = [];
@@ -111,7 +110,7 @@ exports.startBattle = async (req, res) => {
             log.push({ type: 'round', msg: `--- RONDA ${r} ---` });
             const weaponDmg = Math.floor(Math.random() * (bonuses.damage_max - bonuses.damage_min + 1)) + bonuses.damage_min;
             const statDmg = Math.floor(Math.max(totalStr, totalDex) * 2);
-            let dmgToEnemy = Math.max(1, (weaponDmg + statDmg) - Math.floor((baseEnemy.armor || 0) / 5));
+            let dmgToEnemy = Math.max(1, (weaponDmg + statDmg) - Math.floor((enemy.armor || 0) / 5));
 
             enemy.current_hp -= dmgToEnemy;
             log.push({ type: 'player_atk', msg: `Golpeas por ${dmgToEnemy}`, enemyHp: Math.max(0, enemy.current_hp) });
@@ -122,7 +121,8 @@ exports.startBattle = async (req, res) => {
                 break;
             }
 
-            let dmgToPlayer = Math.max(1, enemy.damage - Math.floor((totalArmor + totalCon / 2) / 5));
+            const enemyAttack = randomInt(enemy.damage_min, enemy.damage_max, enemyDamageRng);
+            let dmgToPlayer = Math.max(1, enemyAttack - Math.floor((totalArmor + totalCon / 2) / 5));
             player.current_hp -= dmgToPlayer;
             log.push({ type: 'enemy_atk', msg: `Te golpean por ${dmgToPlayer}`, playerHp: Math.max(0, player.current_hp) });
 
@@ -185,7 +185,8 @@ exports.startBattle = async (req, res) => {
         let leveledUp = false;
 
         if (isWin) {
-            const xpGain = baseEnemy.xp_reward ?? computeEnemyXp({ enemy: baseEnemy, playerLevel: currentLevel });
+            const baseXp = baseEnemy.xp_reward ?? computeEnemyXp({ enemy: { ...baseEnemy, is_elite_minor: enemyInstance.is_elite_minor }, playerLevel: currentLevel, enemyLevel: enemyInstance.level });
+            const xpGain = baseXp;
             rewards.xp = xpGain;
             currentXp += xpGain;
 
@@ -203,7 +204,12 @@ exports.startBattle = async (req, res) => {
 
             const minGold = baseEnemy.gold_reward_min || 1;
             const maxGold = baseEnemy.gold_reward_max || 5;
-            rewards.copper = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
+            let copperGain = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
+            if (enemyInstance.is_elite_minor) {
+                copperGain = Math.round(copperGain * 1.15);
+                if (Math.random() <= 0.02) copperGain += 100; // bonus silver equivalent
+            }
+            rewards.copper = copperGain;
 
             const normalized = normalizeCurrency(player.gold, player.silver, player.copper, rewards.copper);
             finalGold = normalized.newGold;
@@ -247,12 +253,28 @@ exports.startBattle = async (req, res) => {
             questLogs.forEach(msg => log.push({ type: 'info', msg: msg }));
         }
 
+        const enemyStats = {
+            level: enemy.level,
+            hp_current: enemy.current_hp,
+            hp_max: enemy.max_hp,
+            damage_min: enemy.damage_min,
+            damage_max: enemy.damage_max,
+            armor: enemy.armor,
+            crit_chance: enemy.crit_chance || 0,
+            block_chance: enemy.block_chance || 0,
+            is_elite_minor: enemy.is_elite_minor
+        };
+
+        // Log for verification in dev
+        console.log('[COMBAT] enemy_stats', enemyStats);
+
         res.json({
             success: true,
             combatResult: {
                 isWin, log, rewards, leveledUp, 
                 initialPlayerHp, initialEnemyHp, finalPlayerHp: player.current_hp,
-                enemyName: baseEnemy.name, enemyImage: baseEnemy.image_url
+                enemyName: baseEnemy.name, enemyImage: baseEnemy.image_url,
+                enemy_stats: enemyStats
             }
         });
 

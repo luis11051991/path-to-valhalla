@@ -353,8 +353,12 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
 
 // --- COMPONENTE MODAL DE BATALLA ---
 const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, playerStats, zoneImage }) => {
+    const enemyStats = result.enemy_stats || {};
+    const isEnemyReady = enemyStats.hp_max != null;
+    const initialEnemyHpValue = enemyStats.hp_max ?? result.initialEnemyHp ?? 0;
+    const initialEnemyHpCurrent = enemyStats.hp_current ?? initialEnemyHpValue;
     const [visibleLines, setVisibleLines] = useState([]);
-    const [currentHp, setCurrentHp] = useState({ player: result.initialPlayerHp, enemy: result.initialEnemyHp });
+    const [currentHp, setCurrentHp] = useState({ player: result.initialPlayerHp, enemy: initialEnemyHpCurrent });
     const [isFinished, setIsFinished] = useState(false);
     const scrollRef = useRef(null);
     const timerRef = useRef(null); 
@@ -365,7 +369,7 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
 
         setCurrentHp({
             player: result.initialPlayerHp,
-            enemy: result.initialEnemyHp
+            enemy: initialEnemyHpCurrent
         });
 
         timerRef.current = setInterval(() => {
@@ -374,8 +378,8 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                 if (line) {
                     setVisibleLines(prev => [...prev, line]);
                     setCurrentHp(prev => ({
-                        player: line.playerHp !== undefined ? line.playerHp : prev.player,
-                        enemy: line.enemyHp !== undefined ? line.enemyHp : prev.enemy
+                        player: line.playerHp !== undefined ? Math.max(0, line.playerHp) : prev.player,
+                        enemy: line.enemyHp !== undefined ? Math.max(0, line.enemyHp) : prev.enemy
                     }));
                 }
                 idx++;
@@ -394,14 +398,14 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
         setVisibleLines(result.log);
         setIsFinished(true); 
         setCurrentHp({
-            player: result.finalPlayerHp,
-            enemy: result.isWin ? 0 : (result.log[result.log.length - 2]?.enemyHp || 0)
+            player: Math.max(0, result.finalPlayerHp),
+            enemy: Math.max(0, result.isWin ? 0 : (result.log[result.log.length - 2]?.enemyHp || 0))
         });
         if (scrollRef.current) setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
     };
 
-    const playerPct = Math.max(0, (currentHp.player / result.initialPlayerHp) * 100);
-    const enemyPct = Math.max(0, (currentHp.enemy / result.initialEnemyHp) * 100);
+    const playerPct = Math.max(0, result.initialPlayerHp ? (currentHp.player / result.initialPlayerHp) * 100 : 0);
+    const enemyPct = Math.max(0, initialEnemyHpValue ? (currentHp.enemy / initialEnemyHpValue) * 100 : 0);
 
     return (
         <div className="fixed inset-0 z-[100] flex flex-col bg-slate-950 animate-in fade-in duration-300">
@@ -471,16 +475,18 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                                 <div className="w-full h-3 bg-slate-800 rounded-full mt-2 overflow-hidden border border-slate-700 relative">
                                     <div className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-500" style={{ width: `${enemyPct}%` }} />
                                 </div>
-                                <div className="text-[10px] text-slate-400 mt-1 font-mono font-bold">{currentHp.enemy} HP</div>
+                                <div className="text-[10px] text-slate-400 mt-1 font-mono font-bold">
+                                    {isEnemyReady ? `${currentHp.enemy}/${initialEnemyHpValue} HP` : '...'}
+                                </div>
                             </div>
                         </div>
 
                         <div className="hidden md:flex flex-col gap-2 text-left bg-black/60 p-3 rounded-lg border-l-2 border-red-600 backdrop-blur-md shadow-lg">
                             <div className="text-red-500 font-bold text-xs uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Enemigo</div>
-                            <StatRow icon={<Sword size={12} />} label="Daño" value={`${baseEnemy?.damage_min}-${baseEnemy?.damage_max}`} align="left" />
-                            <StatRow icon={<Shield size={12} />} label="Armadura" value={baseEnemy?.armor} align="left" />
-                            <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${baseEnemy?.crit_chance}%`} color="text-yellow-600" align="left" />
-                            <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${baseEnemy?.block_chance}%`} color="text-blue-400" align="left" />
+                            <StatRow icon={<Sword size={12} />} label="Daño" value={`${enemyStats.damage_min ?? 0}-${enemyStats.damage_max ?? 0}`} align="left" />
+                            <StatRow icon={<Shield size={12} />} label="Armadura" value={enemyStats.armor ?? 0} align="left" />
+                            <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${enemyStats.crit_chance ?? 0}%`} color="text-yellow-600" align="left" />
+                            <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${enemyStats.block_chance ?? 0}%`} color="text-blue-400" align="left" />
                         </div>
                     </div>
                 </div>
