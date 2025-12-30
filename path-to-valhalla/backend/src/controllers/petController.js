@@ -44,7 +44,16 @@ exports.equipPet = async (req, res) => {
             ORDER BY pp.is_active DESC, p.tier DESC
         `, [userId]);
 
-        const user = await hydratePlayer(userId);
+        const hydrated = await hydratePlayer(userId);
+        const bgResult = await pool.query('SELECT image_url FROM backgrounds WHERE id = $1', [hydrated.active_background_id || 1]);
+        const bagsResult = await pool.query('SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()', [userId]);
+        const user = {
+            ...hydrated,
+            active_background_url: bgResult.rows[0]?.image_url || hydrated.active_background_url,
+            real_inventory: (await pool.query(`SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.image_url, it.price_copper, it.description, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 ORDER BY pi.bag_slot ASC`, [userId])).rows,
+            rented_bags: bagsResult.rows
+        };
+
         res.json({ success: true, pets: petsRes.rows, user });
 
     } catch (err) {

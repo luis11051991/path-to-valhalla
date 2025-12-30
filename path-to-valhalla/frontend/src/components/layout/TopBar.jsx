@@ -23,8 +23,8 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
   const raceData = useMemo(() => RACES.find(r => r.id === user.race) || RACES[0], [user.race]);
 
   // --- DATOS DEL USUARIO ---
-  const maxHp = user.calculated_max_hp || user.calculatedMaxHp || ((user.stats?.constitution || 10) * 20);
-  const currentHp = user.current_hp;
+  const maxHp = user.calculatedMaxHp ?? user.calculated_max_hp ?? 0;
+  const currentHp = user.current_hp ?? 0;
   const currentXp = user.experience || 0;
   const maxXp = getRequiredXp(user.level);
   
@@ -67,6 +67,7 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
   // --- COMPONENTE DE BARRA ---
   const StatBar = ({ colorClass, value, max, label, type }) => {
     const timerText = type ? getTimeUntilRegen(type, value, max) : null;
+    const percent = max > 0 ? Math.min((value / max) * 100, 100) : 0;
 
     return (
       <div className="flex flex-col w-24 lg:w-32 relative group">
@@ -80,7 +81,7 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
           <span className="text-[9px] text-white font-mono">{value}/{max}</span>
         </div>
         <div className="h-2.5 bg-black/60 border border-slate-700/50 rounded-sm overflow-hidden shadow-inner relative">
-          <div className={`h-full ${colorClass} transition-all duration-500 shadow-[0_0_10px_currentColor]`} style={{ width: `${Math.min((value / max) * 100, 100)}%` }} />
+          <div className={`h-full ${colorClass} transition-all duration-500 shadow-[0_0_10px_currentColor]`} style={{ width: `${percent}%` }} />
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/20"></div>
         </div>
       </div>

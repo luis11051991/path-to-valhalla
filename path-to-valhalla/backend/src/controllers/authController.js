@@ -66,9 +66,9 @@ exports.register = async (req, res) => {
     user = await hydratePlayer(user.id);
     const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' });
 
-    // 7. RESPONDER ÉXITO
+    // 7. RESPONDER EXITO
     res.status(201).json({ 
-      message: '¡Cuenta creada! Elige tu destino.', 
+      message: 'Cuenta creada! Elige tu destino.', 
       token,
       user: { ...user, active_background_url: bgUrl, real_inventory: [], rented_bags: [] } 
     });

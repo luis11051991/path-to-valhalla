@@ -111,7 +111,11 @@ exports.trainStats = async (req, res) => {
     const bagsRes = await pool.query('SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()', [userId]);
     finalUser.rented_bags = bagsRes.rows;
 
-    res.json({ success: true, user: finalUser });
+    const hydrated = await hydratePlayer(finalUser);
+    hydrated.real_inventory = itemsResult.rows;
+    hydrated.rented_bags = bagsRes.rows;
+
+    res.json({ success: true, user: hydrated });
 
   } catch (err) { console.error(err); res.status(500).json({ message: 'Error al entrenar' }); }
 };
@@ -164,17 +168,17 @@ exports.rentBag = async (req, res) => {
     updatedUser.real_inventory = itemsResult.rows;
     updatedUser.rented_bags = (await pool.query('SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()', [userId])).rows;
 
-    res.json({ success: true, user: updatedUser, message: `¡Bolsa extendida!` });
+    const hydrated = await hydratePlayer(updatedUser);
+    hydrated.real_inventory = updatedUser.real_inventory;
+    hydrated.rented_bags = updatedUser.rented_bags;
 
-  } catch (err) { 
-      await pool.query('ROLLBACK'); 
-      console.error(err); 
-      // Enviamos el mensaje de error real para depurar si vuelve a pasar algo
-      res.status(500).json({ message: err.message || 'Error al alquilar' }); 
+    res.json({ success: true, user: hydrated, message: 'Bolsa extendida!' });
+  } catch (err) {
+      await pool.query('ROLLBACK');
+      console.error(err);
+      res.status(500).json({ message: err.message || 'Error al alquilar' });
   }
 };
-
-// --- OBTENER HABILIDADES ---
 exports.getMySkills = async (req, res) => {
     const userId = req.user.id; 
 
