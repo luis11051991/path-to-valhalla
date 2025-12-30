@@ -645,31 +645,31 @@ const Dashboard = ({ user, onUpdateUser }) => {
                             maxHp={displayMaxHp}
                             onSave={handleSaveStats}
                         />
-                        <div className="space-y-2 mt-3">
-                            <div className="flex justify-between items-center border-b border-white/5 pb-1">
-                                <span className="text-slate-400 flex items-center gap-2">
-                                    <img src={STAT_IMAGES.damage} className="w-5 h-5" /> Daño Físico
+                        <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] space-y-2">
+                            <div className="flex justify-between items-center border-b border-amber-500/20 pb-2">
+                                <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide">
+                                    <img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico
                                 </span>
-                                <span className="text-white font-mono font-bold text-amber-500">
+                                <span className="text-amber-400 font-mono font-extrabold text-sm">
                                     {derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}
                                 </span>
                             </div>
-                            <div className="flex justify-between items-center border-b border-white/5 pb-1">
-                                <span className="text-slate-400 flex items-center gap-2">
-                                    <img src={STAT_IMAGES.defense} className="w-5 h-5" /> Defensa
+                            <div className="flex justify-between items-center border-b border-amber-500/10 pb-2">
+                                <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide">
+                                    <img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa
                                 </span>
-                                <span className="text-white font-mono">{derivedStats.defense}</span>
+                                <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
                             </div>
-                            <div className="flex justify-between items-center border-b border-white/5 pb-1">
-                                <span className="text-slate-400 flex items-center gap-2">
-                                    <img src={STAT_IMAGES.health} className="w-5 h-5" /> Salud Max
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide">
+                                    <img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud
                                 </span>
-                                <span className="text-red-400 font-mono">
-                                    {user.current_hp} / {derivedStats.maxHp}
+                                <span className="text-red-400 font-mono text-sm">
+                                    {user.current_hp} / {derivedStats.maxHp ?? displayMaxHp}
                                 </span>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 mt-2 pt-1">
+                        <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-white/5">
                             <div className="bg-slate-900/50 p-1 rounded text-center">
                                 <div className="text-[9px] text-slate-500 flex items-center justify-center gap-1"><img src={STAT_IMAGES.crit} className="w-4 h-4" /> CRÍTICO</div>
                                 <div className="text-green-400 font-bold">{derivedStats.critChance.toFixed(1)}%</div>
