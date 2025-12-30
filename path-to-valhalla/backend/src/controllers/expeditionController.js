@@ -1,6 +1,6 @@
-﻿const pool = require('../config/db');
+const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
-const { processRegeneration } = require('../utils/regenUtils');
+const { hydratePlayer, computeMaxHp } = require('../shared/player_stats');
 
 // XP rules live in the shared module
 const { getRequiredXp } = require('../shared/level_xp');
@@ -44,11 +44,6 @@ exports.getZoneEnemies = async (req, res) => {
 exports.startBattle = async (req, res) => {
     const { userId, enemyId, zoneId } = req.body;
 
-    try {
-        const preCheck = await pool.query('SELECT * FROM players WHERE id = $1', [userId]);
-        if (preCheck.rows.length > 0) await processRegeneration(preCheck.rows[0]);
-    } catch (e) { console.error("Error regen:", e); }
-
     const client = await pool.connect();
 
     try {
@@ -58,34 +53,26 @@ exports.startBattle = async (req, res) => {
         const enemyRes = await client.query('SELECT * FROM enemies WHERE id = $1', [enemyId]);
         const zoneRes = await client.query('SELECT * FROM expeditions WHERE id = $1', [zoneId]);
 
-        if (!playerRes.rows[0] || !enemyRes.rows[0]) throw new Error("Datos invÃ¡lidos");
+        if (!playerRes.rows[0] || !enemyRes.rows[0]) throw new Error("Datos inválidos");
 
-        const player = playerRes.rows[0];
+        let player = await hydratePlayer(playerRes.rows[0], client);
         const baseEnemy = enemyRes.rows[0];
         const zone = zoneRes.rows[0];
 
         if (player.level < zone.level_required) throw new Error(`Nivel insuficiente.`);
-        if (player.energy < 5) throw new Error("EnergÃ­a insuficiente.");
-        if (player.current_hp <= 5) throw new Error("EstÃ¡s muy herido.");
+        if (player.energy < 5) throw new Error("Energía insuficiente.");
+        if (player.current_hp <= 5) throw new Error("Estás muy herido.");
 
-        const itemsRes = await client.query(`SELECT pi.*, it.base_stats FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 AND pi.is_equipped = true`, [userId]);
-
-        let bonuses = { strength: 0, dexterity: 0, constitution: 0, armor: 0, damage_min: 0, damage_max: 0 };
-        itemsRes.rows.forEach(item => {
-            const stats = item.base_stats || {};
-            Object.entries(stats).forEach(([key, val]) => {
-                let valToAdd = Array.isArray(val) ? Math.floor((val[0] + val[1]) / 2) : val;
-                if (bonuses[key] !== undefined) bonuses[key] += valToAdd;
-            });
-        });
-
-        const totalStr = (player.stats.strength || 0) + bonuses.strength;
-        const totalDex = (player.stats.dexterity || 0) + bonuses.dexterity;
-        const totalCon = (player.stats.constitution || 0) + bonuses.constitution;
-        const totalArmor = bonuses.armor;
+        const totalStats = player.total_stats || player.stats || {};
+        const totalStr = totalStats.strength || 0;
+        const totalDex = totalStats.dexterity || 0;
+        const totalCon = totalStats.constitution || 0;
+        const totalArmor = (totalStats.armor || 0) + (totalStats.defense || 0);
+        const weaponMin = Math.max(0, totalStats.damage_min || 0);
+        const weaponMax = Math.max(weaponMin, totalStats.damage_max || weaponMin);
 
         const enemyInstance = generateEnemyInstance(baseEnemy, userId, zoneId);
-        const playerMaxHp = 100 + (totalCon * 20);
+        const playerMaxHp = player.calculatedMaxHp || computeMaxHp(totalCon);
         player.current_hp = Math.min(player.current_hp, playerMaxHp);
 
         const initialPlayerHp = player.current_hp;
@@ -108,7 +95,7 @@ exports.startBattle = async (req, res) => {
 
         for (let r = 1; r <= 10; r++) {
             log.push({ type: 'round', msg: `--- RONDA ${r} ---` });
-            const weaponDmg = Math.floor(Math.random() * (bonuses.damage_max - bonuses.damage_min + 1)) + bonuses.damage_min;
+            const weaponDmg = weaponMax > weaponMin ? Math.floor(Math.random() * (weaponMax - weaponMin + 1)) + weaponMin : weaponMin;
             const statDmg = Math.floor(Math.max(totalStr, totalDex) * 2);
             let dmgToEnemy = Math.max(1, (weaponDmg + statDmg) - Math.floor((enemy.armor || 0) / 5));
 
@@ -117,7 +104,7 @@ exports.startBattle = async (req, res) => {
 
             if (enemy.current_hp <= 0) {
                 isWin = true;
-                log.push({ type: 'info', msg: "¡Victoria!" });
+                log.push({ type: 'info', msg: "�Victoria!" });
                 break;
             }
 
@@ -134,7 +121,7 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- ACTUALIZACIÃ“N DE MISIONES (LÃ“GICA MEJORADA) ---
+        // --- ACTUALIZACIÓN DE MISIONES (LÓGICA MEJORADA) ---
         let questLogs = [];
         if (isWin) {
             // Buscamos TODAS las misiones activas
@@ -160,7 +147,7 @@ exports.startBattle = async (req, res) => {
                             progress[req.target_id] = currentCount + 1;
                             updated = true;
                             // Agregamos al log de batalla
-                            questLogs.push(`ðŸ“œ ${quest.title}: ${req.name} (${progress[req.target_id]}/${targetCount})`);
+                            questLogs.push(`📜 ${quest.title}: ${req.name} (${progress[req.target_id]}/${targetCount})`);
                         }
                     }
                 }
@@ -197,8 +184,8 @@ exports.startBattle = async (req, res) => {
                     currentLevel++;
                     currentStatPoints += 5;
                     leveledUp = true;
-                    player.current_hp = 100 + (totalCon * 20); 
-                    log.push({ type: 'info', msg: `¡LEVEL UP! Ahora eres nivel ${currentLevel}` });
+                    player.current_hp = playerMaxHp; 
+                    log.push({ type: 'info', msg: `�LEVEL UP! Ahora eres nivel ${currentLevel}` });
                 } else { break; }
             }
 
@@ -240,9 +227,9 @@ exports.startBattle = async (req, res) => {
         await client.query(`
             UPDATE players 
             SET current_hp = $1, energy = energy - 5, experience = $2, level = $3, stat_points = $4,
-                gold = $5, silver = $6, copper = $7, last_expedition_at = NOW() 
-            WHERE id = $8`,
-            [player.current_hp, currentXp, currentLevel, currentStatPoints, finalGold, finalSilver, finalCopper, userId]
+                gold = $5, silver = $6, copper = $7, last_expedition_at = NOW(), last_regen_at = $8 
+            WHERE id = $9`,
+            [player.current_hp, currentXp, currentLevel, currentStatPoints, finalGold, finalSilver, finalCopper, player.last_regen_at, userId]
         );
 
         await client.query('COMMIT');

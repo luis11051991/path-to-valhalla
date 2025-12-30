@@ -23,7 +23,7 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
   const raceData = useMemo(() => RACES.find(r => r.id === user.race) || RACES[0], [user.race]);
 
   // --- DATOS DEL USUARIO ---
-  const maxHp = user.calculatedMaxHp || ((user.stats?.constitution || 10) * 20);
+  const maxHp = user.calculated_max_hp || user.calculatedMaxHp || ((user.stats?.constitution || 10) * 20);
   const currentHp = user.current_hp;
   const currentXp = user.experience || 0;
   const maxXp = getRequiredXp(user.level);

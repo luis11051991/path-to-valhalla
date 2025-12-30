@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { hydratePlayer } = require('../shared/player_stats');
 
 // Configuración de Fondos por Raza
 const RACE_BACKGROUNDS = {
@@ -66,8 +67,11 @@ exports.chooseRace = async (req, res) => {
     const bagsRes = await pool.query('SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()', [userId]);
     finalUser.rented_bags = bagsRes.rows;
 
-    res.json({ success: true, user: finalUser });
+    let hydratedUser = await hydratePlayer(finalUser);
+    hydratedUser.real_inventory = itemsResult.rows;
+    hydratedUser.rented_bags = bagsRes.rows;
 
+    res.json({ success: true, user: hydratedUser });
   } catch (err) { 
       console.error("Error en chooseRace:", err); 
       res.status(500).json({ message: 'Error al elegir raza' }); 

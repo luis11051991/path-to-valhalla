@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { processRegeneration } = require('../utils/regenUtils'); // <--- IMPORTANTE: Importamos la utilidad
+const { hydratePlayer } = require('../shared/player_stats'); // <--- IMPORTANTE: Importamos la utilidad
 
 const SECRET_KEY = 'valhalla_secret_key_odin';
 
@@ -53,7 +53,7 @@ exports.register = async (req, res) => {
         defaultStats
     ]);
     
-    const user = newUser.rows[0];
+    let user = newUser.rows[0];
 
     // 5. REGISTRAR FONDO INICIAL
     await pool.query('INSERT INTO player_backgrounds (player_id, background_id) VALUES ($1, $2)', [user.id, defaultBgId]);
@@ -62,16 +62,16 @@ exports.register = async (req, res) => {
     const bgResult = await pool.query('SELECT image_url FROM backgrounds WHERE id = $1', [defaultBgId]);
     const bgUrl = bgResult.rows[0]?.image_url || '';
 
-    // 6. GENERAR TOKEN
+    // 6. HIDRATAR Y GENERAR TOKEN
+    user = await hydratePlayer(user.id);
     const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' });
 
-    // 7. RESPONDER Ã‰XITO
+    // 7. RESPONDER ÉXITO
     res.status(201).json({ 
-      message: 'Â¡Cuenta creada! Elige tu destino.', 
+      message: '¡Cuenta creada! Elige tu destino.', 
       token,
       user: { ...user, active_background_url: bgUrl, real_inventory: [], rented_bags: [] } 
     });
-
   } catch (err) { 
       console.error(">>> ERROR CRÃTICO EN REGISTER:", err); 
       res.status(500).json({ message: 'Error interno del servidor.' }); 
@@ -99,9 +99,9 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(400).json({ message: 'Credenciales incorrectas.' });
 
-    // --- REGENERACIÃ“N UNIFICADA (HP, ENERGÃA, VALOR) ---
-    // Calculamos lo que recuperÃ³ mientras estaba desconectado
-    user = await processRegeneration(user);
+    // --- HIDRATACIÓN Y REGEN ---
+    // Calculamos regen y clamping con equipo/mascota
+    user = await hydratePlayer(user);
     // ----------------------------------------------------
 
     // Cargar datos extra
@@ -154,9 +154,9 @@ exports.getProfile = async (req, res) => {
     
     let user = result.rows[0];
 
-    // --- REGENERACIÃ“N UNIFICADA ---
-    // Calculamos regeneraciÃ³n cada vez que el perfil se refresca
-    user = await processRegeneration(user);
+    // --- HIDRATACIÓN Y REGEN ---
+    // Calculamos regeneración cada vez que el perfil se refresca
+    user = await hydratePlayer(user);
     // -----------------------------
 
     const itemsQuery = `

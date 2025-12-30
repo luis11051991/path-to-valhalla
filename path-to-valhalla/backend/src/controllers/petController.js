@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { hydratePlayer } = require('../shared/player_stats');
 
 // --- OBTENER MIS MASCOTAS ---
 exports.getMyPets = async (req, res) => {
@@ -33,8 +34,18 @@ exports.equipPet = async (req, res) => {
         await pool.query('UPDATE player_pets SET is_active = false WHERE player_id = $1', [userId]);
         await pool.query('UPDATE player_pets SET is_active = true WHERE id = $1 AND player_id = $2', [playerPetId, userId]);
         await pool.query('COMMIT');
-        
-        exports.getMyPets(req, res);
+
+        const petsRes = await pool.query(`
+            SELECT pp.id as player_pet_id, pp.current_hunger, pp.is_active, pp.nickname,
+                   p.name, p.description, p.image_url, p.tier, p.bonus_stats, p.max_hunger, p.code
+            FROM player_pets pp
+            JOIN pets p ON pp.pet_id = p.id
+            WHERE pp.player_id = $1
+            ORDER BY pp.is_active DESC, p.tier DESC
+        `, [userId]);
+
+        const user = await hydratePlayer(userId);
+        res.json({ success: true, pets: petsRes.rows, user });
 
     } catch (err) {
         await pool.query('ROLLBACK');

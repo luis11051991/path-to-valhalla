@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { hydratePlayer } = require('../shared/player_stats');
 
 // ==========================================
 // 1. HELPER: GENERAR STATS
@@ -122,7 +123,9 @@ exports.moveItem = async (req, res) => {
 
     await client.query('COMMIT');
     const inventoryRes = await client.query(`SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.image_url, it.price_copper, it.description, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 ORDER BY pi.bag_slot ASC`, [userId]);
-    res.json({ success: true, inventory: inventoryRes.rows });
+    const user = await hydratePlayer(userId);
+    user.real_inventory = inventoryRes.rows;
+    res.json({ success: true, inventory: inventoryRes.rows, user });
 
   } catch (err) { await client.query('ROLLBACK'); console.error(err); res.status(500).json({ message: 'Error de inventario' }); } finally { client.release(); }
 };
