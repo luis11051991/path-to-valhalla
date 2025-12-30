@@ -88,7 +88,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
         const totalCon = (user.stats?.constitution || 0) + bonuses.constitution;
         const totalLuck = (user.stats?.luck || 0) + bonuses.luck;
 
-        const maxHp = 100 + (totalCon * 20);
+        const maxHp = user.calculatedMaxHp ?? user.calculated_max_hp ?? 0;
         const strBonus = totalStr * 2;
 
         return {

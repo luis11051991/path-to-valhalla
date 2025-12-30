@@ -39,7 +39,7 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
     const last = new Date(user.last_regen_at);
     const diffSeconds = Math.max(0, (now - last) / 1000);
 
-    let interval = 10; // HP
+    let interval = 3; // HP (backend regen)
     if (type === 'energy') interval = 120;
     if (type === 'valor') interval = 1800;
 

@@ -35,7 +35,7 @@ const STAT_CONFIG = {
     }
 };
 
-const StatsPanel = ({ stats, bonuses, availablePoints, onSave }) => {
+const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0 }) => {
     // Estado temporal (lo que estás modificando antes de confirmar)
     const [pendingStats, setPendingStats] = useState(stats);
     const [spentPoints, setSpentPoints] = useState(0);
@@ -55,8 +55,7 @@ const StatsPanel = ({ stats, bonuses, availablePoints, onSave }) => {
         const totalInt = pendingStats.intelligence + (bonuses.intelligence || 0);
         const totalLuk = pendingStats.luck + (bonuses.luck || 0);
 
-        // Calculamos resultados
-        const maxHp = 100 + (totalCon * 20);
+        // Calculamos resultados (sin recalcular HP local)
         const damageMin = (bonuses.damage_min || 0) + (totalStr * 2);
         const damageMax = (bonuses.damage_max || 0) + (totalStr * 2);
         const defense = (bonuses.armor || 0) + Math.floor(totalCon / 2);
@@ -66,8 +65,9 @@ const StatsPanel = ({ stats, bonuses, availablePoints, onSave }) => {
         const blockChance = Math.min(totalLuk * 0.25, 25);
         const healPower = Math.min(totalInt * 0.5, 25);
         const skillDmg = Math.min(totalInt * 0.25, 25);
+        const backendMaxHp = maxHp || 0;
 
-        return { maxHp, damageMin, damageMax, defense, critChance, blockChance, healPower, skillDmg };
+        return { maxHp: backendMaxHp, damageMin, damageMax, defense, critChance, blockChance, healPower, skillDmg };
     }, [pendingStats, bonuses]);
 
     // Botones + y -
