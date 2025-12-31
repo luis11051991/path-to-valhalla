@@ -447,7 +447,12 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                         <div className="w-36 md:w-56 bg-slate-900 border-2 border-amber-600 rounded-lg shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
                             <div className="h-40 md:h-56 bg-slate-800 relative">
                                 {playerBg && <img src={playerBg} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="User Bg" />}
-                                <img src={playerImage} className="relative z-10 w-full h-full object-contain object-bottom" alt="Hero" />
+                                <img
+                                    src={playerImage}
+                                    className="relative z-10 w-full h-full object-contain object-bottom drop-shadow-[0_0_25px_rgba(0,0,0,0.9)]"
+                                    style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }}
+                                    alt="Hero"
+                                />
                                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900 to-transparent h-10 z-20" />
                             </div>
                             <div className="p-2 bg-slate-950 text-center border-t border-slate-800">

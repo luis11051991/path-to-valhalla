@@ -112,7 +112,12 @@ const TopBar = ({ user, onLogout, onOpenShop, onToggleSidebar, onToggleCompact, 
         <div className="relative shrink-0">
           <div className="w-12 h-12 rounded bg-black border-2 border-amber-600 shadow-[0_0_15px_rgba(245,158,11,0.2)] overflow-hidden relative">
             <img src={bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-80" alt="BG" />
-            <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-top z-10" alt="Avatar" />
+            <img
+              src={getAvatarImage()}
+              className="absolute inset-0 w-full h-full object-cover object-top z-10 drop-shadow-[0_0_14px_rgba(0,0,0,0.7)]"
+              style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }}
+              alt="Avatar"
+            />
           </div>
           <div className="absolute -bottom-1.5 -right-1.5 bg-amber-900 text-amber-100 text-[9px] font-bold px-1.5 py-0.5 border border-amber-500 rounded shadow-md z-20">{user.level}</div>
         </div>
