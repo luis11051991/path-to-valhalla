@@ -6,8 +6,7 @@ const RACE_BACKGROUNDS = {
   'human': 1, 'elf': 2, 'dwarf': 3, 'orc': 4, 'feline': 5, 'goblin': 6
 };
 
-// --- NUEVO: Configuración de CLASES por Raza (Basado en tu DB) ---
-// Human=1, Elf=2, Dwarf=3, Goblin=4, Orc=5, Feline=6
+// Configuración de CLASES por Raza
 const RACE_CLASSES = {
   'human': 1, 'humano': 1,
   'elf': 2, 'elfo': 2,
@@ -27,24 +26,20 @@ exports.chooseRace = async (req, res) => {
     // 1. Determinar IDs correctos
     const correctBgId = RACE_BACKGROUNDS[raceKey] || 1; 
     const activeBg = backgroundId || correctBgId; 
-    
-    // --- CORRECCIÓN CRÍTICA AQUÍ ---
-    // Buscamos el ID de la clase correcta según la raza. Si no existe, usa 1.
     const correctClassId = RACE_CLASSES[raceKey] || 1; 
-    // -------------------------------
 
     const safeGender = (gender === 'female') ? 'female' : 'male';
 
-    // 2. Actualizar Jugador (INCLUYENDO class_id)
+    // 2. Actualizar Jugador
     await pool.query(
       'UPDATE players SET race = $1, stats = $2, active_background_id = $3, gender = $4, class_id = $5 WHERE id = $6',
       [raceKey, stats, activeBg, safeGender, correctClassId, userId]
     );
 
-    // 3. Registrar Fondo si no lo tiene
+    // 3. Registrar Fondo
     await pool.query('INSERT INTO player_backgrounds (player_id, background_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, activeBg]);
 
-    // 4. Devolver usuario actualizado (Incluyendo nombre de clase)
+    // 4. Devolver usuario actualizado
     const finalUserRes = await pool.query(`
         SELECT p.*, b.image_url as active_background_url, c.name as class_name 
         FROM players p 
@@ -55,7 +50,7 @@ exports.chooseRace = async (req, res) => {
     
     const finalUser = finalUserRes.rows[0];
 
-    // Cargar inventario y bolsas para que el dashboard no falle
+    // Cargar inventario y bolsas
     const itemsQuery = `
         SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, 
         it.image_url, it.price_copper,
@@ -120,7 +115,7 @@ exports.trainStats = async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Error al entrenar' }); }
 };
 
-// --- ALQUILAR MOCHILA (CORREGIDO) ---
+// --- ALQUILAR MOCHILA ---
 exports.rentBag = async (req, res) => {
   const { userId, bagNumber } = req.body;
   const COST = 50; const DAYS = 7; 
@@ -137,16 +132,10 @@ exports.rentBag = async (req, res) => {
     const newExpiryDate = new Date(baseDate); newExpiryDate.setDate(newExpiryDate.getDate() + DAYS);
 
     await pool.query('BEGIN');
-    
-    // 1. Cobrar
     await pool.query('UPDATE players SET onix = onix - $1 WHERE id = $2', [COST, userId]);
-    
-    // 2. Registrar Alquiler
     await pool.query(`INSERT INTO player_bag_rentals (player_id, bag_number, expires_at) VALUES ($1, $2, $3) ON CONFLICT (player_id, bag_number) DO UPDATE SET expires_at = $3`, [userId, bagNumber, newExpiryDate]);
-    
     await pool.query('COMMIT');
 
-    // 3. Devolver usuario actualizado (AQUÍ ESTABA EL ERROR: FALTABA EL JOIN CON CLASSES 'c')
     const updatedUserRes = await pool.query(`
         SELECT p.*, b.image_url as active_background_url, c.name as class_name 
         FROM players p 
@@ -156,13 +145,7 @@ exports.rentBag = async (req, res) => {
     `, [userId]);
     
     const updatedUser = updatedUserRes.rows[0];
-
-    // Cargar inventario y bolsas
-    const itemsQuery = `
-        SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, 
-        it.image_url, it.price_copper,
-        it.description 
-        FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1`;
+    const itemsQuery = `SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.image_url, it.price_copper, it.description FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1`;
     const itemsResult = await pool.query(itemsQuery, [userId]);
     
     updatedUser.real_inventory = itemsResult.rows;
@@ -179,6 +162,8 @@ exports.rentBag = async (req, res) => {
       res.status(500).json({ message: err.message || 'Error al alquilar' });
   }
 };
+
+// --- GESTIÓN DE HABILIDADES (MEJORADO) ---
 exports.getMySkills = async (req, res) => {
     const userId = req.user.id; 
 
@@ -188,16 +173,25 @@ exports.getMySkills = async (req, res) => {
         
         const classId = playerRes.rows[0].class_id;
 
+        // --- CORRECCIÓN: SISTEMA ACUMULATIVO ---
+        // Verificar si hay habilidades NUEVAS de la clase actual que el jugador NO tenga
         if (classId) {
-            const checkSkills = await pool.query('SELECT * FROM player_skills WHERE player_id = $1', [userId]);
-            if (checkSkills.rows.length === 0) {
-                const availableSkills = await pool.query('SELECT id FROM skills WHERE class_id = $1', [classId]);
-                for (let skill of availableSkills.rows) {
-                    await pool.query('INSERT INTO player_skills (player_id, skill_id) VALUES ($1, $2)', [userId, skill.id]);
-                }
+            const availableSkills = await pool.query('SELECT id FROM skills WHERE class_id = $1', [classId]);
+            
+            for (let skill of availableSkills.rows) {
+                // "Insertar si no existe". Usamos WHERE NOT EXISTS para evitar duplicados sin borrar los viejos.
+                await pool.query(`
+                    INSERT INTO player_skills (player_id, skill_id, is_equipped, skill_level)
+                    SELECT $1, $2, false, 1
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM player_skills WHERE player_id = $1 AND skill_id = $2
+                    )
+                `, [userId, skill.id]);
             }
         }
+        // ------------------------------------------
 
+        // Obtener TODAS las habilidades (Viejas + Nuevas)
         const mySkillsQuery = `
             SELECT ps.id as player_skill_id, ps.is_equipped, ps.skill_level,
                    s.name, s.description, s.icon, s.image_url, 
