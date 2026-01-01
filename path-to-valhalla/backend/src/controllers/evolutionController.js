@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 
 // --- 1. OBTENER OPCIONES DE EVOLUCIÓN ---
+// --- 1. OBTENER OPCIONES DE EVOLUCIÓN ---
 exports.getEvolutionOptions = async (req, res) => {
     const userId = req.user.id; 
 
@@ -27,10 +28,20 @@ exports.getEvolutionOptions = async (req, res) => {
         const parentToSearch = currentClassId || 99999;
         const optionsRes = await pool.query(optionsQuery, [parentToSearch]);
 
+        // --- NUEVO: BUSCAR LA QUEST DE EVOLUCIÓN CORRESPONDIENTE ---
+        // Busca la quest de tipo evolución más alta que el usuario pueda hacer por su nivel
+        const questRes = await pool.query(
+            "SELECT * FROM quests WHERE type = 'evolution' AND min_level <= $1 ORDER BY min_level DESC LIMIT 1", 
+            [player.level]
+        );
+        const questPreview = questRes.rows.length > 0 ? questRes.rows[0] : null;
+        // -----------------------------------------------------------
+
         res.json({
             available: true,
             currentTier: currentTier,
-            options: optionsRes.rows
+            options: optionsRes.rows,
+            questData: questPreview // <--- Enviamos esto al frontend
         });
 
     } catch (err) {

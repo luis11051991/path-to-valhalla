@@ -119,7 +119,7 @@ exports.getQuestStatus = async (req, res) => {
     }
 };
 
-// 2. ACEPTAR MISIÃ“N (Solo Diarias - Activa Cooldown Global)
+// 2. ACEPTAR MISIÓN (Solo Diarias - Activa Cooldown Global)
 exports.acceptQuest = async (req, res) => {
     const userId = req.user.id;
     const { questId } = req.body; 

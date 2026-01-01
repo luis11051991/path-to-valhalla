@@ -22,7 +22,8 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
             .then(data => {
                 if (data.available) {
                     setOptions(data.options);
-                    setStep(1); // Intro Odín
+                    setQuestPreview(data.questData); // <--- GUARDAR LA QUEST AQUÍ
+                    setStep(1); 
                 } else {
                     setError(data.message);
                 }
@@ -190,14 +191,14 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
             )}
 
             {/* STEP 4: PREVIEW DE QUEST (Imagen Ajustada) */}
-            {step === 4 && selectedOption && (
+            {/* STEP 4: PREVIEW DE QUEST (DINÁMICO) */}
+            {step === 4 && selectedOption && questPreview && (
                 <div className="h-full flex items-center justify-center animate-in slide-in-from-right duration-500 p-8">
                     <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 bg-slate-950 border-2 border-amber-600 rounded-xl overflow-hidden shadow-[0_0_100px_rgba(245,158,11,0.2)]">
                         
                         {/* Lado Izquierdo: Clase Elegida */}
                         <div className="relative h-64 md:h-auto bg-slate-900 flex items-center justify-center overflow-hidden">
                             <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-10"></div>
-                            {/* AJUSTE IMAGEN: object-center y escala normal (100) */}
                             <img 
                                 src={getClassImage(selectedOption.image_url)} 
                                 className="w-full h-full object-contain object-center scale-100 p-4" 
@@ -212,16 +213,16 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                             </div>
                         </div>
 
-                        {/* Lado Derecho: La Quest */}
+                        {/* Lado Derecho: La Quest (DATOS REALES) */}
                         <div className="p-10 flex flex-col justify-between bg-black/60 backdrop-blur-md relative">
                             <div>
                                 <h4 className="text-amber-500 font-bold text-xl uppercase tracking-widest mb-4 flex items-center gap-3 border-b border-amber-900/50 pb-2">
-                                    <Scroll size={24} /> Contrato de Sangre
+                                    <Scroll size={24} /> {questPreview.title}
                                 </h4>
                                 
                                 <div className="space-y-6">
                                     <p className="text-lg text-slate-200 font-serif italic leading-relaxed">
-                                        "Oh guerrero, no será tan fácil. Primero me tienes que traer las cabezas de mis enemigos para demostrar que mereces este poder."
+                                        "{questPreview.description}"
                                     </p>
                                     
                                     <div className="bg-slate-900/80 p-5 rounded border border-red-900/50 shadow-inner">
@@ -229,15 +230,12 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                                             <Skull size={14} /> Requisitos del Sacrificio
                                         </h5>
                                         <ul className="space-y-2">
-                                            <li className="flex justify-between text-sm text-slate-300 border-b border-white/5 pb-1">
-                                                <span>Lobo de Tundra</span> <span className="text-red-400 font-mono font-bold">x10</span>
-                                            </li>
-                                            <li className="flex justify-between text-sm text-slate-300 border-b border-white/5 pb-1">
-                                                <span>Rata Escarcha</span> <span className="text-red-400 font-mono font-bold">x10</span>
-                                            </li>
-                                            <li className="flex justify-between text-sm text-slate-300 border-b border-white/5 pb-1">
-                                                <span>Esqueleto Vikingo</span> <span className="text-red-400 font-mono font-bold">x1</span>
-                                            </li>
+                                            {/* MAPEO DINÁMICO DE REQUISITOS */}
+                                            {questPreview.requirements && questPreview.requirements.map((req, idx) => (
+                                                <li key={idx} className="flex justify-between text-sm text-slate-300 border-b border-white/5 pb-1">
+                                                    <span>{req.name}</span> <span className="text-red-400 font-mono font-bold">x{req.count}</span>
+                                                </li>
+                                            ))}
                                         </ul>
                                     </div>
                                 </div>

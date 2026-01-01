@@ -30,8 +30,46 @@ exports.getExpeditions = async (req, res) => {
 
 exports.getZoneEnemies = async (req, res) => {
     const { zoneId } = req.params;
+    const userId = req.user?.id;
+
     try {
-        const enemiesRes = await pool.query(`SELECT * FROM enemies WHERE zone_id = $1 AND is_hidden = false ORDER BY difficulty_tier ASC, min_level ASC`, [zoneId]);
+        // 1) Revisar quests activas para enemigos ocultos requeridos
+        const activeQuestsRes = await pool.query(`
+            SELECT pq.progress, q.requirements
+            FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.player_id = $1 AND pq.status = 'active'
+        `, [userId]);
+
+        const visibleHiddenIds = [];
+        for (const quest of activeQuestsRes.rows) {
+            const requirements = quest.requirements || [];
+            const progress = quest.progress || {};
+
+            for (const req of requirements) {
+                if (req?.type !== 'kill') continue;
+                const targetId = Number(req.target_id);
+                const requiredCount = Number(req.count || 0);
+                const currentCount = Number(progress[req.target_id] || 0);
+
+                if (Number.isFinite(targetId) && currentCount < requiredCount) {
+                    visibleHiddenIds.push(targetId);
+                }
+            }
+        }
+
+        // 2) Traer enemigos visibles + ocultos requeridos por quests
+        const enemiesRes = await pool.query(
+            `
+            SELECT *
+            FROM enemies
+            WHERE zone_id = $1
+              AND (is_hidden = false OR id = ANY($2))
+            ORDER BY difficulty_tier ASC, min_level ASC
+            `,
+            [zoneId, visibleHiddenIds]
+        );
+
         const enemies = enemiesRes.rows.map(e => ({
             ...e,
             computed_xp_reward: computeEnemyXp({ enemy: e, playerLevel: computeEnemyLevel(e), enemyLevel: computeEnemyLevel(e) })
