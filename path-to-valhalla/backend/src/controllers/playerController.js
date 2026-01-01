@@ -192,6 +192,7 @@ exports.getMySkills = async (req, res) => {
                    s.damage_min, s.damage_max, s.heal_amount, 
                    s.scaling_stat, s.scaling_factor,
                    s.price_gold as base_price,
+                   s.max_level,
                    s.trigger_chance
             FROM player_skills ps
             JOIN skills s ON ps.skill_id = s.id

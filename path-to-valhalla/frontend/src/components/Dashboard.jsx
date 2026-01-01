@@ -197,7 +197,13 @@ const Dashboard = ({ user, onUpdateUser }) => {
 
     const handleUpgradeSkill = async (e, skill) => {
         e.stopPropagation(); // Evitar que se equipe al hacer clic
-        
+
+        const maxLevel = skill.max_level || 10;
+        if ((skill.skill_level || 1) >= maxLevel) {
+            setErrorMsg("Esta habilidad ya está en su nivel máximo.");
+            return;
+        }
+
         const cost = calculateUpgradeCost(skill);
         const playerTotalCopper = (user.gold * 10000) + (user.silver * 100) + user.copper;
 
@@ -877,7 +883,9 @@ const Dashboard = ({ user, onUpdateUser }) => {
                     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">{mySkills.length === 0 ? (<div className="flex flex-col items-center justify-center h-48 text-slate-500"><img src="/icons/tabs/tab_grimoire.png" className="w-16 h-16 opacity-30 mb-4" /><p>No hay habilidades disponibles.</p></div>) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {mySkills.map((skill) => {
-                                const upgradeCost = calculateUpgradeCost(skill);
+                                const maxLevel = skill.max_level || 10;
+                                const isMax = (skill.skill_level || 1) >= maxLevel;
+                                const upgradeCost = isMax ? null : calculateUpgradeCost(skill);
                                 return (
                                     <div key={skill.player_skill_id} onClick={() => handleToggleEquip(skill.player_skill_id)} className={`relative group bg-slate-950 border rounded-xl overflow-hidden transition-all cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] ${skill.is_equipped ? 'border-purple-500 ring-1 ring-purple-500 bg-purple-900/10' : 'border-purple-900/30 hover:border-purple-500/60'}`}>
                                         <div className="flex p-4 gap-4">
@@ -901,13 +909,19 @@ const Dashboard = ({ user, onUpdateUser }) => {
                                             </div>
                                             
                                             {/* BOTÓN MEJORAR */}
-                                            <button 
-                                                onClick={(e) => handleUpgradeSkill(e, skill)}
-                                                className="px-2 py-1 bg-amber-700 hover:bg-amber-600 text-white rounded text-[10px] font-bold uppercase flex items-center gap-1 shadow-lg transition-transform active:scale-95 border border-amber-500"
-                                            >
-                                                <ArrowUpCircle size={12} /> 
-                                                {formatCurrency(upgradeCost)}
-                                            </button>
+                                            {isMax ? (
+                                                <div className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] font-bold uppercase flex items-center gap-1 border border-slate-600 cursor-default select-none">
+                                                    <Ban size={12} /> Max
+                                                </div>
+                                            ) : (
+                                                <button 
+                                                    onClick={(e) => handleUpgradeSkill(e, skill)}
+                                                    className="px-2 py-1 bg-amber-700 hover:bg-amber-600 text-white rounded text-[10px] font-bold uppercase flex items-center gap-1 shadow-lg transition-transform active:scale-95 border border-amber-500"
+                                                >
+                                                    <ArrowUpCircle size={12} /> 
+                                                    {formatCurrency(upgradeCost)}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 );
