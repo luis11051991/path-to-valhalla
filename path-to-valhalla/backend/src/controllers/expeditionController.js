@@ -40,7 +40,7 @@ exports.getZoneEnemies = async (req, res) => {
     } catch (err) { res.status(500).json({ message: 'Error cargando enemigos.' }); }
 };
 
-// --- MOTOR DE COMBATE (FUSIONADO: TU LÓGICA + SKILLS RNG) ---
+// --- MOTOR DE COMBATE ---
 exports.startBattle = async (req, res) => {
     const { userId, enemyId, zoneId } = req.body;
 
@@ -66,16 +66,14 @@ exports.startBattle = async (req, res) => {
         const totalStats = player.total_stats || player.stats || {};
         const totalStr = totalStats.strength || 0;
         const totalDex = totalStats.dexterity || 0;
-        const totalInt = totalStats.intelligence || 0; // Necesario para skills mágicos
+        const totalInt = totalStats.intelligence || 0; // Necesario para magia
         const totalCon = totalStats.constitution || 0;
         const totalArmor = (totalStats.armor || 0) + (totalStats.defense || 0);
         
-        // Daño de arma base
         const weaponMin = Math.max(0, totalStats.damage_min || 0);
         const weaponMax = Math.max(weaponMin, totalStats.damage_max || weaponMin);
 
-        // --- NUEVO: CARGAR SKILLS EQUIPADOS ---
-        // Traemos el % chance, nivel y stats del skill
+        // --- CARGAR SKILLS EQUIPADOS (NUEVO) ---
         const skillsQuery = `
             SELECT ps.skill_level, s.name, s.damage_min, s.damage_max, s.heal_amount, 
                    s.trigger_chance, s.scaling_stat, s.scaling_factor
@@ -93,7 +91,6 @@ exports.startBattle = async (req, res) => {
 
         const initialPlayerHp = player.current_hp;
         const enemyDamageRng = seededRandom(`${userId}-${baseEnemy.id}-${zoneId}-dmg`);
-        
         const enemy = {
             max_hp: enemyInstance.hp_max || enemyInstance.hp,
             current_hp: enemyInstance.hp_current || enemyInstance.hp,
@@ -110,38 +107,34 @@ exports.startBattle = async (req, res) => {
         let log = [];
         let isWin = false;
 
-        // --- BUCLE DE COMBATE ---
         for (let r = 1; r <= 10; r++) {
             log.push({ type: 'round', msg: `--- RONDA ${r} ---` });
 
-            // 1. TURNO DEL JUGADOR
-            let dmgToEnemy = 0;
-            let skillTriggered = null;
-            let skillDamage = 0;
-            let skillHeal = 0;
-
-            // Calcular Daño Base (Arma + Stats Físicos)
+            // --- 1. TURNO DEL JUGADOR (MODIFICADO) ---
             const weaponDmg = weaponMax > weaponMin ? Math.floor(Math.random() * (weaponMax - weaponMin + 1)) + weaponMin : weaponMin;
             const statDmg = Math.floor(Math.max(totalStr, totalDex) * 2);
             const baseTotalDmg = weaponDmg + statDmg;
 
-            // A. Intentar activar SKILL
-            for (const skill of equippedSkills) {
-                // Chance Base + (Inteligencia * 0.5)%, Tope 60%
-                const chance = Math.min(60, (skill.trigger_chance || 15) + (totalInt * 0.5));
-                const roll = Math.random() * 100;
+            let skillTriggered = null;
+            let skillDamage = 0;
+            let skillHeal = 0;
 
-                if (roll <= chance) {
+            // Intentar activar Skill
+            for (const skill of equippedSkills) {
+                // Probabilidad: Base + (Inteligencia * 0.5)% - Tope 60%
+                const chance = Math.min(60, (skill.trigger_chance || 15) + (totalInt * 0.5));
+                
+                if (Math.random() * 100 <= chance) {
                     skillTriggered = skill;
                     
-                    // Cálculo de poder del skill (Nivel + Escalado)
+                    // Calcular Poder (Nivel + Escalado)
                     const lvlMult = 1 + ((skill.skill_level - 1) * 0.1); // +10% por nivel
                     
                     if (skill.damage_min > 0) {
                         const baseSkillDmg = Math.floor(Math.random() * (skill.damage_max - skill.damage_min + 1)) + skill.damage_min;
                         skillDamage = Math.floor(baseSkillDmg * lvlMult);
                         
-                        // Escalado por Atributo
+                        // Bonos por stats
                         if (skill.scaling_stat === 'intelligence') skillDamage += Math.floor(totalInt * (skill.scaling_factor || 1));
                         if (skill.scaling_stat === 'strength') skillDamage += Math.floor(totalStr * (skill.scaling_factor || 1));
                         if (skill.scaling_stat === 'dexterity') skillDamage += Math.floor(totalDex * (skill.scaling_factor || 1));
@@ -150,33 +143,28 @@ exports.startBattle = async (req, res) => {
                     if (skill.heal_amount > 0) {
                         skillHeal = Math.floor(skill.heal_amount * lvlMult + (totalInt * 0.5));
                     }
-                    
                     break; // Solo 1 skill por turno
                 }
             }
 
-            // B. Calcular Daño Final al Enemigo
-            // Si salió skill, sumamos su daño al base. Si no, solo base.
-            let totalRawDamage = baseTotalDmg + skillDamage;
-            dmgToEnemy = Math.max(1, totalRawDamage - Math.floor((enemy.armor || 0) / 5));
+            // Aplicar Daño
+            let finalDmgToEnemy = Math.max(1, (baseTotalDmg + skillDamage) - Math.floor((enemy.armor || 0) / 5));
+            enemy.current_hp -= finalDmgToEnemy;
 
-            // C. Aplicar Daños y Curas
-            enemy.current_hp -= dmgToEnemy;
-            if (skillHeal > 0) {
-                player.current_hp = Math.min(playerMaxHp, player.current_hp + skillHeal);
-            }
-
-            // D. Loggear
+            // Logs
             if (skillTriggered) {
                 log.push({ 
                     type: 'player_atk', 
-                    msg: `¡Usas ${skillTriggered.name}! (Daño: ${dmgToEnemy})`, 
+                    msg: `¡Usas ${skillTriggered.name}! (Daño: ${finalDmgToEnemy})`, 
                     isSkill: true,
                     enemyHp: Math.max(0, enemy.current_hp) 
                 });
-                if (skillHeal > 0) log.push({ type: 'info', msg: `Te curas ${skillHeal} HP.` });
+                if (skillHeal > 0) {
+                    player.current_hp = Math.min(playerMaxHp, player.current_hp + skillHeal);
+                    log.push({ type: 'info', msg: `Te curas ${skillHeal} HP.` });
+                }
             } else {
-                log.push({ type: 'player_atk', msg: `Golpeas por ${dmgToEnemy}`, enemyHp: Math.max(0, enemy.current_hp) });
+                log.push({ type: 'player_atk', msg: `Golpeas por ${finalDmgToEnemy}`, enemyHp: Math.max(0, enemy.current_hp) });
             }
 
             if (enemy.current_hp <= 0) {
@@ -185,7 +173,7 @@ exports.startBattle = async (req, res) => {
                 break;
             }
 
-            // 2. TURNO DEL ENEMIGO (Tu lógica original)
+            // --- 2. TURNO DEL ENEMIGO (TU LÓGICA INTACTA) ---
             const enemyAttack = randomInt(enemy.damage_min, enemy.damage_max, enemyDamageRng);
             let dmgToPlayer = Math.max(1, enemyAttack - Math.floor((totalArmor + totalCon / 2) / 5));
             player.current_hp -= dmgToPlayer;
@@ -199,7 +187,7 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- ACTUALIZACIÓN DE MISIONES (TU LÓGICA) ---
+        // --- MISIONES (TU LÓGICA INTACTA) ---
         let questLogs = [];
         if (isWin) {
             const activeQuestsRes = await client.query(`
@@ -231,7 +219,7 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- RECOMPENSAS (TU LÓGICA) ---
+        // --- RECOMPENSAS (TU LÓGICA INTACTA) ---
         let rewards = { xp: 0, copper: 0, items: [] };
         let finalGold = parseInt(player.gold || 0);
         let finalSilver = parseInt(player.silver || 0);
@@ -243,8 +231,9 @@ exports.startBattle = async (req, res) => {
 
         if (isWin) {
             const baseXp = baseEnemy.xp_reward ?? computeEnemyXp({ enemy: { ...baseEnemy, is_elite_minor: enemyInstance.is_elite_minor }, playerLevel: currentLevel, enemyLevel: enemyInstance.level });
-            rewards.xp = baseXp;
-            currentXp += baseXp;
+            const xpGain = baseXp;
+            rewards.xp = xpGain;
+            currentXp += xpGain;
 
             while (true) {
                 const xpNeeded = getRequiredXp(currentLevel);
@@ -263,7 +252,7 @@ exports.startBattle = async (req, res) => {
             let copperGain = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
             if (enemyInstance.is_elite_minor) {
                 copperGain = Math.round(copperGain * 1.15);
-                if (Math.random() <= 0.02) copperGain += 100;
+                if (Math.random() <= 0.02) copperGain += 100; // bonus silver
             }
             rewards.copper = copperGain;
 

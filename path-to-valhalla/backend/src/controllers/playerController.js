@@ -166,38 +166,33 @@ exports.rentBag = async (req, res) => {
 // --- GESTIÓN DE HABILIDADES (MEJORADO) ---
 exports.getMySkills = async (req, res) => {
     const userId = req.user.id; 
-
     try {
         const playerRes = await pool.query('SELECT class_id FROM players WHERE id = $1', [userId]);
         if (playerRes.rows.length === 0) return res.status(404).json({ message: 'Jugador no encontrado' });
         
         const classId = playerRes.rows[0].class_id;
 
-        // --- CORRECCIÓN: SISTEMA ACUMULATIVO ---
-        // Verificar si hay habilidades NUEVAS de la clase actual que el jugador NO tenga
+        // Auto-aprender skills de la clase si no los tiene (ACUMULATIVO)
         if (classId) {
             const availableSkills = await pool.query('SELECT id FROM skills WHERE class_id = $1', [classId]);
-            
             for (let skill of availableSkills.rows) {
-                // "Insertar si no existe". Usamos WHERE NOT EXISTS para evitar duplicados sin borrar los viejos.
                 await pool.query(`
                     INSERT INTO player_skills (player_id, skill_id, is_equipped, skill_level)
                     SELECT $1, $2, false, 1
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM player_skills WHERE player_id = $1 AND skill_id = $2
-                    )
+                    WHERE NOT EXISTS (SELECT 1 FROM player_skills WHERE player_id = $1 AND skill_id = $2)
                 `, [userId, skill.id]);
             }
         }
-        // ------------------------------------------
 
-        // Obtener TODAS las habilidades (Viejas + Nuevas)
+        // QUERY ACTUALIZADA: Trae precio base, chance, scaling, etc.
         const mySkillsQuery = `
             SELECT ps.id as player_skill_id, ps.is_equipped, ps.skill_level,
                    s.name, s.description, s.icon, s.image_url, 
                    s.energy_cost, s.cooldown_seconds, 
                    s.damage_min, s.damage_max, s.heal_amount, 
-                   s.scaling_stat, s.scaling_factor
+                   s.scaling_stat, s.scaling_factor,
+                   s.price_gold as base_price,
+                   s.trigger_chance
             FROM player_skills ps
             JOIN skills s ON ps.skill_id = s.id
             WHERE ps.player_id = $1
@@ -217,11 +212,9 @@ exports.getMySkills = async (req, res) => {
 exports.equipSkill = async (req, res) => {
     const userId = req.user.id;
     const { skillId } = req.body; 
-
     try {
         const playerRes = await pool.query('SELECT level FROM players WHERE id = $1', [userId]);
         if (playerRes.rows.length === 0) return res.status(404).json({ message: 'Jugador no encontrado' });
-        
         const level = playerRes.rows[0].level;
 
         let maxSlots = 2; 
@@ -229,37 +222,29 @@ exports.equipSkill = async (req, res) => {
         else if (level >= 50) maxSlots = 4;
         else if (level >= 10) maxSlots = 3;
 
-        const skillCheck = await pool.query(
-            'SELECT is_equipped FROM player_skills WHERE id = $1 AND player_id = $2',
-            [skillId, userId]
-        );
-
+        // Comprobar estado actual
+        const skillCheck = await pool.query('SELECT is_equipped FROM player_skills WHERE id = $1 AND player_id = $2', [skillId, userId]);
         if (skillCheck.rows.length === 0) return res.status(400).json({ message: 'Habilidad no encontrada.' });
 
         const isCurrentlyEquipped = skillCheck.rows[0].is_equipped;
 
         if (isCurrentlyEquipped) {
-            await pool.query('UPDATE player_skills SET is_equipped = false WHERE id = $1', [skillId]);
+            // Desequipar
+            await pool.query('UPDATE player_skills SET is_equipped = false, slot_index = 0 WHERE id = $1', [skillId]);
             res.json({ success: true, message: 'Habilidad desequipada.' });
         } else {
-            const equippedCountRes = await pool.query(
-                'SELECT COUNT(*) FROM player_skills WHERE player_id = $1 AND is_equipped = true',
-                [userId]
-            );
+            // Equipar: Verificar espacio
+            const equippedCountRes = await pool.query('SELECT COUNT(*) FROM player_skills WHERE player_id = $1 AND is_equipped = true', [userId]);
             const equippedCount = parseInt(equippedCountRes.rows[0].count);
 
             if (equippedCount >= maxSlots) {
-                return res.status(400).json({ 
-                    message: `¡Ranuras llenas! Tienes ${maxSlots} espacios disponibles (Nivel ${level}).` 
-                });
+                return res.status(400).json({ message: `¡Ranuras llenas! Tienes ${maxSlots} espacios disponibles (Nivel ${level}).` });
             }
 
-            await pool.query('UPDATE player_skills SET is_equipped = true WHERE id = $1', [skillId]);
+            // Asignar slot
+            const nextSlot = equippedCount + 1;
+            await pool.query('UPDATE player_skills SET is_equipped = true, slot_index = $1 WHERE id = $2', [nextSlot, skillId]);
             res.json({ success: true, message: 'Habilidad equipada.' });
         }
-
-    } catch (err) {
-        console.error("Error al equipar skill:", err);
-        res.status(500).json({ message: 'Error del servidor.' });
-    }
+    } catch (err) { console.error("Error al equipar skill:", err); res.status(500).json({ message: 'Error del servidor.' }); }
 };

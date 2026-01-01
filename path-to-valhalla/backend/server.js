@@ -7,6 +7,7 @@ const playerController = require('./src/controllers/playerController');
 const bgController = require('./src/controllers/backgroundController'); 
 const inventoryController = require('./src/controllers/inventoryController');
 const petController = require('./src/controllers/petController');
+const skillController = require('./src/controllers/skillController');
 
 // --- IMPORTACIÓN DE MIDDLEWARES ---
 const authMiddleware = require('./src/middleware/authMiddleware'); 
@@ -47,6 +48,7 @@ app.post('/api/rent-bag', playerController.rentBag);
 // ---> RUTAS DE HABILIDADES <---
 app.get('/api/my-skills', authMiddleware, playerController.getMySkills);
 app.post('/api/equip-skill', authMiddleware, playerController.equipSkill);
+app.post('/api/skills/upgrade', authMiddleware, skillController.upgradeSkill);
 
 // ---> RUTAS DE MASCOTAS <---
 app.get('/api/my-pets', authMiddleware, petController.getMyPets);

@@ -2,7 +2,7 @@
 import {
     Maximize2, X, Lock, Gem,
     ScrollText, Image as ImageIcon, AlertTriangle, Ban, Clock, Plus,
-    CheckCircle, ArrowRight,
+    CheckCircle, ArrowRight, ArrowUpCircle,
     // --- ICONOS DE UTILIDAD (Lucide) ---
     PawPrint, Heart, Zap 
 } from 'lucide-react'; 
@@ -185,6 +185,45 @@ const Dashboard = ({ user, onUpdateUser }) => {
         };
         if (item.icon && iconMap[item.icon]) return iconMap[item.icon];
         return [];
+    };
+
+    // --- LOGICA DE MEJORA DE SKILL (NUEVA) ---
+    const calculateUpgradeCost = (skill) => {
+        const base = skill.base_price || 100;
+        const lvl = skill.skill_level || 1;
+        // Fórmula Exponencial: Base * 1.3^(Nivel-1)
+        return Math.floor(base * Math.pow(1.3, lvl - 1));
+    };
+
+    const handleUpgradeSkill = async (e, skill) => {
+        e.stopPropagation(); // Evitar que se equipe al hacer clic
+        
+        const cost = calculateUpgradeCost(skill);
+        const playerTotalCopper = (user.gold * 10000) + (user.silver * 100) + user.copper;
+
+        if (playerTotalCopper < cost) {
+            setErrorMsg("No tienes suficiente dinero para mejorar esta habilidad.");
+            return;
+        }
+
+        try {
+            const res = await fetch(apiUrl('/api/skills/upgrade'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ playerSkillId: skill.player_skill_id })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                onUpdateUser({ ...user, ...data.newFunds });
+                fetchSkills();
+            } else {
+                setErrorMsg(data.message);
+            }
+        } catch (error) {
+            console.error(error);
+            setErrorMsg("Error al mejorar habilidad.");
+        }
     };
 
     // --- ACCIONES ---
@@ -632,7 +671,7 @@ const Dashboard = ({ user, onUpdateUser }) => {
                                 {evolutionStatus === 'in_progress' ? (
                                     <><ScrollText size={16} /> Misión en Progreso</>
                                 ) : (
-                                    <><Sparkles size={16} className="animate-spin-slow" /> ¡Evolución Disponible!</>
+                                    <><Zap size={16} className="animate-spin-slow" /> ¡Evolución Disponible!</>
                                 )}
                             </button>
                         )}
@@ -803,51 +842,31 @@ const Dashboard = ({ user, onUpdateUser }) => {
                 </div>
             )}
 
-            {/* VISTA: GRIMORIO */}
+            {/* VISTA: GRIMORIO ACTUALIZADO (NIVEL, PRECIO, MEJORA) */}
             {activeTab === 'skills' && (
                 <div className="relative z-10 w-full h-[700px] bg-slate-900/80 backdrop-blur-md border border-purple-500/30 rounded-lg p-6 animate-in fade-in duration-300 flex flex-col">
                     <div className="mb-8 p-4 bg-black/40 border border-purple-900/50 rounded-lg">
                         <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-purple-300 uppercase tracking-widest">Barra de Batalla (Slots)</h3><span className="text-xs text-slate-500">{equippedSkills.length} / {unlockedSlots} Equipados</span></div>
                         <div className="flex gap-4 justify-center">
-                            {[...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => {
-                                const isUnlocked = i < unlockedSlots;
-                                const skill = equippedSkills[i];
-                                const requiredLvl = i === 2 ? 10 : i === 3 ? 50 : 100;
-
+                            {[...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => { 
+                                const isUnlocked = i < unlockedSlots; 
+                                const skill = equippedSkills[i]; 
                                 return (
-                                    <div key={i} className="flex flex-col items-center gap-1">
-                                        <div
-                                            className={`w-[4.5rem] h-[4.5rem] rounded-lg border-2 flex items-center justify-center relative transition-all ${
-                                                !isUnlocked
-                                                    ? 'bg-slate-950 border-slate-800 opacity-80'
-                                                    : skill
-                                                        ? 'bg-black border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105'
-                                                        : 'bg-black/50 border-slate-700'
-                                            }`}
-                                            onClick={() => skill && handleToggleEquip(skill.player_skill_id)}
-                                        >
-                                            {!isUnlocked ? (
-                                                <img
-                                                    src="/icons/ui/slot_locked.png"
-                                                    alt="Slot bloqueado"
-                                                    className="w-14 h-14 object-contain opacity-90"
-                                                />
-                                            ) : skill ? (
-                                                <img
-                                                    src={skill.image_url}
-                                                    className="w-full h-full object-cover rounded"
-                                                    title="Click para quitar"
-                                                />
-                                            ) : (
-                                                <img
-                                                    src="/icons/ui/slot_empty.png"
-                                                    alt="Slot vacío"
-                                                    className="w-14 h-14 object-contain opacity-90"
-                                                />
-                                            )}
-                                        </div>
-                                        {!isUnlocked && (
-                                            <span className="text-[10px] text-slate-500">LVL {requiredLvl}</span>
+                                    <div 
+                                        key={i} 
+                                        className={`w-16 h-16 rounded-lg border-2 flex items-center justify-center relative transition-all overflow-hidden
+                                        ${!isUnlocked ? 'border-slate-800' : skill ? 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105' : 'border-slate-700'}`} 
+                                        onClick={() => skill && handleToggleEquip(skill.player_skill_id)}
+                                    >
+                                        {!isUnlocked ? (
+                                            <>
+                                                <img src="/icons/ui/slot_locked.png" className="w-full h-full object-cover opacity-60" alt="Bloqueado" />
+                                                <span className="absolute bottom-1 text-[9px] text-white font-bold bg-black/60 px-1 rounded">LVL {i === 2 ? 10 : i === 3 ? 50 : 100}</span>
+                                            </>
+                                        ) : skill ? (
+                                            <img src={skill.image_url} className="w-full h-full object-cover" title="Click para quitar" alt={skill.name} />
+                                        ) : (
+                                            <img src="/icons/ui/slot_empty.png" className="w-full h-full object-cover opacity-80" alt="Vacío" />
                                         )}
                                     </div>
                                 );
@@ -855,14 +874,53 @@ const Dashboard = ({ user, onUpdateUser }) => {
                         </div>
                     </div>
                     <h2 className="text-2xl font-serif text-purple-400 mb-6 flex items-center gap-3"><img src="/icons/tabs/tab_grimoire.png" className="w-8 h-8" /> Grimorio de Poderes</h2>
-                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">{mySkills.length === 0 ? (<div className="flex flex-col items-center justify-center h-48 text-slate-500"><img src="/icons/tabs/tab_grimoire.png" className="w-16 h-16 opacity-30 mb-4" /><p>No hay habilidades disponibles.</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{mySkills.map((skill) => (<div key={skill.player_skill_id} onClick={() => handleToggleEquip(skill.player_skill_id)} className={`relative group bg-slate-950 border rounded-xl overflow-hidden transition-all cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] ${skill.is_equipped ? 'border-purple-500 ring-1 ring-purple-500 bg-purple-900/10' : 'border-purple-900/30 hover:border-purple-500/60'}`}><div className="flex p-4 gap-4"><div className={`w-16 h-16 rounded-lg bg-black border shrink-0 overflow-hidden relative ${skill.is_equipped ? 'border-purple-400' : 'border-purple-500/30'}`}>{skill.image_url ? (<img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-purple-500"><Zap /></div>)}{skill.is_equipped && (<div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center backdrop-blur-[1px]"><span className="text-[10px] font-bold text-white bg-purple-600 px-1 rounded">EQUIPADO</span></div>)}</div><div><h3 className={`text-lg font-bold transition-colors ${skill.is_equipped ? 'text-purple-300' : 'text-slate-300 group-hover:text-white'}`}>{skill.name}</h3><p className="text-xs text-slate-400 mt-1 line-clamp-2">{skill.description}</p></div></div><div className="bg-black/40 px-4 py-2 flex justify-between text-xs border-t border-purple-900/30"><div className="text-blue-400 font-mono">MP: {skill.energy_cost}</div>{skill.damage_min > 0 && (<div className="text-red-400 font-bold">DMG: {skill.damage_min}</div>)}{skill.heal_amount > 0 && (<div className="text-green-400 font-bold">HEAL: {skill.heal_amount}</div>)}</div></div>))}</div>)}</div>
+                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">{mySkills.length === 0 ? (<div className="flex flex-col items-center justify-center h-48 text-slate-500"><img src="/icons/tabs/tab_grimoire.png" className="w-16 h-16 opacity-30 mb-4" /><p>No hay habilidades disponibles.</p></div>) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {mySkills.map((skill) => {
+                                const upgradeCost = calculateUpgradeCost(skill);
+                                return (
+                                    <div key={skill.player_skill_id} onClick={() => handleToggleEquip(skill.player_skill_id)} className={`relative group bg-slate-950 border rounded-xl overflow-hidden transition-all cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] ${skill.is_equipped ? 'border-purple-500 ring-1 ring-purple-500 bg-purple-900/10' : 'border-purple-900/30 hover:border-purple-500/60'}`}>
+                                        <div className="flex p-4 gap-4">
+                                            <div className={`w-16 h-16 rounded-lg bg-black border shrink-0 overflow-hidden relative ${skill.is_equipped ? 'border-purple-400' : 'border-purple-500/30'}`}>
+                                                {skill.image_url ? (<img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-purple-500"><Zap /></div>)}
+                                                {skill.is_equipped && (<div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center backdrop-blur-[1px]"><span className="text-[10px] font-bold text-white bg-purple-600 px-1 rounded">EQUIPADO</span></div>)}
+                                                <div className="absolute bottom-0 right-0 bg-black/80 text-[10px] text-white px-1 font-bold border-tl border-purple-500/50">Lvl {skill.skill_level}</div>
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className={`text-lg font-bold transition-colors ${skill.is_equipped ? 'text-purple-300' : 'text-slate-300 group-hover:text-white'}`}>{skill.name}</h3>
+                                                <div className="text-[10px] text-yellow-500 flex items-center gap-1 mb-1">Chance: {(skill.trigger_chance || 15)}%</div>
+                                                <p className="text-xs text-slate-400 line-clamp-2">{skill.description}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* BARRA INFERIOR DE STATS Y MEJORA */}
+                                        <div className="bg-black/40 px-4 py-2 flex justify-between items-center text-xs border-t border-purple-900/30">
+                                            <div className="flex gap-3">
+                                                <div className="text-blue-400 font-mono">MP: {skill.energy_cost}</div>
+                                                {skill.damage_min > 0 && (<div className="text-red-400 font-bold">DMG: {Math.floor(skill.damage_min * (1 + (skill.skill_level-1)*0.1))}</div>)}
+                                            </div>
+                                            
+                                            {/* BOTÓN MEJORAR */}
+                                            <button 
+                                                onClick={(e) => handleUpgradeSkill(e, skill)}
+                                                className="px-2 py-1 bg-amber-700 hover:bg-amber-600 text-white rounded text-[10px] font-bold uppercase flex items-center gap-1 shadow-lg transition-transform active:scale-95 border border-amber-500"
+                                            >
+                                                <ArrowUpCircle size={12} /> 
+                                                {formatCurrency(upgradeCost)}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}</div>
                 </div>
             )}
 
-            {/* MODALES */}
-            {showAvatarModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => setShowAvatarModal(false)}> <div className="relative w-full max-w-4xl flex flex-col gap-4" onClick={e => e.stopPropagation()}> <div className="relative w-full h-[60vh] bg-black/50 rounded-lg overflow-hidden border-2 border-amber-600 shadow-2xl flex items-center justify-center"> <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-60 transition-opacity duration-500" /> <img src={getAvatarImage()} className="relative z-10 max-h-full w-auto object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.9)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} /> <button onClick={() => setShowAvatarModal(false)} className="absolute top-4 right-4 p-2 bg-black/60 text-slate-200 hover:text-white hover:bg-red-600/80 rounded-full z-50 border border-white/10 transition-colors"><X size={24} /></button> </div> <div className="w-full bg-slate-900/90 border-2 border-slate-700 rounded-lg p-4 backdrop-blur-sm"> <h3 className="text-amber-500 font-bold text-sm mb-3 uppercase tracking-wider flex items-center gap-2"><ImageIcon size={16} /> ColecciÃ³n de Fondos</h3> <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-amber-900 scrollbar-track-slate-800"> {backgroundsList.map(bg => (<div key={bg.id} className="relative group shrink-0 w-32 cursor-pointer" onClick={() => bg.owned && handleEquipBg(bg.id)}> <div className={`h-20 rounded-md overflow-hidden border-2 transition-all relative ${currentBgUrl === bg.image_url ? 'border-amber-500 shadow-[0_0_10px_#f59e0b]' : 'border-slate-600 opacity-70 group-hover:opacity-100 group-hover:border-slate-400'}`}> <img src={bg.image_url} className="w-full h-full object-cover" /> {!bg.owned && <div className="absolute inset-0 bg-black/70 flex items-center justify-center"><Lock size={20} className="text-slate-400" /></div>} </div> <div className="mt-1 text-center"> {bg.owned ? <span className={`text-[10px] font-bold ${currentBgUrl === bg.image_url ? 'text-green-400' : 'text-slate-400'}`}>{currentBgUrl === bg.image_url ? 'Equipado' : 'Equipar'}</span> : <button onClick={(e) => { e.stopPropagation(); handleBuyBgClick(bg.id, bg.price_onyx); }} className="w-full text-[10px] bg-purple-700 hover:bg-purple-600 text-white rounded px-1 py-0.5 flex items-center justify-center gap-1"><Gem size={8} /> {bg.price_onyx}</button>} </div> </div>))} </div> </div> </div> </div>)}
+            {/* MODALES, ERRORES, ETC (IGUAL QUE ANTES) */}
+            {showAvatarModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => setShowAvatarModal(false)}> <div className="relative w-full max-w-4xl flex flex-col gap-4" onClick={e => e.stopPropagation()}> <div className="relative w-full h-[60vh] bg-black/50 rounded-lg overflow-hidden border-2 border-amber-600 shadow-2xl flex items-center justify-center"> <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-60 transition-opacity duration-500" /> <img src={getAvatarImage()} className="relative z-10 max-h-full w-auto object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.9)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} /> <button onClick={() => setShowAvatarModal(false)} className="absolute top-4 right-4 p-2 bg-black/60 text-slate-200 hover:text-white hover:bg-red-600/80 rounded-full z-50 border border-white/10 transition-colors"><X size={24} /></button> </div> <div className="w-full bg-slate-900/90 border-2 border-slate-700 rounded-lg p-4 backdrop-blur-sm"> <h3 className="text-amber-500 font-bold text-sm mb-3 uppercase tracking-wider flex items-center gap-2"><ImageIcon size={16} /> Colección de Fondos</h3> <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-amber-900 scrollbar-track-slate-800"> {backgroundsList.map(bg => (<div key={bg.id} className="relative group shrink-0 w-32 cursor-pointer" onClick={() => bg.owned && handleEquipBg(bg.id)}> <div className={`h-20 rounded-md overflow-hidden border-2 transition-all relative ${currentBgUrl === bg.image_url ? 'border-amber-500 shadow-[0_0_10px_#f59e0b]' : 'border-slate-600 opacity-70 group-hover:opacity-100 group-hover:border-slate-400'}`}> <img src={bg.image_url} className="w-full h-full object-cover" /> {!bg.owned && <div className="absolute inset-0 bg-black/70 flex items-center justify-center"><Lock size={20} className="text-slate-400" /></div>} </div> <div className="mt-1 text-center"> {bg.owned ? <span className={`text-[10px] font-bold ${currentBgUrl === bg.image_url ? 'text-green-400' : 'text-slate-400'}`}>{currentBgUrl === bg.image_url ? 'Equipado' : 'Equipar'}</span> : <button onClick={(e) => { e.stopPropagation(); handleBuyBgClick(bg.id, bg.price_onyx); }} className="w-full text-[10px] bg-purple-700 hover:bg-purple-600 text-white rounded px-1 py-0.5 flex items-center justify-center gap-1"><Gem size={8} /> {bg.price_onyx}</button>} </div> </div>))} </div> </div> </div> </div>)}
             {pendingPurchase && (<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in"><div className="bg-slate-900 border-2 border-amber-600 rounded-lg p-6 max-w-sm w-full shadow-[0_0_50px_rgba(245,158,11,0.2)] transform scale-100 flex flex-col items-center"><AlertTriangle className="text-amber-500 mb-4 h-10 w-10" /><h3 className="text-xl font-serif font-bold text-amber-500 mb-2 text-center uppercase tracking-widest">Confirmar Compra</h3><p className="text-slate-300 text-center text-sm mb-6 leading-relaxed">¿Deseas confirmar la transacción por <br /><span className="font-bold text-purple-400 text-lg">{pendingPurchase.price} Ónix</span>?<br /><span className="text-xs text-slate-500 mt-2 block">{pendingPurchase.name}</span></p><div className="flex justify-center gap-4 w-full"><button onClick={() => setPendingPurchase(null)} className="flex-1 py-2 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors text-sm font-bold uppercase">Cancelar</button><button onClick={executePurchase} className="flex-1 py-2 rounded bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white shadow-lg transition-all text-sm font-bold uppercase">Confirmar</button></div></div></div>)}
-            {errorMsg && (<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in"><div className="bg-slate-900 border-2 border-red-600 rounded-lg p-6 max-w-sm w-full shadow-[0_0_50px_rgba(220,38,38,0.3)] flex flex-col items-center"><Ban className="text-red-500 mb-4 h-10 w-10" /><h3 className="text-xl font-serif font-bold text-red-500 mb-2 text-center uppercase tracking-widest">AcciÃ³n InvÃ¡lida</h3><p className="text-slate-300 text-center text-sm mb-6 leading-relaxed">{errorMsg}</p><button onClick={() => setErrorMsg(null)} className="w-full py-2 rounded bg-red-700 hover:bg-red-600 text-white shadow-lg transition-all text-sm font-bold uppercase">Entendido</button></div></div>)}
+            {errorMsg && (<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in"><div className="bg-slate-900 border-2 border-red-600 rounded-lg p-6 max-w-sm w-full shadow-[0_0_50px_rgba(220,38,38,0.3)] flex flex-col items-center"><Ban className="text-red-500 mb-4 h-10 w-10" /><h3 className="text-xl font-serif font-bold text-red-500 mb-2 text-center uppercase tracking-widest">Acción Inválida</h3><p className="text-slate-300 text-center text-sm mb-6 leading-relaxed">{errorMsg}</p><button onClick={() => setErrorMsg(null)} className="w-full py-2 rounded bg-red-700 hover:bg-red-600 text-white shadow-lg transition-all text-sm font-bold uppercase">Entendido</button></div></div>)}
             
             {showEvolutionModal && (
                 <EvolutionModal 
@@ -878,13 +936,9 @@ const Dashboard = ({ user, onUpdateUser }) => {
                 />
             )}
             
-            {showPetModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowPetModal(false)}><div className="relative w-full max-w-4xl h-[70vh] bg-slate-950 border-2 border-amber-600 rounded-xl flex overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]" onClick={e => e.stopPropagation()}><div className="w-1/3 border-r border-slate-800 bg-black/40 flex flex-col"><h3 className="p-4 text-amber-500 font-serif font-bold uppercase tracking-widest border-b border-slate-800 flex items-center gap-2"><PawPrint size={18} /> Establo</h3><div className="flex-1 overflow-y-auto p-2 space-y-2">{myPets.length === 0 ? (<div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aÃºn.</div>) : (myPets.map(pet => (<div key={pet.player_pet_id} onClick={() => setActivePet(pet)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}><img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" /><div><div className="text-sm text-slate-200 font-bold">{pet.name}</div><div className="text-[10px] text-slate-500">Nivel {pet.tier}</div></div>{pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}</div>)))}</div></div><div className="w-2/3 relative flex flex-col bg-slate-950"><button onClick={() => setShowPetModal(false)} className="absolute top-4 right-4 text-white z-50 p-2 bg-black/50 rounded-full hover:bg-red-600"><X /></button>{activePet ? (<><div className="flex-1 relative w-full bg-black overflow-hidden flex items-center justify-center"><div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div><img src={activePet.image_url} className="h-full w-full object-contain p-0 animate-in zoom-in duration-500 z-10" /><div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 to-transparent z-20"></div><div className="absolute bottom-4 left-0 right-0 text-center z-30"><h2 className="text-4xl font-serif text-amber-400 drop-shadow-md mb-1">{activePet.name}</h2><p className="text-slate-300 text-sm max-w-lg mx-auto italic drop-shadow-md">"{activePet.description}"</p></div></div><div className="h-48 bg-slate-900 border-t-4 border-amber-900 p-4 flex gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-40"><div className="w-1/2 space-y-2"><h4 className="text-amber-500 text-xs uppercase tracking-widest font-bold border-b border-slate-700 pb-1 mb-2">Bonificaciones Activas</h4><div className="grid grid-cols-2 gap-2">{Object.entries(activePet.bonus_stats || {}).map(([key, val]) => (<div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between"><span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span></div>))}</div></div><div className="w-1/2 flex flex-col justify-between"><div><div className="flex justify-between text-xs text-slate-300 mb-1 font-bold"><span>Nivel de Saciedad</span><span className={activePet.current_hunger < 30 ? "text-red-500" : "text-green-500"}>{activePet.current_hunger}%</span></div><div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700"><div className={`h-full transition-all ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div></div></div><div className="flex gap-2 mt-2">{activePet.is_active ? (<div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div>) : (<button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>)}<button onClick={() => handleFeedPet(activePet.player_pet_id)} className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase rounded border border-slate-600 transition-colors flex flex-col items-center justify-center gap-1" title={getFeedCostText(activePet.tier)}><Heart size={14} className="text-red-500" /> Comer</button></div></div></div></>) : (<div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>)}</div></div></div>)}
+            {showPetModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowPetModal(false)}><div className="relative w-full max-w-4xl h-[70vh] bg-slate-950 border-2 border-amber-600 rounded-xl flex overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]" onClick={e => e.stopPropagation()}><div className="w-1/3 border-r border-slate-800 bg-black/40 flex flex-col"><h3 className="p-4 text-amber-500 font-serif font-bold uppercase tracking-widest border-b border-slate-800 flex items-center gap-2"><PawPrint size={18} /> Establo</h3><div className="flex-1 overflow-y-auto p-2 space-y-2">{myPets.length === 0 ? (<div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aún.</div>) : (myPets.map(pet => (<div key={pet.player_pet_id} onClick={() => setActivePet(pet)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}><img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" /><div><div className="text-sm text-slate-200 font-bold">{pet.name}</div><div className="text-[10px] text-slate-500">Nivel {pet.tier}</div></div>{pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}</div>)))}</div></div><div className="w-2/3 relative flex flex-col bg-slate-950"><button onClick={() => setShowPetModal(false)} className="absolute top-4 right-4 text-white z-50 p-2 bg-black/50 rounded-full hover:bg-red-600"><X /></button>{activePet ? (<><div className="flex-1 relative w-full bg-black overflow-hidden flex items-center justify-center"><div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div><img src={activePet.image_url} className="h-full w-full object-contain p-0 animate-in zoom-in duration-500 z-10" /><div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 to-transparent z-20"></div><div className="absolute bottom-4 left-0 right-0 text-center z-30"><h2 className="text-4xl font-serif text-amber-400 drop-shadow-md mb-1">{activePet.name}</h2><p className="text-slate-300 text-sm max-w-lg mx-auto italic drop-shadow-md">"{activePet.description}"</p></div></div><div className="h-48 bg-slate-900 border-t-4 border-amber-900 p-4 flex gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-40"><div className="w-1/2 space-y-2"><h4 className="text-amber-500 text-xs uppercase tracking-widest font-bold border-b border-slate-700 pb-1 mb-2">Bonificaciones Activas</h4><div className="grid grid-cols-2 gap-2">{Object.entries(activePet.bonus_stats || {}).map(([key, val]) => (<div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between"><span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span></div>))}</div></div><div className="w-1/2 flex flex-col justify-between"><div><div className="flex justify-between text-xs text-slate-300 mb-1 font-bold"><span>Nivel de Saciedad</span><span className={activePet.current_hunger < 30 ? "text-red-500" : "text-green-500"}>{activePet.current_hunger}%</span></div><div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700"><div className={`h-full transition-all ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div></div></div><div className="flex gap-2 mt-2">{activePet.is_active ? (<div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div>) : (<button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>)}<button onClick={() => handleFeedPet(activePet.player_pet_id)} className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase rounded border border-slate-600 transition-colors flex flex-col items-center justify-center gap-1" title={getFeedCostText(activePet.tier)}><Heart size={14} className="text-red-500" /> Comer</button></div></div></div></>) : (<div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>)}</div></div></div>)}
         </div>
     );
 };
 
 export default Dashboard;
-
-
-
-
