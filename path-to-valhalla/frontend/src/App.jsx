@@ -1,23 +1,27 @@
 import React, { useState, useEffect } from 'react';
+// 1. Importamos las herramientas del Router
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+
 import Auth from './components/Auth';
 import RaceSelection from './components/RaceSelection';
-import Dashboard from './components/Dashboard';
+import HeroOverview from './pages/HeroOverview'; // <--- El nuevo protagonista
 import Expeditions from './components/Expeditions';
 import Packages from './components/Packages';
-import Market from './components/Market'; 
-import Workshop from './components/Workshop'; 
-import ValhallaHall from './components/ValhallaHall'; // <--- 1. NUEVO IMPORT
+import Market from './components/Market';
+import Workshop from './components/Workshop';
+import ValhallaHall from './components/ValhallaHall';
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
 import OnixShopModal from './components/OnixShopModal';
+import Grimoire from './pages/Grimoire';
 import { apiUrl } from './constants/api';
 
 function App() {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('auth');
-  const [gameView, setGameView] = useState('dashboard'); 
+  const [view, setView] = useState('auth'); // 'auth', 'race', 'welcome_back', 'game'
   const [isShopOpen, setIsShopOpen] = useState(false);
 
+  // --- LÓGICA DE SESIÓN (INTACTA) ---
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
@@ -31,7 +35,7 @@ function App() {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'x-auth-token': token 
+          'x-auth-token': token
         }
       })
         .then(res => {
@@ -39,24 +43,17 @@ function App() {
           throw new Error('Sesión expirada');
         })
         .then(data => {
-          if (data.user) {
-            handleUserUpdate(data.user);
-          }
+          if (data.user) handleUserUpdate(data.user);
         })
-        .catch(err => {
-          console.log("Error validando sesión:", err);
-        });
+        .catch(err => console.log("Error validando sesión:", err));
     }
   }, []);
 
   const handleAuthSuccess = (userData, isRegistration) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
-    if (isRegistration) {
-      setView('race');
-    } else {
-      setView('welcome_back');
-    }
+    if (isRegistration) setView('race');
+    else setView('welcome_back');
   };
 
   const handleRaceSelected = (updatedUserData) => {
@@ -77,89 +74,83 @@ function App() {
     setUser(null);
     setView('auth');
     setIsShopOpen(false);
-    setGameView('dashboard');
-  };
-
-  const handleNavigate = (newView) => {
-    setGameView(newView);
   };
 
   const openShop = () => setIsShopOpen(true);
   const closeShop = () => setIsShopOpen(false);
 
-  return (
-    <div className="w-full h-full font-sans text-slate-100">
+  // --- RENDERIZADO ---
 
-      {view === 'auth' && <Auth onLoginSuccess={handleAuthSuccess} />}
-      {view === 'race' && <RaceSelection onRaceSelect={handleRaceSelected} />}
+  if (view === 'auth') return <Auth onLoginSuccess={handleAuthSuccess} />;
+  if (view === 'race') return <RaceSelection onRaceSelect={handleRaceSelected} />;
+  if (view === 'welcome_back' && user) return <WelcomeBack user={user} onComplete={() => setView('game')} />;
 
-      {view === 'welcome_back' && user && (
-        <WelcomeBack user={user} onComplete={() => setView('game')} />
-      )}
-
-      {view === 'game' && user && (
-        <>
+  // AQUÍ COMIENZA EL ROUTER (Solo cuando el usuario ya entró al juego)
+  if (view === 'game' && user) {
+    return (
+      <BrowserRouter>
+        <div className="w-full h-full font-sans text-slate-100">
           <GameLayout
             user={user}
             onLogout={handleLogout}
             onOpenShop={openShop}
-            onNavigate={handleNavigate} 
-            currentView={gameView}      
           >
-            {/* RENDERIZADO CONDICIONAL */}
-            
-            {gameView === 'dashboard' && (
-              <Dashboard
-                user={user}
-                onUpdateUser={handleUserUpdate}
-              />
-            )}
+            <Routes>
+              {/* Redirección: Si entras a la raíz, te manda a Visión General */}
+              <Route path="/" element={<Navigate to="/hero" replace />} />
 
-            {gameView === 'expeditions' && (
-              <Expeditions
-                user={user}
-                onUpdateUser={handleUserUpdate}
+              {/* --- RUTAS DEL JUEGO --- */}
+              
+              {/* Visión General (AHORA USA HeroOverview) */}
+              <Route
+                path="/hero"
+                element={<HeroOverview user={user} onUpdateUser={handleUserUpdate} />}
               />
-            )}
 
-            {gameView === 'packages' && (
-              <Packages 
-                  user={user}
-                  token={localStorage.getItem('token')}
-                  onUpdateUser={handleUserUpdate}
+              {/* Grimorio */}
+              <Route
+                path="/grimoire"
+                element={<Grimoire user={user} onUpdateUser={handleUserUpdate} />}
               />
-            )}
 
-            {gameView === 'market' && (
-              <Market 
-                user={user}
-                onUpdateUser={handleUserUpdate}
+              {/* Inventario (Paquetes) */}
+              <Route
+                path="/inventory"
+                element={<Packages user={user} token={localStorage.getItem('token')} onUpdateUser={handleUserUpdate} />}
               />
-            )}
 
-            {gameView === 'workshop' && (
-              <Workshop 
-                user={user}
-                onUpdateUser={handleUserUpdate}
+              {/* Aventura */}
+              <Route
+                path="/expeditions"
+                element={<Expeditions user={user} onUpdateUser={handleUserUpdate} />}
               />
-            )}
-
-            {/* --- 2. RENDERIZAR VALHALLA HALL --- */}
-            {gameView === 'valhalla_hall' && (
-              <ValhallaHall 
-                user={user}
-                onUpdateUser={handleUserUpdate}
+              <Route
+                path="/valhalla"
+                element={<ValhallaHall user={user} onUpdateUser={handleUserUpdate} />}
               />
-            )}
 
+              {/* Ciudad */}
+              <Route
+                path="/market"
+                element={<Market user={user} onUpdateUser={handleUserUpdate} />}
+              />
+              <Route
+                path="/workshop"
+                element={<Workshop user={user} onUpdateUser={handleUserUpdate} />}
+              />
+
+              {/* Ruta comodín: Si la URL no existe, vuelve a /hero */}
+              <Route path="*" element={<Navigate to="/hero" replace />} />
+            </Routes>
           </GameLayout>
 
           <OnixShopModal isOpen={isShopOpen} onClose={closeShop} />
-        </>
-      )}
+        </div>
+      </BrowserRouter>
+    );
+  }
 
-    </div>
-  );
+  return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-amber-500 font-bold animate-pulse">Cargando Valhalla...</div>;
 }
 
 export default App;
