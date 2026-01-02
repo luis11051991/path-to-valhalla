@@ -2,7 +2,24 @@
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { getRequiredXp } = require('../shared/level_xp');
 
-// ConfiguraciÃ³n
+// --- HELPER: Generar Stats Fijos (Resuelve bug de rangos) ---
+const generateQuestItemStats = (templateStats) => {
+    const finalStats = {};
+    if (!templateStats) return {};
+
+    for (const [key, value] of Object.entries(templateStats)) {
+        // Si es un rango [min, max], elige un número al azar
+        if (Array.isArray(value) && value.length === 2) {
+            finalStats[key] = Math.floor(Math.random() * (value[1] - value[0] + 1)) + value[0];
+        } else {
+            // Si es fijo, lo mantiene
+            finalStats[key] = value;
+        }
+    }
+    return finalStats;
+};
+
+// Configuración
 const getMaxQuestSlots = (level) => {
     if (level >= 40) return 5;
     if (level >= 21) return 4;
@@ -24,7 +41,7 @@ exports.getQuestStatus = async (req, res) => {
         if (playerRes.rows.length === 0) return res.status(404).json({ message: "Jugador no encontrado" });
         const player = playerRes.rows[0];
 
-        // --- CONTEXTO: EVOLUCIÃ“N (Sin cambios) ---
+        // --- CONTEXTO: EVOLUCIÓN (Sin cambios) ---
         if (context === 'evolution') {
             const evoQuestRes = await client.query(`SELECT pq.*, q.title, q.description, q.requirements, p.pending_class_id FROM player_quests pq JOIN quests q ON pq.quest_id = q.id JOIN players p ON pq.player_id = p.id WHERE pq.player_id = $1 AND q.type = 'evolution' AND pq.status = 'active'`, [userId]);
             if (evoQuestRes.rows.length > 0) {
@@ -42,12 +59,10 @@ exports.getQuestStatus = async (req, res) => {
             return res.json({ status: player.evolution_quest_status === 'completed' ? 'completed' : 'locked' });
         }
 
-        // --- CONTEXTO: SALÃ“N DE VALHALLUS ---
+        // --- CONTEXTO: SALÓN DE VALHALLUS ---
         if (context === 'hall') {
             
             // 1. LOGICA SEMANAL (AUTO-ASIGNAR)
-            // Verificamos si tiene misiones semanales activas O completadas recientemente (esta semana)
-            // Para simplificar: Si no tiene NINGUNA semanal activa, le asignamos 3 nuevas.
             const weeklyCheck = await client.query(`
                 SELECT pq.id FROM player_quests pq 
                 JOIN quests q ON pq.quest_id = q.id 
@@ -55,7 +70,6 @@ exports.getQuestStatus = async (req, res) => {
             `, [userId]);
 
             if (weeklyCheck.rows.length === 0) {
-                // No tiene semanales activas. Asignamos 3 aleatorias de su nivel.
                 const newWeeklies = await client.query(`
                     SELECT id FROM quests 
                     WHERE type = 'weekly' AND min_level <= $1 
@@ -63,13 +77,11 @@ exports.getQuestStatus = async (req, res) => {
                 `, [player.level]);
 
                 for (const q of newWeeklies.rows) {
-                    // Verificar que no la haya completado hoy (opcional, para evitar farm infinito si borras)
-                    // Insertamos
                     await client.query("INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')", [userId, q.id]);
                 }
             }
 
-            // 2. RECUPERAR TODAS LAS ACTIVAS (Diarias y Semanales)
+            // 2. RECUPERAR TODAS LAS ACTIVAS
             const allActiveRes = await client.query(`
                 SELECT pq.*, q.title, q.description, q.requirements, q.type, q.min_level, q.reward_xp, q.reward_gold, q.reward_silver, q.reward_copper
                 FROM player_quests pq
@@ -77,12 +89,10 @@ exports.getQuestStatus = async (req, res) => {
                 WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type != 'evolution'
             `, [userId]);
 
-            // Separamos en arrays para el frontend
             const dailyActive = allActiveRes.rows.filter(q => q.type === 'daily');
             const weeklyActive = allActiveRes.rows.filter(q => q.type === 'weekly');
 
-            // 3. RECUPERAR TABLÃ“N DISPONIBLE (Solo Diarias)
-            // Filtro inteligente: Muestra misiones cercanas a tu nivel (ORDER BY min_level DESC)
+            // 3. RECUPERAR TABLÓN DISPONIBLE
             const dailyAvailable = await client.query(`
                 SELECT * FROM quests 
                 WHERE type = 'daily' 
@@ -92,7 +102,7 @@ exports.getQuestStatus = async (req, res) => {
                 LIMIT 6
             `, [player.level, userId]);
 
-            // 4. CALCULAR COOLDOWN COMPARTIDO
+            // 4. CALCULAR COOLDOWN
             let globalCooldown = 0;
             if (player.last_hall_action_at) {
                 const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
@@ -106,7 +116,7 @@ exports.getQuestStatus = async (req, res) => {
                 dailyAvailable: dailyAvailable.rows,
                 weeklyActive,
                 maxSlots: getMaxQuestSlots(player.level),
-                globalCooldown // Un solo timer para todo
+                globalCooldown
             });
         }
 
@@ -119,7 +129,7 @@ exports.getQuestStatus = async (req, res) => {
     }
 };
 
-// 2. ACEPTAR MISIÓN (Solo Diarias - Activa Cooldown Global)
+// 2. ACEPTAR MISIÓN
 exports.acceptQuest = async (req, res) => {
     const userId = req.user.id;
     const { questId } = req.body; 
@@ -128,13 +138,11 @@ exports.acceptQuest = async (req, res) => {
         const playerRes = await pool.query('SELECT level, last_hall_action_at FROM players WHERE id = $1', [userId]);
         const player = playerRes.rows[0];
 
-        // Validar Cooldown Global
         if (player.last_hall_action_at) {
             const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-            if (diff < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s para realizar otra acciÃ³n.` });
+            if (diff < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s para realizar otra acción.` });
         }
 
-        // Validar Slots (Solo aplica a diarias)
         const maxSlots = getMaxQuestSlots(player.level);
         const countRes = await pool.query(`
             SELECT COUNT(*) FROM player_quests pq JOIN quests q ON pq.quest_id = q.id 
@@ -142,22 +150,21 @@ exports.acceptQuest = async (req, res) => {
         `, [userId]);
         
         if (parseInt(countRes.rows[0].count) >= maxSlots) {
-            return res.status(400).json({ message: `LÃ­mite de misiones diarias alcanzado (${maxSlots}).` });
+            return res.status(400).json({ message: `Límite de misiones diarias alcanzado (${maxSlots}).` });
         }
 
-        // Insertar y Activar Cooldown
         await pool.query("INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')", [userId, questId]);
         await pool.query("UPDATE players SET last_hall_action_at = NOW() WHERE id = $1", [userId]);
 
         res.json({ success: true, message: "Contrato firmado. (Cooldown activado)" });
 
     } catch (err) {
-        if (err.code === '23505') return res.status(400).json({ message: "MisiÃ³n ya activa." });
+        if (err.code === '23505') return res.status(400).json({ message: "Misión ya activa." });
         res.status(500).json({ message: "Error al aceptar." });
     }
 };
 
-// 3. REFRESCAR TABLÃ“N (Solo Diarias - Activa Cooldown Global)
+// 3. REFRESCAR TABLÓN
 exports.refreshBoard = async (req, res) => {
     const userId = req.user.id;
     
@@ -170,10 +177,9 @@ exports.refreshBoard = async (req, res) => {
             if (diff < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s.` });
         }
 
-        // Simplemente actualizamos el timestamp para bloquear acciones y el frontend recargarÃ¡ con RANDOM()
         await pool.query("UPDATE players SET last_hall_action_at = NOW() WHERE id = $1", [userId]);
 
-        res.json({ success: true, message: "TablÃ³n actualizado. (Cooldown activado)" });
+        res.json({ success: true, message: "Tablón actualizado. (Cooldown activado)" });
     } catch (err) {
         res.status(500).json({ message: "Error al refrescar." });
     }
@@ -208,17 +214,17 @@ exports.completeQuest = async (req, res) => {
 
         if (!isComplete) throw new Error("Objetivos incompletos.");
 
-        // Datos jugador para XP/nivel/puntos
+        // Datos jugador
         const playerData = (await client.query("SELECT level, experience, stat_points, gold, silver, copper FROM players WHERE id = $1", [userId])).rows[0];
         let currentLevel = parseInt(playerData.level || 1);
         let currentXp = parseInt(playerData.experience || 0);
         let currentStatPoints = parseInt(playerData.stat_points || 0);
 
-        // Calcular economía
+        // Economía
         const rewardTotal = ((userQuest.reward_gold || 0) * 10000) + ((userQuest.reward_silver || 0) * 100) + (userQuest.reward_copper || 0);
         const normalized = normalizeCurrency(playerData.gold || 0, playerData.silver || 0, playerData.copper || 0, rewardTotal);
 
-        // Aplicar XP y subir nivel (5 puntos por nivel como en expediciones)
+        // XP y Nivel
         currentXp += (userQuest.reward_xp || 0);
         while (true) {
             const needed = getRequiredXp(currentLevel);
@@ -229,7 +235,7 @@ exports.completeQuest = async (req, res) => {
             } else break;
         }
 
-        // Guardar recompensas y progreso de jugador
+        // Guardar cambios en Jugador
         await client.query(
             `UPDATE players 
              SET experience = $1, level = $2, stat_points = $3, gold = $4, silver = $5, copper = $6 
@@ -237,9 +243,30 @@ exports.completeQuest = async (req, res) => {
             [currentXp, currentLevel, currentStatPoints, normalized.newGold, normalized.newSilver, normalized.newCopper, userId]
         );
         
+        // --- GUARDAR ITEMS (CORREGIDO CON GENERACIÓN DE STATS) ---
         if (userQuest.reward_items) {
             for (const item of userQuest.reward_items) {
-                await client.query(`INSERT INTO player_packages (player_id, item_template_id, quantity) VALUES ($1, $2, $3)`, [userId, item.template_id, item.qty]);
+                // 1. Obtener la plantilla para saber sus stats base
+                const tplRes = await client.query('SELECT type, base_stats FROM items_templates WHERE id = $1', [item.template_id]);
+                
+                if (tplRes.rows.length > 0) {
+                    const template = tplRes.rows[0];
+                    let finalStats = {};
+
+                    // 2. Generar stats únicos si es equipo
+                    if (template.type !== 'material' && template.type !== 'consumable') {
+                         finalStats = generateQuestItemStats(template.base_stats);
+                    }
+
+                    // 3. Insertar con datos resueltos
+                    await client.query(
+                        `INSERT INTO player_packages (player_id, item_template_id, quantity, data) VALUES ($1, $2, $3, $4)`, 
+                        [userId, item.template_id, item.qty, finalStats]
+                    );
+                } else {
+                    // Fallback de seguridad
+                    await client.query(`INSERT INTO player_packages (player_id, item_template_id, quantity) VALUES ($1, $2, $3)`, [userId, item.template_id, item.qty]);
+                }
             }
         }
 
@@ -269,4 +296,3 @@ exports.completeQuest = async (req, res) => {
     }
 };
 module.exports = exports;
-

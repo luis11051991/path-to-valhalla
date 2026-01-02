@@ -909,19 +909,19 @@ const Dashboard = ({ user, onUpdateUser }) => {
                                             </div>
                                             
                                             {/* BOTÓN MEJORAR */}
-                                            {isMax ? (
-                                                <div className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] font-bold uppercase flex items-center gap-1 border border-slate-600 cursor-default select-none">
-                                                    <Ban size={12} /> Max
-                                                </div>
-                                            ) : (
-                                                <button 
-                                                    onClick={(e) => handleUpgradeSkill(e, skill)}
-                                                    className="px-2 py-1 bg-amber-700 hover:bg-amber-600 text-white rounded text-[10px] font-bold uppercase flex items-center gap-1 shadow-lg transition-transform active:scale-95 border border-amber-500"
-                                                >
-                                                    <ArrowUpCircle size={12} /> 
-                                                    {formatCurrency(upgradeCost)}
-                                                </button>
-                                            )}
+                                                {isMax ? (
+                                                    <div className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] font-bold uppercase flex items-center gap-1 border border-slate-600 cursor-default select-none">
+                                                        <Ban size={12} /> Max
+                                                    </div>
+                                                ) : (
+                                                    <button 
+                                                        onClick={(e) => handleUpgradeSkill(e, skill)}
+                                                    className="px-2 py-1 bg-blue-700 hover:bg-blue-600 text-white rounded text-[10px] font-bold uppercase flex items-center gap-1 shadow-lg transition-transform active:scale-95 border border-blue-400"
+                                                    >
+                                                        <ArrowUpCircle size={12} /> 
+                                                        {formatCurrency(upgradeCost)}
+                                                    </button>
+                                                )}
                                         </div>
                                     </div>
                                 );
