@@ -4,12 +4,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import Auth from './components/Auth';
 import RaceSelection from './components/RaceSelection';
-import HeroOverview from './pages/HeroOverview'; // <--- El nuevo protagonista
-import Expeditions from './components/Expeditions';
-import Packages from './components/Packages';
-import Market from './components/Market';
-import Workshop from './components/Workshop';
-import ValhallaHall from './components/ValhallaHall';
+import HeroOverview from './pages/HeroOverview';
+import Expeditions from './pages/Expeditions';
+import Packages from './pages/Packages';
+import Market from './pages/Market';
+import Workshop from './pages/Workshop';
+import ValhallaHall from './pages/ValhallaHall';
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
 import OnixShopModal from './components/OnixShopModal';

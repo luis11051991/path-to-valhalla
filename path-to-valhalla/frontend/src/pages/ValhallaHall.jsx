@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom'; // <--- IMPORTACIÓN CLAVE
 import { Clock, CheckCircle, X, AlertTriangle } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 import { getRequiredXp } from '../shared/level_xp';
@@ -21,7 +22,6 @@ const normalizeUserLevel = (userData) => {
     if (!userData) return userData;
     let level = userData.level || 1;
     let experience = userData.experience || 0;
-    // Repartir experiencia sobrante subiendo niveles en cascada
     while (true) {
         const required = getRequiredXp(level);
         if (experience < required) break;
@@ -31,7 +31,12 @@ const normalizeUserLevel = (userData) => {
     return { ...userData, level, experience };
 };
 
-const ValhallaHall = ({ user, onUpdateUser }) => {
+const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
+    // --- SOPORTE HÍBRIDO (Props o Contexto) ---
+    const contextData = useOutletContext();
+    const user = propUser || (contextData ? contextData[0] : null);
+    const onUpdateUser = propOnUpdateUser || (contextData ? contextData[1] : null);
+
     const [loading, setLoading] = useState(true);
     const [hallData, setHallData] = useState(null);
     const [globalCooldown, setGlobalCooldown] = useState(0);
@@ -42,7 +47,6 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
     const loadData = async () => {
         setLoading(true);
         try {
-            // Solicitamos contexto 'hall' con timestamp para evitar caché
             const res = await fetch(apiUrl(`/api/quests/status?context=hall&t=${Date.now()}`), {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             });
@@ -52,9 +56,10 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
         } catch (err) { console.error(err); } finally { setLoading(false); }
     };
 
-    useEffect(() => { loadData(); }, []); // Cargar al montar
+    useEffect(() => { 
+        if (user) loadData(); 
+    }, [user]);
 
-    // Timer Global
     useEffect(() => {
         if (globalCooldown <= 0) return;
         const interval = setInterval(() => {
@@ -65,7 +70,6 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
 
     const formatTime = (sec) => `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
 
-    // Acciones
     const handleAccept = async () => {
         if (!selectedQuest) return;
         const res = await fetch(apiUrl('/api/quests/accept'), {
@@ -115,6 +119,8 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
     };
 
     const { dailyActive = [], dailyAvailable = [], weeklyActive = [], maxSlots } = hallData || {};
+
+    if (!user) return null;
 
     return (
         <div className="h-full flex flex-col p-6 bg-[url('/backgrounds/hall_bg.png')] bg-cover bg-center relative font-sans text-slate-100">
@@ -244,7 +250,7 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
                 )}
             </div>
 
-            {/* MODAL DETALLE (Para aceptar Diarias) */}
+            {/* MODAL DETALLE */}
             {selectedQuest && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in zoom-in-95">
                     <div className="bg-slate-900 border-2 border-amber-600 rounded-xl p-6 max-w-sm w-full shadow-2xl relative">
@@ -300,7 +306,6 @@ const ValhallaHall = ({ user, onUpdateUser }) => {
     );
 };
 
-// Subcomponente para Tarjeta de Misión (para limpiar código)
 const QuestCard = ({ quest, onComplete, isWeekly }) => {
     let isComplete = true;
     quest.requirements.forEach(req => {
@@ -339,7 +344,6 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
                         <img src={VALHALLA_ICONS.rewardXp} alt="XP" className="w-4 h-4 object-contain" />
                         {quest.reward_xp}
                     </span>
-                    {/* Mostrar solo la moneda m?s alta para ahorrar espacio en la tarjeta peque?a */}
                     {quest.reward_gold > 0 ? (
                         <span className="text-yellow-500 flex items-center gap-1">
                             <img src={VALHALLA_ICONS.gold} alt="Oro" className="w-4 h-4 object-contain" />
@@ -379,5 +383,3 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
 };
 
 export default ValhallaHall;
-
-

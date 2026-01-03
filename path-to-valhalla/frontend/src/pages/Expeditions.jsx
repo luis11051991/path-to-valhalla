@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom'; // <--- ÚNICO CAMBIO IMPORTANTE
 import { Sword, Shield, Skull, Trophy, Lock, Clock, Crosshair, Ban, FastForward } from 'lucide-react';
 import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
@@ -11,7 +12,12 @@ const EXPEDITION_ICONS = {
     bossBadge: '/icons/expedition/boss_badge.png',
 };
 
-const Expeditions = ({ user, onUpdateUser }) => {
+const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
+    // --- SOPORTE HÍBRIDO (Props o Contexto) ---
+    const contextData = useOutletContext();
+    const user = propUser || (contextData ? contextData[0] : null);
+    const onUpdateUser = propOnUpdateUser || (contextData ? contextData[1] : null);
+
     // --- ESTADOS ---
     const [view, setView] = useState('MAP');
     const [selectedZone, setSelectedZone] = useState(null);
@@ -36,7 +42,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
     };
 
     useEffect(() => {
-        if (!user.last_expedition_at) return;
+        if (!user || !user.last_expedition_at) return;
         const checkCooldown = () => {
             const now = new Date();
             const last = new Date(user.last_expedition_at);
@@ -70,6 +76,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
 
     // --- CÁLCULO DE STATS REALES ---
     const playerStats = useMemo(() => {
+        if (!user) return {}; // Protección si user es null
         let bonuses = { strength: 0, dexterity: 0, constitution: 0, luck: 0, armor: 0, damage_min: 0, damage_max: 0 };
 
         if (user.real_inventory) {
@@ -176,6 +183,7 @@ const Expeditions = ({ user, onUpdateUser }) => {
         return raceData ? raceData.bgImage : null;
     };
 
+    if (!user) return null; // Protección extra
     if (loading && view === 'MAP') return <div className="text-center mt-20 text-slate-500 animate-pulse">Cargando mapa...</div>;
 
     return (

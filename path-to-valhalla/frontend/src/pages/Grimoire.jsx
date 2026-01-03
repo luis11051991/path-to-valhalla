@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Ban, ArrowUpCircle, Lock } from 'lucide-react';
+import { Zap, Ban, ArrowUpCircle } from 'lucide-react'; // Quitamos Lock porque usaremos imagen
 import { apiUrl } from '../constants/api';
 
 // Configuración
@@ -116,8 +116,6 @@ const Grimoire = ({ user, onUpdateUser }) => {
     const equippedSkills = mySkills.filter(s => s.is_equipped).sort((a,b) => (a.slot_index || 0) - (b.slot_index || 0));
     // Crear array fijo de slots para mostrar huecos vacíos
     const slotsDisplay = [...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => {
-        // Buscar si hay una skill en este "índice visual" (1-based en DB, 0-based en array)
-        // Nota: Tu backend guarda slot_index. Podemos usar el orden del array equipado simplemente.
         return equippedSkills[i] || null;
     });
 
@@ -145,7 +143,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                 key={i} 
                                 className={`w-20 h-20 rounded-xl border-2 flex items-center justify-center relative transition-all overflow-hidden group
                                 ${!isUnlocked 
-                                    ? 'border-slate-800 bg-slate-950 opacity-50' 
+                                    ? 'border-slate-800 bg-slate-950' 
                                     : skill 
                                         ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105 bg-purple-900/20' 
                                         : 'border-slate-700 bg-slate-900/50'}`} 
@@ -153,11 +151,15 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                 title={skill ? "Click para desequipar" : isUnlocked ? "Ranura vacía" : "Bloqueado"}
                             >
                                 {!isUnlocked ? (
-                                    <div className="flex flex-col items-center">
-                                        <Lock size={20} className="text-slate-600 mb-1" />
-                                        <span className="text-[9px] text-slate-500 font-bold uppercase">Lvl {i === 2 ? 10 : i === 3 ? 50 : 100}</span>
-                                    </div>
+                                    // SLOT BLOQUEADO (Imagen + Texto)
+                                    <>
+                                        <img src="/icons/ui/slot_locked.png" className="w-full h-full object-cover opacity-60" alt="Bloqueado" />
+                                        <span className="absolute bottom-1 text-[9px] text-white font-bold bg-black/60 px-1 rounded border border-white/10">
+                                            LVL {i === 2 ? 10 : i === 3 ? 50 : 100}
+                                        </span>
+                                    </>
                                 ) : skill ? (
+                                    // SKILL EQUIPADA
                                     <>
                                         <img src={skill.image_url} className="w-full h-full object-cover" alt={skill.name} />
                                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -165,9 +167,8 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center opacity-20">
-                                        <div className="w-8 h-8 border-2 border-slate-500 rounded-full border-dashed" />
-                                    </div>
+                                    // SLOT VACÍO (Imagen)
+                                    <img src="/icons/ui/slot_empty.png" className="w-full h-full object-cover opacity-40" alt="Vacío" />
                                 )}
                             </div>
                         );

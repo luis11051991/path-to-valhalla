@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom'; // <--- IMPORTACIÓN CLAVE
 import { 
     ShoppingBag, Coins, Sword, Shield, Gem, Scroll, FlaskConical, DollarSign, 
     Store, RefreshCw, AlertTriangle 
@@ -17,7 +18,12 @@ const SHOP_CONFIG = {
 
 const STAT_ICONS = { strength: '💪', dexterity: '⚡', constitution: '❤️', intelligence: '🧠', wisdom: '✨', charisma: '🎭', luck: '🍀', defense: '🛡️', block: '🚫', crit: '🎯' };
 
-const Market = ({ user, onUpdateUser }) => {
+const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
+    // --- SOPORTE HÍBRIDO (Props o Contexto) ---
+    const contextData = useOutletContext();
+    const user = propUser || (contextData ? contextData[0] : null);
+    const onUpdateUser = propOnUpdateUser || (contextData ? contextData[1] : null);
+
     const [mode, setMode] = useState('buy'); // 'buy' or 'sell'
     const [activeCategory, setActiveCategory] = useState('weapons');
     
@@ -26,7 +32,7 @@ const Market = ({ user, onUpdateUser }) => {
     const [feedbackKey, setFeedbackKey] = useState(0); 
     
     const [shopItems, setShopItems] = useState([]);
-    const [inventory, setInventory] = useState(user.real_inventory || []);
+    const [inventory, setInventory] = useState(user?.real_inventory || []);
     const [loadingShop, setLoadingShop] = useState(false);
     
     const [refreshCost, setRefreshCost] = useState(0);
@@ -35,21 +41,23 @@ const Market = ({ user, onUpdateUser }) => {
     const [tooltipData, setTooltipData] = useState(null);
     const [itemToSell, setItemToSell] = useState(null); 
 
-    useEffect(() => { setInventory(user.real_inventory || []); }, [user.real_inventory]);
+    useEffect(() => { 
+        if (user) setInventory(user.real_inventory || []); 
+    }, [user?.real_inventory]);
 
     useEffect(() => {
-        if (mode === 'buy') { loadShopData(); }
-    }, [mode]);
+        if (mode === 'buy' && user) { loadShopData(); }
+    }, [mode, user]);
 
     // Helpers para cambiar modo y limpiar tooltip
     const changeMode = (newMode) => {
         setMode(newMode);
-        setTooltipData(null); // Limpiar tooltip al cambiar modo
+        setTooltipData(null); 
     };
 
     const changeCategory = (catId) => {
         setActiveCategory(catId);
-        setTooltipData(null); // Limpiar tooltip al cambiar pestaña
+        setTooltipData(null);
     };
 
     const loadShopData = async () => {
@@ -92,19 +100,16 @@ const Market = ({ user, onUpdateUser }) => {
             const data = await res.json();
             if (data.success) {
                 onUpdateUser({ ...user, ...data.newMoney, real_inventory: data.inventory });
-                
-                // ACTUALIZACIÓN VISUAL: Usamos el stock nuevo que devuelve el backend
                 if (data.updatedStock) {
                     setShopItems(data.updatedStock);
                 }
-                
                 showFeedback(`Comprado: ${item.name}`, "success");
             } else { showFeedback(data.message, "error"); }
         } catch (error) { showFeedback("Error al comprar", "error"); }
     };
 
     const initiateSell = (item) => {
-        setTooltipData(null); // Limpiamos tooltip al hacer click por si acaso
+        setTooltipData(null); 
         if (item.rarity === 'common' || item.rarity === 'uncommon') { performSell(item); } 
         else { setItemToSell(item); }
     };
@@ -120,7 +125,7 @@ const Market = ({ user, onUpdateUser }) => {
                 onUpdateUser({ ...user, ...data.newMoney, real_inventory: data.inventory });
                 showFeedback(`+${item.price_copper} Cobre`, "success");
                 setItemToSell(null);
-                setTooltipData(null); // <--- SOLUCIÓN: Forzar cierre del tooltip tras venta exitosa
+                setTooltipData(null); 
             } else { showFeedback(data.message, "error"); }
         } catch (error) { showFeedback("Error al vender", "error"); }
     };
@@ -163,43 +168,16 @@ const Market = ({ user, onUpdateUser }) => {
         setTooltipData({ item: tooltipItem, rect, side: isRightSide ? 'left' : 'right', viewType: type });
     };
 
-    // --- HELPER DE ESTILOS POR RAREZA ---
     const getItemStyles = (rarity) => {
         switch (rarity) {
-            case 'uncommon': // VERDE
-                return { 
-                    text: 'text-green-400', 
-                    border: 'border-green-800', // Borde sutil
-                    glow: '' 
-                };
-            case 'rare': // AZUL
-                return { 
-                    text: 'text-blue-400', 
-                    border: 'border-blue-800', // Borde sutil
-                    glow: '' 
-                };
-            case 'legendary': // NARANJA
-                return { 
-                    text: 'text-orange-400', 
-                    border: 'border-orange-500', 
-                    glow: 'shadow-[0_0_15px_rgba(251,146,60,0.4)]' // Aura Naranja
-                };
-            case 'mythic': // ROJO
-                return { 
-                    text: 'text-red-500', 
-                    border: 'border-red-600', 
-                    glow: 'shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse' // Aura Roja Pulsante
-                };
-            default: // COMÚN (Blanco)
-                return { 
-                    text: 'text-slate-200', 
-                    border: 'border-slate-600', 
-                    glow: '' 
-                };
+            case 'uncommon': return { text: 'text-green-400', border: 'border-green-800', glow: '' };
+            case 'rare': return { text: 'text-blue-400', border: 'border-blue-800', glow: '' };
+            case 'legendary': return { text: 'text-orange-400', border: 'border-orange-500', glow: 'shadow-[0_0_15px_rgba(251,146,60,0.4)]' };
+            case 'mythic': return { text: 'text-red-500', border: 'border-red-600', glow: 'shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse' };
+            default: return { text: 'text-slate-200', border: 'border-slate-600', glow: '' };
         }
     };
 
-    // --- TOOLTIP GLOBAL ---
     const GlobalTooltip = () => {
         if (!tooltipData) return null;
         const { item, rect, side, viewType } = tooltipData;
@@ -213,21 +191,15 @@ const Market = ({ user, onUpdateUser }) => {
         return (
             <div style={style} className="w-[200px] pointer-events-none">
                 <div className={`bg-slate-950 border-2 p-3 rounded shadow-[0_0_30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-100 ${styles.border}`}>
-                    
-                    {/* Título con Color */}
                     <p className={`font-bold text-sm ${styles.text}`}>{item.name}</p>
-                    
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} • {item.rarity}</p>
                     
-                    {/* --- DAÑO Y ARMADURA --- */}
                     {item.base_stats?.damage_min && <p className="text-xs text-slate-300 mt-1">⚔️ Daño: <span className="text-white">{item.base_stats.damage_min} - {item.base_stats.damage_max}</span></p>}
                     {item.base_stats?.armor && <p className="text-xs text-slate-300 mt-1">🛡️ Armadura: <span className="text-white">{item.base_stats.armor}</span></p>}
 
-                    {/* --- STATS --- */}
                     {Object.entries(item.base_stats || {}).map(([key, val]) => {
                         if (['damage_min', 'damage_max', 'armor'].includes(key)) return null;
                         if (val <= 0) return null; 
-                        
                         const icon = STAT_ICONS[key] || '🔹';
                         return <p key={key} className="text-xs text-green-400 capitalize flex items-center gap-1">{icon} {key}: <span className="text-white">+{val}</span></p>;
                     })}
@@ -250,9 +222,10 @@ const Market = ({ user, onUpdateUser }) => {
         );
     };
 
+    if (!user) return null;
+
     const currentConfig = mode === 'buy' ? SHOP_CONFIG[activeCategory] : SHOP_CONFIG.default;
     
-    // --- LÓGICA DE FILTRADO ---
     const filteredShopItems = shopItems.filter(item => {
         if (activeCategory === 'weapons') return item.type === 'weapon';
         if (activeCategory === 'jewelry') return ['ring', 'neck', 'earring', 'accessory'].includes(item.type);

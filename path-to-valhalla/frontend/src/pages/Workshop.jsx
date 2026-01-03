@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom'; // <--- CONEXIÓN AL ROUTER
 import { Hammer, Anvil, FlaskRound, Scroll, Lock, ArrowUpCircle, AlertTriangle, Package, Info, XCircle, CheckCircle } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 
@@ -21,17 +22,22 @@ const getProfessionRankTitle = (level) => {
     return "Leyenda Viviente";
 };
 
-const Workshop = ({ user, onUpdateUser }) => {
+const Workshop = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
+    // --- SOPORTE HÍBRIDO (Props o Contexto) ---
+    const contextData = useOutletContext();
+    const user = propUser || (contextData ? contextData[0] : null);
+    const onUpdateUser = propOnUpdateUser || (contextData ? contextData[1] : null);
+
     const [loading, setLoading] = useState(true);
     const [workshopData, setWorkshopData] = useState(null);
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [confirmProfession, setConfirmProfession] = useState(null);
     
-    // Estado unificado para mensajes (Éxito o Error) - Adiós alerts feos
+    // Estado unificado para mensajes (Éxito o Error)
     const [messageModal, setMessageModal] = useState(null); 
     const [tooltipData, setTooltipData] = useState(null);
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { if(user) loadData(); }, [user]);
 
     const loadData = async () => {
         try {
@@ -39,6 +45,7 @@ const Workshop = ({ user, onUpdateUser }) => {
             const data = await res.json();
             if (data.success) {
                 setWorkshopData(data);
+                // Actualizar profesión en el usuario local si ha cambiado
                 if(data.hasProfession && (!user.profession || user.profession !== data.profession)) {
                     onUpdateUser({ ...user, profession: data.profession });
                 }
@@ -61,7 +68,6 @@ const Workshop = ({ user, onUpdateUser }) => {
                 setLoading(true); 
                 await loadData(); 
             } else {
-                // Error en selección (poco probable, pero por si acaso)
                 setMessageModal({ type: 'error', title: 'Error', message: data.message });
             }
         } catch (err) { console.error(err); }
@@ -76,11 +82,9 @@ const Workshop = ({ user, onUpdateUser }) => {
             });
             const data = await res.json();
             if (data.success) {
-                // ÉXITO: Mostramos modal bonito y recargamos
                 setMessageModal({ type: 'success', title: data.message, message: data.detail, item: selectedRecipe });
                 loadData(); 
             } else {
-                // ERROR: Mostramos modal de error (no alert)
                 setMessageModal({ type: 'error', title: 'Fallo al Forjar', message: data.message });
             }
         } catch (err) { 
@@ -136,6 +140,7 @@ const Workshop = ({ user, onUpdateUser }) => {
         );
     };
 
+    if (!user) return null;
     if (loading) return <div className="h-full flex items-center justify-center text-slate-500 animate-pulse">Cargando Taller...</div>;
 
     // --- BLOQUEO NIVEL ---
@@ -164,7 +169,6 @@ const Workshop = ({ user, onUpdateUser }) => {
                         </button>
                     ))}
                 </div>
-                {/* Modal Confirmación Profesión */}
                 {confirmProfession && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in">
                         <div className={`bg-slate-900 border-2 ${selectedProfData.border} rounded-xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center`}>
@@ -186,7 +190,7 @@ const Workshop = ({ user, onUpdateUser }) => {
     const { profession, level, xp, nextLevelXp, recipes } = workshopData;
     const profInfo = PROFESSIONS.find(p => p.id === profession) || PROFESSIONS[0];
     const xpPercent = Math.min((xp / nextLevelXp) * 100, 100);
-    const rankTitle = getProfessionRankTitle(level); // Obtenemos el título del rango
+    const rankTitle = getProfessionRankTitle(level);
 
     return (
         <div className="h-full flex flex-col bg-slate-950 relative overflow-hidden animate-in fade-in duration-500">
