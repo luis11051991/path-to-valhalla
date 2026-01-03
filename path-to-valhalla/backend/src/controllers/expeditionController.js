@@ -144,11 +144,15 @@ exports.startBattle = async (req, res) => {
 
         let log = [];
         let isWin = false;
+        
+        // Variables para tracking de daño total (para el desempate)
+        let totalDamageDealtByPlayer = 0;
+        let totalDamageDealtByEnemy = 0;
 
         for (let r = 1; r <= 10; r++) {
             log.push({ type: 'round', msg: `--- RONDA ${r} ---` });
 
-            // --- 1. TURNO DEL JUGADOR (MODIFICADO) ---
+            // --- 1. TURNO DEL JUGADOR ---
             const weaponDmg = weaponMax > weaponMin ? Math.floor(Math.random() * (weaponMax - weaponMin + 1)) + weaponMin : weaponMin;
             const statDmg = Math.floor(Math.max(totalStr, totalDex) * 2);
             const baseTotalDmg = weaponDmg + statDmg;
@@ -188,6 +192,7 @@ exports.startBattle = async (req, res) => {
             // Aplicar Daño
             let finalDmgToEnemy = Math.max(1, (baseTotalDmg + skillDamage) - Math.floor((enemy.armor || 0) / 5));
             enemy.current_hp -= finalDmgToEnemy;
+            totalDamageDealtByPlayer += finalDmgToEnemy;
 
             // Logs
             if (skillTriggered) {
@@ -195,6 +200,7 @@ exports.startBattle = async (req, res) => {
                     type: 'player_atk', 
                     msg: `¡Usas ${skillTriggered.name}! (Daño: ${finalDmgToEnemy})`, 
                     isSkill: true,
+                    damage: finalDmgToEnemy, // NUEVO: Dato numérico para frontend
                     enemyHp: Math.max(0, enemy.current_hp) 
                 });
                 if (skillHeal > 0) {
@@ -202,7 +208,12 @@ exports.startBattle = async (req, res) => {
                     log.push({ type: 'info', msg: `Te curas ${skillHeal} HP.` });
                 }
             } else {
-                log.push({ type: 'player_atk', msg: `Golpeas por ${finalDmgToEnemy}`, enemyHp: Math.max(0, enemy.current_hp) });
+                log.push({ 
+                    type: 'player_atk', 
+                    msg: `Golpeas por ${finalDmgToEnemy}`, 
+                    damage: finalDmgToEnemy, // NUEVO: Dato numérico para frontend
+                    enemyHp: Math.max(0, enemy.current_hp) 
+                });
             }
 
             if (enemy.current_hp <= 0) {
@@ -211,11 +222,18 @@ exports.startBattle = async (req, res) => {
                 break;
             }
 
-            // --- 2. TURNO DEL ENEMIGO (TU LÓGICA INTACTA) ---
+            // --- 2. TURNO DEL ENEMIGO ---
             const enemyAttack = randomInt(enemy.damage_min, enemy.damage_max, enemyDamageRng);
             let dmgToPlayer = Math.max(1, enemyAttack - Math.floor((totalArmor + totalCon / 2) / 5));
             player.current_hp -= dmgToPlayer;
-            log.push({ type: 'enemy_atk', msg: `Te golpean por ${dmgToPlayer}`, playerHp: Math.max(0, player.current_hp) });
+            totalDamageDealtByEnemy += dmgToPlayer;
+
+            log.push({ 
+                type: 'enemy_atk', 
+                msg: `Te golpean por ${dmgToPlayer}`, 
+                damage: dmgToPlayer, // NUEVO: Dato numérico para frontend
+                playerHp: Math.max(0, player.current_hp) 
+            });
 
             if (player.current_hp <= 0) {
                 isWin = false;
@@ -225,7 +243,19 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- MISIONES (TU LÓGICA INTACTA) ---
+        // --- 3. LÓGICA DE DESEMPATE (Turno 10) ---
+        if (enemy.current_hp > 0 && player.current_hp > 0) {
+            // Nadie murió tras 10 rondas. Gana quien hizo más daño.
+            if (totalDamageDealtByPlayer >= totalDamageDealtByEnemy) {
+                isWin = true;
+                log.push({ type: 'info', msg: `¡Tiempo agotado! Ganaste por daño (${totalDamageDealtByPlayer} vs ${totalDamageDealtByEnemy}).` });
+            } else {
+                isWin = false;
+                log.push({ type: 'info', msg: `¡Tiempo agotado! Perdiste por daño (${totalDamageDealtByPlayer} vs ${totalDamageDealtByEnemy}).` });
+            }
+        }
+
+        // --- MISIONES ---
         let questLogs = [];
         if (isWin) {
             const activeQuestsRes = await client.query(`
@@ -257,7 +287,7 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- RECOMPENSAS (TU LÓGICA INTACTA) ---
+        // --- RECOMPENSAS ---
         let rewards = { xp: 0, copper: 0, items: [] };
         let finalGold = parseInt(player.gold || 0);
         let finalSilver = parseInt(player.silver || 0);

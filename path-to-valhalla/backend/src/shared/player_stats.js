@@ -1,7 +1,16 @@
 const pool = require('../config/db');
 
+// --- CONSTANTES DE REGENERACIÓN ---
 const HP_REGEN_AMOUNT = 1;
 const HP_REGEN_EVERY_SECONDS = 3;
+
+const ENERGY_REGEN_AMOUNT = 1;
+const ENERGY_REGEN_EVERY_SECONDS = 120; // 2 minutos
+const ENERGY_MAX_DEFAULT = 100;
+
+const VALOR_REGEN_AMOUNT = 1;
+const VALOR_REGEN_EVERY_SECONDS = 1800; // 30 minutos
+const VALOR_MAX_DEFAULT = 5;
 
 const normalizeStats = (stats) => {
     if (!stats) return {};
@@ -22,7 +31,6 @@ const addStats = (target, source) => {
     });
 };
 
-// Suma stats base + bonus de items equipados + bonus de mascota activa
 const computeTotalStats = ({ baseStats = {}, equippedItems = [], petBonuses = {} }) => {
     const total = { ...normalizeStats(baseStats) };
     equippedItems.forEach((statObj) => addStats(total, statObj || {}));
@@ -32,24 +40,63 @@ const computeTotalStats = ({ baseStats = {}, equippedItems = [], petBonuses = {}
 
 const computeMaxHp = (totalConstitution = 0) => {
     const con = Number(totalConstitution) || 0;
-    return con * 20;
+    return 100 + (con * 20); // Fórmula base + constitución
 };
 
-const applyHpRegen = ({ currentHp = 0, maxHp = 0, lastRegenAt, now = new Date() }) => {
+// --- NUEVA LÓGICA DE REGENERACIÓN UNIFICADA ---
+const applyRegen = ({ 
+    currentHp = 0, maxHp = 0, 
+    currentEnergy = 0, maxEnergy = 100, 
+    currentValor = 0, maxValor = 5, 
+    lastRegenAt, 
+    now = new Date() 
+}) => {
     const last = lastRegenAt ? new Date(lastRegenAt) : new Date(now);
+    // Calculamos el tiempo total pasado en segundos
     const diffSeconds = Math.max(0, Math.floor((now - last) / 1000));
-    const ticks = Math.floor(diffSeconds / HP_REGEN_EVERY_SECONDS);
 
-    let updatedHp = Math.min(currentHp, maxHp);
-    let updatedLast = last;
+    // 1. Calcular Ticks para cada recurso
+    const hpTicks = Math.floor(diffSeconds / HP_REGEN_EVERY_SECONDS);
+    const energyTicks = Math.floor(diffSeconds / ENERGY_REGEN_EVERY_SECONDS);
+    const valorTicks = Math.floor(diffSeconds / VALOR_REGEN_EVERY_SECONDS);
 
-    if (ticks > 0) {
-        updatedHp = Math.min(maxHp, updatedHp + (ticks * HP_REGEN_AMOUNT));
-        updatedLast = new Date(last.getTime() + (ticks * HP_REGEN_EVERY_SECONDS * 1000));
+    // 2. Aplicar Ganancias
+    let updatedHp = currentHp;
+    if (hpTicks > 0 && currentHp < maxHp) {
+        updatedHp = Math.min(maxHp, currentHp + (hpTicks * HP_REGEN_AMOUNT));
     }
 
-    updatedHp = Math.min(updatedHp, maxHp);
-    return { currentHp: updatedHp, lastRegenAt: updatedLast };
+    let updatedEnergy = currentEnergy;
+    if (energyTicks > 0 && currentEnergy < maxEnergy) {
+        updatedEnergy = Math.min(maxEnergy, currentEnergy + (energyTicks * ENERGY_REGEN_AMOUNT));
+    }
+
+    let updatedValor = currentValor;
+    if (valorTicks > 0 && currentValor < maxValor) {
+        updatedValor = Math.min(maxValor, currentValor + (valorTicks * VALOR_REGEN_AMOUNT));
+    }
+
+    // 3. Actualizar Timestamp
+    // Avanzamos el reloj solo por la cantidad de "tiempo de Vida" consumido (el intervalo más corto).
+    // Esto evita perder la sincronía fina, aunque implica que si refrescas cada 10 segs, 
+    // la energía podría tardar un poco más en sentirse. Es el mejor compromiso con una sola columna de fecha.
+    let updatedLast = last;
+    if (hpTicks > 0) {
+        updatedLast = new Date(last.getTime() + (hpTicks * HP_REGEN_EVERY_SECONDS * 1000));
+    }
+
+    // Si ya estamos a tope de todo, reseteamos el timer al ahora para no acumular tiempo infinito
+    const isFull = updatedHp >= maxHp && updatedEnergy >= maxEnergy && updatedValor >= maxValor;
+    if (isFull) {
+        updatedLast = new Date(now);
+    }
+
+    return { 
+        currentHp: updatedHp, 
+        currentEnergy: updatedEnergy, 
+        currentValor: updatedValor, 
+        lastRegenAt: updatedLast 
+    };
 };
 
 const getDb = (client) => client || pool;
@@ -79,7 +126,6 @@ const getActivePetBonuses = async (playerId, client) => {
     return normalizeStats(res.rows[0]?.bonus_stats);
 };
 
-// Carga jugador + equipo + mascota, calcula stats derivados, aplica regen y clamp de HP
 const hydratePlayer = async (userOrId, client) => {
     const db = getDb(client);
     let basePlayer;
@@ -102,27 +148,42 @@ const hydratePlayer = async (userOrId, client) => {
     });
 
     const maxHp = computeMaxHp(totalStats.constitution || 0);
-    const regenResult = applyHpRegen({
+    
+    // --- NUEVO: Usar applyRegen para todo ---
+    const regenResult = applyRegen({
         currentHp: Number(basePlayer.current_hp) || 0,
         maxHp,
+        currentEnergy: Number(basePlayer.energy) || 0,
+        maxEnergy: ENERGY_MAX_DEFAULT, // O basePlayer.max_energy si existiera
+        currentValor: Number(basePlayer.valor) || 0,
+        maxValor: VALOR_MAX_DEFAULT,
         lastRegenAt: basePlayer.last_regen_at,
         now: new Date()
     });
 
     let currentHp = regenResult.currentHp;
+    let currentEnergy = regenResult.currentEnergy;
+    let currentValor = regenResult.currentValor;
     const lastRegenAt = regenResult.lastRegenAt;
 
-    // Clamp si el máximo bajó por quitar equipo/mascota
+    // Clamp de seguridad
     if (currentHp > maxHp) currentHp = maxHp;
 
     const lastPersisted = basePlayer.last_regen_at ? new Date(basePlayer.last_regen_at).getTime() : null;
     const lastComputed = lastRegenAt ? new Date(lastRegenAt).getTime() : null;
-    const needsUpdate = currentHp !== basePlayer.current_hp || (lastComputed && lastComputed !== lastPersisted);
+    
+    // Detectar si hubo cambios en CUALQUIER stat
+    const needsUpdate = 
+        currentHp !== basePlayer.current_hp || 
+        currentEnergy !== basePlayer.energy || 
+        currentValor !== basePlayer.valor || 
+        (lastComputed && lastComputed !== lastPersisted);
 
     if (needsUpdate) {
+        // --- QUERY ACTUALIZADA: Guarda Energía y Valor ---
         await db.query(
-            'UPDATE players SET current_hp = $1, last_regen_at = $2 WHERE id = $3',
-            [currentHp, lastRegenAt, basePlayer.id]
+            'UPDATE players SET current_hp = $1, energy = $2, valor = $3, last_regen_at = $4 WHERE id = $5',
+            [currentHp, currentEnergy, currentValor, lastRegenAt, basePlayer.id]
         );
     }
 
@@ -130,6 +191,8 @@ const hydratePlayer = async (userOrId, client) => {
         ...basePlayer,
         stats: normalizeStats(basePlayer.stats),
         current_hp: currentHp,
+        energy: currentEnergy, // Devolvemos valor actualizado
+        valor: currentValor,   // Devolvemos valor actualizado
         last_regen_at: lastRegenAt,
         calculatedMaxHp: maxHp,
         calculated_max_hp: maxHp,
@@ -142,6 +205,6 @@ module.exports = {
     HP_REGEN_EVERY_SECONDS,
     computeTotalStats,
     computeMaxHp,
-    applyHpRegen,
+    applyRegen, // Exportamos la nueva función
     hydratePlayer
 };

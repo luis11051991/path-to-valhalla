@@ -10,6 +10,9 @@ const EXPEDITION_ICONS = {
     skull: '/icons/expedition/skull.png',
     attack: '/icons/expedition/attack_sword.png',
     bossBadge: '/icons/expedition/boss_badge.png',
+    // NUEVOS ICONOS
+    win: '/icons/expedition/win.png',
+    lose: '/icons/expedition/lose.png',
 };
 
 const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
@@ -46,33 +49,20 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         if (!user || !user.last_expedition_at) return;
 
         const checkCooldown = () => {
-            // 1. Obtener tiempo actual en UTC (timestamp puro)
-            // Esto ignora si el PC está en China o Perú, usa el tiempo universal.
             const now = Date.now();
-
-            // 2. Parsear la fecha del servidor asegurando que se trate como UTC
             let dateString = user.last_expedition_at;
-            
-            // Si la fecha viene como string simple (ej: "2023-10-25 10:00:00")
-            // le agregamos la 'Z' para decirle al navegador "¡Hey, esto es UTC!"
             if (typeof dateString === 'string' && !dateString.endsWith('Z')) {
                 dateString += 'Z'; 
             }
-            
-            // Convertimos a milisegundos
             const lastExpedition = new Date(dateString).getTime();
-
-            // 3. Calcular diferencia en segundos
             const diffSeconds = (now - lastExpedition) / 1000;
 
-            // 4. Determinar cooldown según nivel
             let needed = 10;
             if (user.level >= 40) needed = 90;
             else if (user.level >= 30) needed = 70;
             else if (user.level >= 20) needed = 50;
             else if (user.level >= 10) needed = 30;
 
-            // 5. Calcular restante
             if (diffSeconds < needed) {
                 setCooldownSeconds(Math.ceil(needed - diffSeconds));
             } else {
@@ -100,7 +90,7 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
     // --- CÁLCULO DE STATS REALES ---
     const playerStats = useMemo(() => {
-        if (!user) return {}; // Protección si user es null
+        if (!user) return {}; 
         let bonuses = { strength: 0, dexterity: 0, constitution: 0, luck: 0, armor: 0, damage_min: 0, damage_max: 0 };
 
         if (user.real_inventory) {
@@ -207,7 +197,7 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         return raceData ? raceData.bgImage : null;
     };
 
-    if (!user) return null; // Protección extra
+    if (!user) return null; 
     if (loading && view === 'MAP') return <div className="text-center mt-20 text-slate-500 animate-pulse">Cargando mapa...</div>;
 
     return (
@@ -392,6 +382,10 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
     const [visibleLines, setVisibleLines] = useState([]);
     const [currentHp, setCurrentHp] = useState({ player: result.initialPlayerHp, enemy: initialEnemyHpCurrent });
     const [isFinished, setIsFinished] = useState(false);
+    
+    // NUEVO: Estado para contar el daño acumulado
+    const [totalDamage, setTotalDamage] = useState({ player: 0, enemy: 0 });
+
     const scrollRef = useRef(null);
     const timerRef = useRef(null); 
 
@@ -403,16 +397,30 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
             player: result.initialPlayerHp,
             enemy: initialEnemyHpCurrent
         });
+        
+        setTotalDamage({ player: 0, enemy: 0 });
 
         timerRef.current = setInterval(() => {
             if (idx < log.length) {
                 const line = log[idx];
                 if (line) {
                     setVisibleLines(prev => [...prev, line]);
+                    
+                    // Actualizar HP
                     setCurrentHp(prev => ({
                         player: line.playerHp !== undefined ? Math.max(0, line.playerHp) : prev.player,
                         enemy: line.enemyHp !== undefined ? Math.max(0, line.enemyHp) : prev.enemy
                     }));
+
+                    // Actualizar Contadores de Daño
+                    if (line.damage) {
+                        if (line.type === 'player_atk') {
+                            setTotalDamage(prev => ({ ...prev, player: prev.player + line.damage }));
+                        }
+                        if (line.type === 'enemy_atk') {
+                            setTotalDamage(prev => ({ ...prev, enemy: prev.enemy + line.damage }));
+                        }
+                    }
                 }
                 idx++;
                 if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -429,10 +437,23 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
         if (timerRef.current) clearInterval(timerRef.current);
         setVisibleLines(result.log);
         setIsFinished(true); 
+        
         setCurrentHp({
             player: Math.max(0, result.finalPlayerHp),
             enemy: Math.max(0, result.isWin ? 0 : (result.log[result.log.length - 2]?.enemyHp || 0))
         });
+
+        // Calcular daño total instantáneo recorriendo todo el log
+        let finalDmgPlayer = 0;
+        let finalDmgEnemy = 0;
+        result.log.forEach(line => {
+            if (line.damage) {
+                if (line.type === 'player_atk') finalDmgPlayer += line.damage;
+                if (line.type === 'enemy_atk') finalDmgEnemy += line.damage;
+            }
+        });
+        setTotalDamage({ player: finalDmgPlayer, enemy: finalDmgEnemy });
+
         if (scrollRef.current) setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
     };
 
@@ -453,7 +474,7 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                 </button>
             )}
 
-            {/* 1. ARENA VISUAL (SUPERIOR - 55%) - AHORA CENTRADO MATEMÁTICAMENTE */}
+            {/* 1. ARENA VISUAL (SUPERIOR - 55%) */}
             <div className="h-[55%] relative flex items-center justify-center border-b-4 border-amber-900 shadow-2xl pt-16 overflow-hidden">
                 <div className="absolute inset-0 z-0">
                     <img
@@ -464,35 +485,44 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
                 </div>
 
-                {/* Usamos justify-center y gap fijo para simetría perfecta */}
+                {/* CONTENEDOR PRINCIPAL DE LUCHADORES */}
                 <div className="relative z-10 flex items-center justify-center gap-8 md:gap-16 w-full px-4">
+                    
                     {/* LADO JUGADOR */}
-                    <div className="flex items-center gap-4 animate-in slide-in-from-left duration-500">
-                        <div className="hidden md:flex flex-col gap-2 text-right bg-black/60 p-3 rounded-lg border-r-2 border-amber-600 backdrop-blur-md shadow-lg">
-                            <div className="text-amber-500 font-bold text-xs uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Tus Stats</div>
-                            <StatRow icon={<Sword size={12} />} label="Daño" value={`${playerStats.damageMin}-${playerStats.damageMax}`} />
-                            <StatRow icon={<Shield size={12} />} label="Defensa" value={playerStats.defense} />
-                            <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${playerStats.critChance}%`} color="text-yellow-400" />
-                            <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${playerStats.blockChance}%`} color="text-blue-400" />
+                    <div className="flex flex-col items-center gap-4 animate-in slide-in-from-left duration-500">
+                        {/* CONTADOR DE DAÑO */}
+                        <div className="text-white font-black text-2xl drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] flex flex-col items-center">
+                            <span className="text-[10px] text-slate-300 uppercase tracking-widest font-normal mb-1">Daño Total</span>
+                            {totalDamage.player}
                         </div>
 
-                        <div className="w-36 md:w-56 bg-slate-900 border-2 border-amber-600 rounded-lg shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
-                            <div className="h-40 md:h-56 bg-slate-800 relative">
-                                {playerBg && <img src={playerBg} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="User Bg" />}
-                                <img
-                                    src={playerImage}
-                                    className="relative z-10 w-full h-full object-contain object-bottom drop-shadow-[0_0_25px_rgba(0,0,0,0.9)]"
-                                    style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }}
-                                    alt="Hero"
-                                />
-                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900 to-transparent h-10 z-20" />
+                        <div className="flex items-center gap-4">
+                            <div className="hidden md:flex flex-col gap-2 text-right bg-black/60 p-3 rounded-lg border-r-2 border-amber-600 backdrop-blur-md shadow-lg">
+                                <div className="text-amber-500 font-bold text-xs uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Tus Stats</div>
+                                <StatRow icon={<Sword size={12} />} label="Daño" value={`${playerStats.damageMin}-${playerStats.damageMax}`} />
+                                <StatRow icon={<Shield size={12} />} label="Defensa" value={playerStats.defense} />
+                                <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${playerStats.critChance}%`} color="text-yellow-400" />
+                                <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${playerStats.blockChance}%`} color="text-blue-400" />
                             </div>
-                            <div className="p-2 bg-slate-950 text-center border-t border-slate-800">
-                                <div className="text-amber-500 font-bold text-xs md:text-sm truncate uppercase tracking-wider">{user.username}</div>
-                                <div className="w-full h-3 bg-slate-800 rounded-full mt-2 overflow-hidden border border-slate-700 relative">
-                                    <div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{ width: `${playerPct}%` }} />
+
+                            <div className="w-36 md:w-56 bg-slate-900 border-2 border-amber-600 rounded-lg shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
+                                <div className="h-40 md:h-56 bg-slate-800 relative">
+                                    {playerBg && <img src={playerBg} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="User Bg" />}
+                                    <img
+                                        src={playerImage}
+                                        className="relative z-10 w-full h-full object-contain object-bottom drop-shadow-[0_0_25px_rgba(0,0,0,0.9)]"
+                                        style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }}
+                                        alt="Hero"
+                                    />
+                                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900 to-transparent h-10 z-20" />
                                 </div>
-                                <div className="text-[10px] text-slate-400 mt-1 font-mono font-bold">{currentHp.player} HP</div>
+                                <div className="p-2 bg-slate-950 text-center border-t border-slate-800">
+                                    <div className="text-amber-500 font-bold text-xs md:text-sm truncate uppercase tracking-wider">{user.username}</div>
+                                    <div className="w-full h-3 bg-slate-800 rounded-full mt-2 overflow-hidden border border-slate-700 relative">
+                                        <div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{ width: `${playerPct}%` }} />
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-1 font-mono font-bold">{currentHp.player} HP</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -501,29 +531,37 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                     <div className="text-4xl md:text-7xl font-serif text-white/20 italic font-bold select-none drop-shadow-lg">VS</div>
 
                     {/* LADO ENEMIGO */}
-                    <div className="flex items-center gap-4 animate-in slide-in-from-right duration-500">
-                        <div className="w-36 md:w-56 bg-slate-900 border-2 border-red-600 rounded-lg shadow-[0_0_40px_rgba(220,38,38,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
-                            <div className="h-40 md:h-56 bg-slate-800 relative">
-                                <img src={result.enemyImage} className="w-full h-full object-cover" alt="Enemy" onError={(e) => e.target.src = "https://via.placeholder.com/150?text=Enemy"} />
-                                {baseEnemy?.is_boss && <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded font-bold animate-pulse shadow-lg">BOSS</div>}
-                            </div>
-                            <div className="p-2 bg-slate-950 text-center border-t border-slate-800">
-                                <div className="text-red-400 font-bold text-xs md:text-sm truncate uppercase tracking-wider">{result.enemyName}</div>
-                                <div className="w-full h-3 bg-slate-800 rounded-full mt-2 overflow-hidden border border-slate-700 relative">
-                                    <div className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-500" style={{ width: `${enemyPct}%` }} />
-                                </div>
-                                <div className="text-[10px] text-slate-400 mt-1 font-mono font-bold">
-                                    {isEnemyReady ? `${currentHp.enemy}/${initialEnemyHpValue} HP` : '...'}
-                                </div>
-                            </div>
+                    <div className="flex flex-col items-center gap-4 animate-in slide-in-from-right duration-500">
+                        {/* CONTADOR DE DAÑO */}
+                        <div className="text-white font-black text-2xl drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] flex flex-col items-center">
+                            <span className="text-[10px] text-slate-300 uppercase tracking-widest font-normal mb-1">Daño Total</span>
+                            {totalDamage.enemy}
                         </div>
 
-                        <div className="hidden md:flex flex-col gap-2 text-left bg-black/60 p-3 rounded-lg border-l-2 border-red-600 backdrop-blur-md shadow-lg">
-                            <div className="text-red-500 font-bold text-xs uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Enemigo</div>
-                            <StatRow icon={<Sword size={12} />} label="Daño" value={`${enemyStats.damage_min ?? 0}-${enemyStats.damage_max ?? 0}`} align="left" />
-                            <StatRow icon={<Shield size={12} />} label="Armadura" value={enemyStats.armor ?? 0} align="left" />
-                            <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${enemyStats.crit_chance ?? 0}%`} color="text-yellow-600" align="left" />
-                            <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${enemyStats.block_chance ?? 0}%`} color="text-blue-400" align="left" />
+                        <div className="flex items-center gap-4">
+                            <div className="w-36 md:w-56 bg-slate-900 border-2 border-red-600 rounded-lg shadow-[0_0_40px_rgba(220,38,38,0.3)] overflow-hidden flex flex-col transform hover:scale-105 transition-transform">
+                                <div className="h-40 md:h-56 bg-slate-800 relative">
+                                    <img src={result.enemyImage} className="w-full h-full object-cover" alt="Enemy" onError={(e) => e.target.src = "https://via.placeholder.com/150?text=Enemy"} />
+                                    {baseEnemy?.is_boss && <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded font-bold animate-pulse shadow-lg">BOSS</div>}
+                                </div>
+                                <div className="p-2 bg-slate-950 text-center border-t border-slate-800">
+                                    <div className="text-red-400 font-bold text-xs md:text-sm truncate uppercase tracking-wider">{result.enemyName}</div>
+                                    <div className="w-full h-3 bg-slate-800 rounded-full mt-2 overflow-hidden border border-slate-700 relative">
+                                        <div className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-500" style={{ width: `${enemyPct}%` }} />
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-1 font-mono font-bold">
+                                        {isEnemyReady ? `${currentHp.enemy}/${initialEnemyHpValue} HP` : '...'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="hidden md:flex flex-col gap-2 text-left bg-black/60 p-3 rounded-lg border-l-2 border-red-600 backdrop-blur-md shadow-lg">
+                                <div className="text-red-500 font-bold text-xs uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Enemigo</div>
+                                <StatRow icon={<Sword size={12} />} label="Daño" value={`${enemyStats.damage_min ?? 0}-${enemyStats.damage_max ?? 0}`} align="left" />
+                                <StatRow icon={<Shield size={12} />} label="Armadura" value={enemyStats.armor ?? 0} align="left" />
+                                <StatRow icon={<Crosshair size={12} />} label="Crítico" value={`${enemyStats.crit_chance ?? 0}%`} color="text-yellow-600" align="left" />
+                                <StatRow icon={<Ban size={12} />} label="Bloqueo" value={`${enemyStats.block_chance ?? 0}%`} color="text-blue-400" align="left" />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -563,16 +601,16 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
 
                             {/* MENSAJE DE VICTORIA/DERROTA (DENTRO DEL LOG) */}
                             {isFinished && (
-                                <div className="mt-8 p-6 text-center animate-in zoom-in duration-500 bg-black/60 rounded-xl border border-slate-700 shadow-lg mx-auto w-fit">
-                                    {result.isWin ? (
-                                        <div className="text-green-400 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
-                                            <Trophy size={48} className="text-yellow-400 mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" /> ¡VICTORIA!
-                                        </div>
-                                    ) : (
-                                        <div className="text-red-500 font-bold text-2xl uppercase tracking-widest flex flex-col items-center gap-2">
-                                            <Skull size={48} className="text-red-600 mb-2 drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]" /> DERROTA
-                                        </div>
-                                    )}
+                                <div className="mt-4 flex flex-col items-center animate-in zoom-in duration-500">
+                                    <img
+                                        src={result.isWin ? EXPEDITION_ICONS.win : EXPEDITION_ICONS.lose}
+                                        alt={result.isWin ? "Victory" : "Defeat"}
+                                        className="w-32 h-32 object-contain drop-shadow-[0_0_15px_rgba(0,0,0,0.8)]"
+                                    />
+                                    {/* TEXTO CALIGRÁFICO/ÉPICO ÚNICO */}
+                                    <div className={`text-4xl font-serif font-bold italic tracking-wide mt-4 ${result.isWin ? 'text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200 drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]' : 'text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-red-600 to-red-400 drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]'}`}>
+                                        {result.isWin ? 'Victoria' : 'Derrota'}
+                                    </div>
                                 </div>
                             )}
                         </div>
