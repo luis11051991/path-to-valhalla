@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom'; 
-import { Sword, Shield, Skull, Trophy, Lock, Clock, Crosshair, Ban, FastForward } from 'lucide-react';
+import { Sword, Shield, Skull, Trophy, Lock, Clock, Crosshair, Ban, FastForward, Map as MapIcon, ChevronRight } from 'lucide-react';
 import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
 
@@ -10,7 +10,6 @@ const EXPEDITION_ICONS = {
     skull: '/icons/expedition/skull.png',
     attack: '/icons/expedition/attack_sword.png',
     bossBadge: '/icons/expedition/boss_badge.png',
-    // NUEVOS ICONOS
     win: '/icons/expedition/win.png',
     lose: '/icons/expedition/lose.png',
 };
@@ -27,6 +26,9 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [zones, setZones] = useState([]);
     const [enemies, setEnemies] = useState([]);
     const [loading, setLoading] = useState(true);
+    
+    // Estado para pestañas (Tier 0 = Niveles 1-10, Tier 1 = 11-20, etc.)
+    const [activeTabTier, setActiveTabTier] = useState(0); 
 
     // Estado de Batalla
     const [battleResult, setBattleResult] = useState(null);
@@ -75,18 +77,47 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         return () => clearInterval(interval);
     }, [user]);
 
-    // --- CARGAR MAPA ---
+    // --- CARGAR MAPA Y AUTO-SELECCIONAR PESTAÑA (CORREGIDO) ---
     useEffect(() => {
         fetch(apiUrl('/api/expeditions'), {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
             .then(res => res.json())
             .then(data => {
-                if (data.success) setZones(data.expeditions);
+                if (data.success) {
+                    const fetchedZones = data.expeditions;
+                    setZones(fetchedZones);
+
+                    // --- LÓGICA DE AUTO-SELECCIÓN ROBUSTA ---
+                    // 1. Identificar qué tiers tienen mapas realmente
+                    const tiersWithData = new Set();
+                    fetchedZones.forEach(zone => {
+                        const tier = Math.floor((zone.level_req - 1) / 10);
+                        tiersWithData.add(tier);
+                    });
+                    // Ordenar tiers disponibles (ej: [0, 2, 5])
+                    const sortedAvailableTiers = Array.from(tiersWithData).sort((a, b) => a - b);
+
+                    // 2. Calcular el tier ideal basado en el nivel del jugador
+                    let targetTier = 0;
+                    if (user && user.level) {
+                        targetTier = Math.floor((user.level - 1) / 10);
+                    }
+
+                    // 3. Decisión final:
+                    // Si el tier ideal del jugador NO tiene datos, usar el primer tier disponible.
+                    let finalTierToSelect = targetTier;
+                    if (!tiersWithData.has(targetTier) && sortedAvailableTiers.length > 0) {
+                        finalTierToSelect = sortedAvailableTiers[0];
+                    }
+
+                    // Aplicar la selección
+                    setActiveTabTier(finalTierToSelect);
+                }
                 setLoading(false);
             })
             .catch(err => console.error(err));
-    }, []);
+    }, [user?.level]); // Se recalcula si el usuario sube de nivel
 
     // --- CÁLCULO DE STATS REALES ---
     const playerStats = useMemo(() => {
@@ -121,6 +152,22 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             blockChance: Math.min(totalLuck * 0.25, 25).toFixed(1)
         };
     }, [user]);
+
+    // --- LÓGICA DE AGRUPACIÓN DE ZONAS ---
+    const groupedZones = useMemo(() => {
+        const groups = {};
+        zones.forEach(zone => {
+            // Calculamos el Tier: 1-10 -> 0, 11-20 -> 1, etc.
+            const tier = Math.floor((zone.level_req - 1) / 10);
+            if (!groups[tier]) groups[tier] = [];
+            groups[tier].push(zone);
+        });
+        return groups;
+    }, [zones]);
+
+    const activeZones = groupedZones[activeTabTier] || [];
+    // Obtenemos solo los keys (tiers) que existen en el objeto agrupado
+    const availableTiers = Object.keys(groupedZones).map(Number).sort((a,b) => a-b);
 
     // --- ACCIONES ---
     const handleSelectZone = (zone) => {
@@ -198,10 +245,10 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     if (!user) return null; 
-    if (loading && view === 'MAP') return <div className="text-center mt-20 text-slate-500 animate-pulse">Cargando mapa...</div>;
+    if (loading && view === 'MAP' && zones.length === 0) return <div className="text-center mt-20 text-slate-500 animate-pulse">Cargando mapa...</div>;
 
     return (
-        <div className="h-full relative overflow-hidden flex flex-col">
+        <div className="h-full relative overflow-hidden flex flex-col font-sans">
 
             {cooldownSeconds > 0 && (
                 <div className="bg-red-900/90 text-white text-center py-2 font-bold uppercase tracking-widest text-xs sticky top-0 z-50 flex items-center justify-center gap-2 shadow-lg border-b border-red-500 animate-in slide-in-from-top">
@@ -212,29 +259,122 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
             <div className="flex-1 overflow-hidden relative">
 
-                {/* VISTA 1: MAPA */}
+                {/* VISTA 1: MAPA (NUEVO DISEÑO) */}
                 {view === 'MAP' && (
-                    <div className="p-6 h-full overflow-y-auto pb-20 custom-scrollbar">
-                        <h2 className="text-3xl font-serif text-amber-500 mb-6 border-b border-amber-900/30 pb-2 flex items-center gap-3">
-                            <img src={EXPEDITION_ICONS.header} alt="Mapa" className="w-8 h-8 object-contain" />
-                            Mapa de Expediciones
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {zones.map(zone => {
-                                const isLocked = user.level < zone.level_req;
-                                return (
-                                    <div key={zone.id} onClick={() => handleSelectZone(zone)} className={`relative group border-2 rounded-xl overflow-hidden transition-all h-48 cursor-pointer ${isLocked ? 'border-red-900/30 grayscale opacity-60' : 'border-slate-700 hover:border-amber-500 hover:scale-[1.02] shadow-lg'}`}>
-                                        <img src={zone.image_url} className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                                        <div className="absolute bottom-0 left-0 p-4">
-                                            <h3 className="text-xl font-bold text-white drop-shadow-md flex items-center gap-2">
-                                                {zone.name} {isLocked && <Lock size={16} className="text-red-500" />}
-                                            </h3>
-                                            <p className="text-xs text-slate-300">Nivel Req: <span className={isLocked ? "text-red-400 font-bold" : "text-green-400 font-bold"}>{zone.level_req}</span></p>
+                    <div className="flex flex-col h-full">
+                        {/* HEADER + PESTAÑAS */}
+                        <div className="p-6 pb-2 shrink-0 bg-slate-950/80 backdrop-blur-sm z-10 border-b border-slate-800">
+                            <h2 className="text-3xl font-serif text-amber-500 mb-6 flex items-center gap-3 drop-shadow-md">
+                                <img src={EXPEDITION_ICONS.header} alt="Mapa" className="w-8 h-8 object-contain" />
+                                Mapa de Expediciones
+                            </h2>
+                            
+                            {/* BARRA DE PESTAÑAS DE NIVELES */}
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                {availableTiers.length === 0 ? (
+                                    // Si no hay NINGÚN mapa en toda la base de datos
+                                    <span className="text-slate-500 text-sm italic">No hay mapas disponibles.</span>
+                                ) : (
+                                    availableTiers.map(tierIndex => {
+                                        const startLvl = (tierIndex * 10) + 1;
+                                        const endLvl = (parseInt(tierIndex) + 1) * 10;
+                                        const isActive = tierIndex === activeTabTier;
+                                        const isAccessible = user.level >= startLvl;
+
+                                        return (
+                                            <button
+                                                key={tierIndex}
+                                                onClick={() => setActiveTabTier(tierIndex)}
+                                                className={`
+                                                    relative px-6 py-2 rounded-t-lg text-sm font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap
+                                                    ${isActive 
+                                                        ? 'bg-amber-900/30 text-amber-400 border-amber-500 shadow-[0_-4px_15px_rgba(245,158,11,0.1)]' 
+                                                        : isAccessible
+                                                            ? 'bg-slate-900 text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800'
+                                                            : 'bg-slate-950 text-slate-600 border-transparent opacity-60 cursor-not-allowed'
+                                                    }
+                                                `}
+                                            >
+                                                Nivel {startLvl}-{endLvl}
+                                                {!isAccessible && <Lock size={12} className="absolute top-1 right-1 text-slate-700" />}
+                                            </button>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+
+                        {/* LISTA RECTANGULAR DE MAPAS */}
+                        <div className="flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar space-y-4">
+                            {activeZones.length === 0 ? (
+                                <div className="text-center text-slate-500 mt-20 italic border-2 border-dashed border-slate-800 p-10 rounded-xl">
+                                    No hay mapas descubiertos en este rango de niveles.
+                                </div>
+                            ) : (
+                                activeZones.map(zone => {
+                                    const isLocked = user.level < zone.level_req;
+                                    return (
+                                        <div 
+                                            key={zone.id} 
+                                            onClick={() => !isLocked && handleSelectZone(zone)} 
+                                            className={`
+                                                relative w-full h-32 md:h-40 rounded-xl overflow-hidden border-2 transition-all group shrink-0
+                                                ${isLocked 
+                                                    ? 'border-slate-800 grayscale cursor-not-allowed opacity-60' 
+                                                    : 'border-slate-700 hover:border-amber-500 cursor-pointer shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                                                }
+                                            `}
+                                        >
+                                            {/* IMAGEN DE FONDO PANORÁMICA */}
+                                            <div className="absolute inset-0">
+                                                <img 
+                                                    src={zone.image_url} 
+                                                    className={`w-full h-full object-cover transition-transform duration-700 ${!isLocked && 'group-hover:scale-105'}`} 
+                                                    alt={zone.name}
+                                                />
+                                                {/* GRADIENTE PARA LEER TEXTO */}
+                                                <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/70 to-transparent" />
+                                            </div>
+
+                                            {/* CONTENIDO DEL RECTÁNGULO */}
+                                            <div className="relative z-10 h-full flex justify-between items-center px-6 md:px-10">
+                                                
+                                                {/* IZQUIERDA: INFORMACIÓN */}
+                                                <div className="max-w-[60%] flex flex-col justify-center h-full">
+                                                    <h3 className={`text-2xl font-serif font-bold mb-1 ${isLocked ? 'text-slate-500' : 'text-amber-100 group-hover:text-white'}`}>
+                                                        {zone.name}
+                                                    </h3>
+                                                    <div className="flex items-center gap-4 text-xs font-mono text-slate-400">
+                                                        <span className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded border border-white/5">
+                                                            <MapIcon size={12} /> Zona {zone.id}
+                                                        </span>
+                                                        {/* Aquí podrías añadir info de drops si la tuvieras disponible */}
+                                                    </div>
+                                                </div>
+
+                                                {/* DERECHA: ESTADO / ACCIÓN */}
+                                                <div className="flex flex-col items-end gap-2">
+                                                    {isLocked ? (
+                                                        <div className="flex items-center gap-2 text-red-500 font-bold bg-black/60 px-4 py-2 rounded-lg border border-red-900/50 backdrop-blur-sm">
+                                                            <Lock size={18} />
+                                                            <span>NIVEL {zone.level_req}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="text-green-400 text-xs font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
+                                                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Disponible
+                                                            </div>
+                                                            <button className="flex items-center gap-2 bg-amber-700 hover:bg-amber-600 text-white px-6 py-3 rounded-lg font-bold uppercase text-sm shadow-lg transition-transform group-hover:translate-x-1 border border-amber-500">
+                                                                Explorar <ChevronRight size={16} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })
+                            )}
                         </div>
                     </div>
                 )}
