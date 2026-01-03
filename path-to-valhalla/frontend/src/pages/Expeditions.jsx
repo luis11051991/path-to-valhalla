@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useOutletContext } from 'react-router-dom'; // <--- ÚNICO CAMBIO IMPORTANTE
+import { useOutletContext } from 'react-router-dom'; 
 import { Sword, Shield, Skull, Trophy, Lock, Clock, Crosshair, Ban, FastForward } from 'lucide-react';
 import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
@@ -30,10 +30,11 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [currentEnemy, setCurrentEnemy] = useState(null);
     const [isBattling, setIsBattling] = useState(false);
 
-    // --- COOLDOWN ---
+    // --- COOLDOWN (FIX ZONA HORARIA) ---
     const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
     const formatCooldown = (seconds) => {
+        if (seconds <= 0) return "00h 00m 00s";
         const hrs = Math.floor(seconds / 3600);
         const mins = Math.floor((seconds % 3600) / 60);
         const secs = seconds % 60;
@@ -43,19 +44,42 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
     useEffect(() => {
         if (!user || !user.last_expedition_at) return;
+
         const checkCooldown = () => {
-            const now = new Date();
-            const last = new Date(user.last_expedition_at);
-            const diff = (now - last) / 1000;
+            // 1. Obtener tiempo actual en UTC (timestamp puro)
+            // Esto ignora si el PC está en China o Perú, usa el tiempo universal.
+            const now = Date.now();
+
+            // 2. Parsear la fecha del servidor asegurando que se trate como UTC
+            let dateString = user.last_expedition_at;
+            
+            // Si la fecha viene como string simple (ej: "2023-10-25 10:00:00")
+            // le agregamos la 'Z' para decirle al navegador "¡Hey, esto es UTC!"
+            if (typeof dateString === 'string' && !dateString.endsWith('Z')) {
+                dateString += 'Z'; 
+            }
+            
+            // Convertimos a milisegundos
+            const lastExpedition = new Date(dateString).getTime();
+
+            // 3. Calcular diferencia en segundos
+            const diffSeconds = (now - lastExpedition) / 1000;
+
+            // 4. Determinar cooldown según nivel
             let needed = 10;
             if (user.level >= 40) needed = 90;
             else if (user.level >= 30) needed = 70;
             else if (user.level >= 20) needed = 50;
             else if (user.level >= 10) needed = 30;
 
-            if (diff < needed) setCooldownSeconds(Math.ceil(needed - diff));
-            else setCooldownSeconds(0);
+            // 5. Calcular restante
+            if (diffSeconds < needed) {
+                setCooldownSeconds(Math.ceil(needed - diffSeconds));
+            } else {
+                setCooldownSeconds(0);
+            }
         };
+
         checkCooldown();
         const interval = setInterval(checkCooldown, 1000);
         return () => clearInterval(interval);
