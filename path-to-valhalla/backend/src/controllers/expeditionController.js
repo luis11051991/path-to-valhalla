@@ -21,6 +21,76 @@ const generateRandomStats = (templateStats, rng) => {
     return finalStats;
 };
 
+// --- NUEVO: OBTENER BESTIARIO (CON LOOT Y STATS CALCULADOS) ---
+exports.getBestiary = async (req, res) => {
+    const userId = req.user?.id;
+    try {
+        console.log("-> Solicitando Bestiario...");
+
+        // 1. Consulta SQL (Base + Drops)
+        const query = `
+            SELECT 
+                e.*,
+                COALESCE(pb.kills, 0) as kills,
+                pb.first_kill_at,
+                (
+                    SELECT json_agg(json_build_object(
+                        'name', it.name, 
+                        'rarity', it.rarity, 
+                        'chance', ed.drop_chance,
+                        'image_url', it.image_url
+                    ))
+                    FROM enemy_drops ed
+                    JOIN items_templates it ON ed.item_template_id = it.id
+                    WHERE ed.enemy_id = e.id
+                ) as drops
+            FROM enemies e
+            LEFT JOIN player_bestiary pb ON e.id = pb.enemy_id AND pb.player_id = $1
+            ORDER BY e.min_level ASC, e.difficulty_tier ASC
+        `;
+        
+        const result = await pool.query(query, [userId]);
+        
+        // 2. PROCESAMIENTO DE STATS DINÁMICOS
+        // Como la DB tiene nulls porque es escalable, calculamos los rangos aquí.
+        const processedBestiary = result.rows.map(enemy => {
+            // Simulamos el monstruo en su nivel mínimo y máximo
+            // Truco: Forzamos el nivel modificando el objeto temporalmente
+            
+            // Versión más débil posible
+            const weakSim = generateEnemyInstance(
+                { ...enemy, min_level: enemy.min_level, max_level: enemy.min_level }, 
+                'sim-weak', 'bestiary'
+            );
+
+            // Versión más fuerte posible
+            const strongSim = generateEnemyInstance(
+                { ...enemy, min_level: enemy.max_level, max_level: enemy.max_level }, 
+                'sim-strong', 'bestiary'
+            );
+
+            return {
+                ...enemy,
+                // Agregamos los rangos calculados al objeto
+                calculated_stats: {
+                    damage: `${weakSim.damage_min} - ${strongSim.damage_max}`,
+                    hp: `${weakSim.hp_max} - ${strongSim.hp_max}`,
+                    armor: `${weakSim.armor} - ${strongSim.armor}`,
+                    crit: `${weakSim.crit_chance}%`, // El crítico suele ser estable por tier
+                    block: `${weakSim.block_chance}%`
+                }
+            };
+        });
+
+        console.log(`[BESTIARY] Enviando ${processedBestiary.length} enemigos procesados.`);
+        res.json({ success: true, bestiary: processedBestiary });
+
+    } catch (err) {
+        console.error("[BESTIARY ERROR]", err.message);
+        res.status(500).json({ message: 'Error cargando el bestiario.' });
+    }
+};
+
 exports.getExpeditions = async (req, res) => {
     try {
         const result = await pool.query(`SELECT id, name, description, level_required as level_req, energy_cost, duration_seconds, image_url FROM expeditions ORDER BY level_required ASC`);
@@ -107,11 +177,11 @@ exports.startBattle = async (req, res) => {
         const totalInt = totalStats.intelligence || 0; // Necesario para magia
         const totalCon = totalStats.constitution || 0;
         const totalArmor = (totalStats.armor || 0) + (totalStats.defense || 0);
-        
+
         const weaponMin = Math.max(0, totalStats.damage_min || 0);
         const weaponMax = Math.max(weaponMin, totalStats.damage_max || weaponMin);
 
-        // --- CARGAR SKILLS EQUIPADOS (NUEVO) ---
+        // --- CARGAR SKILLS EQUIPADOS ---
         const skillsQuery = `
             SELECT ps.skill_level, s.name, s.damage_min, s.damage_max, s.heal_amount, 
                    s.trigger_chance, s.scaling_stat, s.scaling_factor
@@ -144,7 +214,7 @@ exports.startBattle = async (req, res) => {
 
         let log = [];
         let isWin = false;
-        
+
         // Variables para tracking de daño total (para el desempate)
         let totalDamageDealtByPlayer = 0;
         let totalDamageDealtByEnemy = 0;
@@ -163,20 +233,16 @@ exports.startBattle = async (req, res) => {
 
             // Intentar activar Skill
             for (const skill of equippedSkills) {
-                // Probabilidad: Base + (Inteligencia * 0.5)% - Tope 60%
                 const chance = Math.min(60, (skill.trigger_chance || 15) + (totalInt * 0.5));
-                
+
                 if (Math.random() * 100 <= chance) {
                     skillTriggered = skill;
-                    
-                    // Calcular Poder (Nivel + Escalado)
-                    const lvlMult = 1 + ((skill.skill_level - 1) * 0.1); // +10% por nivel
-                    
+                    const lvlMult = 1 + ((skill.skill_level - 1) * 0.1);
+
                     if (skill.damage_min > 0) {
                         const baseSkillDmg = Math.floor(Math.random() * (skill.damage_max - skill.damage_min + 1)) + skill.damage_min;
                         skillDamage = Math.floor(baseSkillDmg * lvlMult);
-                        
-                        // Bonos por stats
+
                         if (skill.scaling_stat === 'intelligence') skillDamage += Math.floor(totalInt * (skill.scaling_factor || 1));
                         if (skill.scaling_stat === 'strength') skillDamage += Math.floor(totalStr * (skill.scaling_factor || 1));
                         if (skill.scaling_stat === 'dexterity') skillDamage += Math.floor(totalDex * (skill.scaling_factor || 1));
@@ -185,34 +251,32 @@ exports.startBattle = async (req, res) => {
                     if (skill.heal_amount > 0) {
                         skillHeal = Math.floor(skill.heal_amount * lvlMult + (totalInt * 0.5));
                     }
-                    break; // Solo 1 skill por turno
+                    break;
                 }
             }
 
-            // Aplicar Daño
             let finalDmgToEnemy = Math.max(1, (baseTotalDmg + skillDamage) - Math.floor((enemy.armor || 0) / 5));
             enemy.current_hp -= finalDmgToEnemy;
             totalDamageDealtByPlayer += finalDmgToEnemy;
 
-            // Logs
             if (skillTriggered) {
-                log.push({ 
-                    type: 'player_atk', 
-                    msg: `¡Usas ${skillTriggered.name}! (Daño: ${finalDmgToEnemy})`, 
+                log.push({
+                    type: 'player_atk',
+                    msg: `¡Usas ${skillTriggered.name}! (Daño: ${finalDmgToEnemy})`,
                     isSkill: true,
-                    damage: finalDmgToEnemy, // NUEVO: Dato numérico para frontend
-                    enemyHp: Math.max(0, enemy.current_hp) 
+                    damage: finalDmgToEnemy,
+                    enemyHp: Math.max(0, enemy.current_hp)
                 });
                 if (skillHeal > 0) {
                     player.current_hp = Math.min(playerMaxHp, player.current_hp + skillHeal);
                     log.push({ type: 'info', msg: `Te curas ${skillHeal} HP.` });
                 }
             } else {
-                log.push({ 
-                    type: 'player_atk', 
-                    msg: `Golpeas por ${finalDmgToEnemy}`, 
-                    damage: finalDmgToEnemy, // NUEVO: Dato numérico para frontend
-                    enemyHp: Math.max(0, enemy.current_hp) 
+                log.push({
+                    type: 'player_atk',
+                    msg: `Golpeas por ${finalDmgToEnemy}`,
+                    damage: finalDmgToEnemy,
+                    enemyHp: Math.max(0, enemy.current_hp)
                 });
             }
 
@@ -228,11 +292,11 @@ exports.startBattle = async (req, res) => {
             player.current_hp -= dmgToPlayer;
             totalDamageDealtByEnemy += dmgToPlayer;
 
-            log.push({ 
-                type: 'enemy_atk', 
-                msg: `Te golpean por ${dmgToPlayer}`, 
-                damage: dmgToPlayer, // NUEVO: Dato numérico para frontend
-                playerHp: Math.max(0, player.current_hp) 
+            log.push({
+                type: 'enemy_atk',
+                msg: `Te golpean por ${dmgToPlayer}`,
+                damage: dmgToPlayer,
+                playerHp: Math.max(0, player.current_hp)
             });
 
             if (player.current_hp <= 0) {
@@ -245,7 +309,6 @@ exports.startBattle = async (req, res) => {
 
         // --- 3. LÓGICA DE DESEMPATE (Turno 10) ---
         if (enemy.current_hp > 0 && player.current_hp > 0) {
-            // Nadie murió tras 10 rondas. Gana quien hizo más daño.
             if (totalDamageDealtByPlayer >= totalDamageDealtByEnemy) {
                 isWin = true;
                 log.push({ type: 'info', msg: `¡Tiempo agotado! Ganaste por daño (${totalDamageDealtByPlayer} vs ${totalDamageDealtByEnemy}).` });
@@ -255,9 +318,18 @@ exports.startBattle = async (req, res) => {
             }
         }
 
-        // --- MISIONES ---
+        // --- MISIONES Y BESTIARIO ---
         let questLogs = [];
         if (isWin) {
+            // A. REGISTRAR BESTIARIO
+            await client.query(`
+                INSERT INTO player_bestiary (player_id, enemy_id, kills, first_kill_at)
+                VALUES ($1, $2, 1, NOW())
+                ON CONFLICT (player_id, enemy_id)
+                DO UPDATE SET kills = player_bestiary.kills + 1
+            `, [userId, baseEnemy.id]);
+
+            // B. MISIONES
             const activeQuestsRes = await client.query(`
                 SELECT pq.id, pq.progress, q.title, q.requirements 
                 FROM player_quests pq
@@ -266,7 +338,7 @@ exports.startBattle = async (req, res) => {
             `, [userId]);
 
             for (const quest of activeQuestsRes.rows) {
-                let progress = { ...quest.progress }; 
+                let progress = { ...quest.progress };
                 let updated = false;
                 const requirements = quest.requirements || [];
 
@@ -310,7 +382,7 @@ exports.startBattle = async (req, res) => {
                     currentLevel++;
                     currentStatPoints += 5;
                     leveledUp = true;
-                    player.current_hp = playerMaxHp; 
+                    player.current_hp = playerMaxHp;
                     log.push({ type: 'info', msg: `¡LEVEL UP! Ahora eres nivel ${currentLevel}` });
                 } else { break; }
             }
@@ -320,7 +392,7 @@ exports.startBattle = async (req, res) => {
             let copperGain = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
             if (enemyInstance.is_elite_minor) {
                 copperGain = Math.round(copperGain * 1.15);
-                if (Math.random() <= 0.02) copperGain += 100; // bonus silver
+                if (Math.random() <= 0.02) copperGain += 100;
             }
             rewards.copper = copperGain;
 
@@ -370,12 +442,10 @@ exports.startBattle = async (req, res) => {
             is_elite_minor: enemy.is_elite_minor
         };
 
-        console.log('[COMBAT] enemy_stats', enemyStats);
-
         res.json({
             success: true,
             combatResult: {
-                isWin, log, rewards, leveledUp, 
+                isWin, log, rewards, leveledUp,
                 initialPlayerHp, initialEnemyHp, finalPlayerHp: player.current_hp,
                 enemyName: baseEnemy.name, enemyImage: baseEnemy.image_url,
                 enemy_stats: enemyStats

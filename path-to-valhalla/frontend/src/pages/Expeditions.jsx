@@ -77,7 +77,7 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         return () => clearInterval(interval);
     }, [user]);
 
-    // --- CARGAR MAPA Y AUTO-SELECCIONAR PESTAÑA (CORREGIDO) ---
+    // --- CARGAR MAPA Y AUTO-SELECCIONAR PESTAÑA ---
     useEffect(() => {
         fetch(apiUrl('/api/expeditions'), {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -89,35 +89,29 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     setZones(fetchedZones);
 
                     // --- LÓGICA DE AUTO-SELECCIÓN ROBUSTA ---
-                    // 1. Identificar qué tiers tienen mapas realmente
                     const tiersWithData = new Set();
                     fetchedZones.forEach(zone => {
                         const tier = Math.floor((zone.level_req - 1) / 10);
                         tiersWithData.add(tier);
                     });
-                    // Ordenar tiers disponibles (ej: [0, 2, 5])
                     const sortedAvailableTiers = Array.from(tiersWithData).sort((a, b) => a - b);
 
-                    // 2. Calcular el tier ideal basado en el nivel del jugador
                     let targetTier = 0;
                     if (user && user.level) {
                         targetTier = Math.floor((user.level - 1) / 10);
                     }
 
-                    // 3. Decisión final:
-                    // Si el tier ideal del jugador NO tiene datos, usar el primer tier disponible.
                     let finalTierToSelect = targetTier;
                     if (!tiersWithData.has(targetTier) && sortedAvailableTiers.length > 0) {
                         finalTierToSelect = sortedAvailableTiers[0];
                     }
 
-                    // Aplicar la selección
                     setActiveTabTier(finalTierToSelect);
                 }
                 setLoading(false);
             })
             .catch(err => console.error(err));
-    }, [user?.level]); // Se recalcula si el usuario sube de nivel
+    }, [user?.level]); 
 
     // --- CÁLCULO DE STATS REALES ---
     const playerStats = useMemo(() => {
@@ -157,7 +151,6 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const groupedZones = useMemo(() => {
         const groups = {};
         zones.forEach(zone => {
-            // Calculamos el Tier: 1-10 -> 0, 11-20 -> 1, etc.
             const tier = Math.floor((zone.level_req - 1) / 10);
             if (!groups[tier]) groups[tier] = [];
             groups[tier].push(zone);
@@ -166,7 +159,6 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     }, [zones]);
 
     const activeZones = groupedZones[activeTabTier] || [];
-    // Obtenemos solo los keys (tiers) que existen en el objeto agrupado
     const availableTiers = Object.keys(groupedZones).map(Number).sort((a,b) => a-b);
 
     // --- ACCIONES ---
@@ -272,7 +264,6 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                             {/* BARRA DE PESTAÑAS DE NIVELES */}
                             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                                 {availableTiers.length === 0 ? (
-                                    // Si no hay NINGÚN mapa en toda la base de datos
                                     <span className="text-slate-500 text-sm italic">No hay mapas disponibles.</span>
                                 ) : (
                                     availableTiers.map(tierIndex => {
@@ -341,14 +332,23 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                                 
                                                 {/* IZQUIERDA: INFORMACIÓN */}
                                                 <div className="max-w-[60%] flex flex-col justify-center h-full">
-                                                    <h3 className={`text-2xl font-serif font-bold mb-1 ${isLocked ? 'text-slate-500' : 'text-amber-100 group-hover:text-white'}`}>
+                                                    <h3 className={`text-2xl font-serif font-bold mb-2 ${isLocked ? 'text-slate-500' : 'text-amber-100 group-hover:text-white drop-shadow-lg'}`}>
                                                         {zone.name}
                                                     </h3>
+                                                    
+                                                    {/* DESCRIPCIÓN OCULTA - SOLO APARECE EN HOVER (NUEVO) */}
+                                                    {zone.description && (
+                                                        <div className={`overflow-hidden transition-all duration-500 ease-out ${isLocked ? 'max-h-0 opacity-0' : 'max-h-0 opacity-0 group-hover:max-h-20 group-hover:opacity-100'}`}>
+                                                            <p className="text-sm font-serif italic mb-3 leading-relaxed text-amber-200/90 drop-shadow-md border-l-2 border-amber-500/50 pl-2">
+                                                                "{zone.description}"
+                                                            </p>
+                                                        </div>
+                                                    )}
+
                                                     <div className="flex items-center gap-4 text-xs font-mono text-slate-400">
                                                         <span className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded border border-white/5">
                                                             <MapIcon size={12} /> Zona {zone.id}
                                                         </span>
-                                                        {/* Aquí podrías añadir info de drops si la tuvieras disponible */}
                                                     </div>
                                                 </div>
 

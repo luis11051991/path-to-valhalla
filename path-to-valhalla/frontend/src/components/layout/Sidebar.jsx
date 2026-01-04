@@ -12,7 +12,7 @@ const links = [
             { to: '/grimoire', label: 'Grimorio', icon: '/icons/tabs/tab_grimoire.png' }, 
             
             { to: '/inventory', label: 'Paquetes', icon: '/icons/sidebar/hero_packages.png' }, 
-            { to: '/bestiary', label: 'Bestiario', icon: '/icons/sidebar/hero_bestiary.png', disabled: true },
+            { to: '/bestiary', label: 'Bestiario', icon: '/icons/sidebar/hero_bestiary.png'},
             { to: '/achievements', label: 'Logros', icon: '/icons/sidebar/hero_achievements.png', disabled: true },
             { to: '/stats', label: 'Estadísticas', icon: '/icons/sidebar/hero_stats.png', disabled: true },
             { to: '/messages', label: 'Mensajería', icon: '/icons/sidebar/hero_messages.png', disabled: true }, 

@@ -19,7 +19,10 @@ const expeditionRoutes = require('./src/routes/expeditionRoutes');
 const packageRoutes = require('./src/routes/packageRoutes'); 
 const shopRoutes = require('./src/routes/shopRoutes'); 
 const workshopRoutes = require('./src/routes/workshopRoutes'); 
-const questRoutes = require('./src/routes/questRoutes'); // <--- 1. NUEVO IMPORT
+const questRoutes = require('./src/routes/questRoutes');
+
+// CORRECCIÓN AQUÍ: Agregamos el /src/ que faltaba
+const bestiaryRoutes = require('./src/routes/bestiaryRoutes'); 
 
 const app = express();
 
@@ -34,7 +37,8 @@ app.use('/api/expeditions', expeditionRoutes);
 app.use('/api/packages', packageRoutes); 
 app.use('/api/shop', shopRoutes); 
 app.use('/api/workshop', workshopRoutes); 
-app.use('/api/quests', questRoutes); // <--- 2. CONECTADO AQUÍ
+app.use('/api/quests', questRoutes);
+app.use('/api/bestiary', bestiaryRoutes);
 
 // --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);

@@ -14,6 +14,7 @@ import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
 import OnixShopModal from './components/OnixShopModal';
 import Grimoire from './pages/Grimoire';
+import Bestiary from './pages/Bestiary';
 import { apiUrl } from './constants/api';
 
 function App() {
@@ -100,7 +101,7 @@ function App() {
               <Route path="/" element={<Navigate to="/hero" replace />} />
 
               {/* --- RUTAS DEL JUEGO --- */}
-              
+
               {/* Visión General (AHORA USA HeroOverview) */}
               <Route
                 path="/hero"
@@ -119,11 +120,18 @@ function App() {
                 element={<Packages user={user} token={localStorage.getItem('token')} onUpdateUser={handleUserUpdate} />}
               />
 
+              {/* Bestiario */}
+              <Route
+                path="/bestiary"
+                element={<Bestiary user={user} onUpdateUser={handleUserUpdate} />}
+              />
+
               {/* Aventura */}
               <Route
                 path="/expeditions"
                 element={<Expeditions user={user} onUpdateUser={handleUserUpdate} />}
               />
+              
               <Route
                 path="/valhalla"
                 element={<ValhallaHall user={user} onUpdateUser={handleUserUpdate} />}
