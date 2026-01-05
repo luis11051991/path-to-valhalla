@@ -40,6 +40,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [currentBgUrl, setCurrentBgUrl] = useState(user?.active_background_url);
     const [pendingPurchase, setPendingPurchase] = useState(null);
     const [errorMsg, setErrorMsg] = useState(null);
+    const [successMsg, setSuccessMsg] = useState(null); // Nuevo estado para mensajes de éxito
 
     const [myPets, setMyPets] = useState([]);
     const [activePet, setActivePet] = useState(null);
@@ -48,6 +49,9 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [tooltipData, setTooltipData] = useState(null);
     const [draggedItem, setDraggedItem] = useState(null);
     const [compatibleSlots, setCompatibleSlots] = useState([]);
+    
+    // --- ESTADO PARA MENÚ CONTEXTUAL ---
+    const [contextMenu, setContextMenu] = useState(null);
 
     // --- LÓGICA DE EVOLUCIÓN ---
     const [evolutionStatus, setEvolutionStatus] = useState(() => {
@@ -80,7 +84,17 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         } else {
             setEvolutionStatus('locked');
         }
+        
+        // Refrescar inventario al cargar para asegurar consistencia
+        refreshUser();
     }, [user?.level, user?.evolution_quest_status]);
+
+    // Cerrar menú contextual al hacer click en cualquier lado
+    useEffect(() => {
+        const handleClick = () => setContextMenu(null);
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, []);
 
     useEffect(() => {
         if (showAvatarModal && user?.id) {
@@ -116,6 +130,33 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             if (data.user) onUpdateUser(data.user);
         } catch (error) {
             console.error('Error refrescando perfil:', error);
+        }
+    };
+
+    // --- ACCIONES DE ÍTEMS (USAR) ---
+    const handleUseItem = async (item) => {
+        try {
+            const res = await fetch(apiUrl('/api/inventory/use'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ inventoryItemId: item.id })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccessMsg(data.message);
+                onUpdateUser({ ...user, ...data.user, real_inventory: data.inventory });
+            } else {
+                setErrorMsg(data.message);
+            }
+        } catch (err) { setErrorMsg("Error de conexión al usar objeto."); }
+        setContextMenu(null);
+    };
+
+    const handleContextMenu = (e, item) => {
+        e.preventDefault();
+        // Solo mostrar menú si es consumible, receta, pergamino o material
+        if (['consumable', 'scroll', 'recipe', 'material'].includes(item.type)) {
+            setContextMenu({ x: e.clientX, y: e.clientY, item });
         }
     };
 
@@ -455,6 +496,11 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         const isBroken = durability === 0;
         const styles = getItemStyles(item.rarity);
         
+        // --- LOGICA DE VISIBILIDAD DE DURABILIDAD (Modificada) ---
+        // Ocultar si es consumible, material, pergamino, receta o legendario
+        const hideDurability = ['consumable', 'material', 'scroll', 'recipe'].includes(item.type) || item.rarity === 'legendary';
+        const showDurabilityBar = !hideDurability && (item.durability_current !== null);
+
         let style = { position: 'fixed', zIndex: 9999 };
         if (side === 'left') { style.right = (window.innerWidth - rect.left) + 10; style.top = rect.top; } 
         else if (side === 'top') { style.left = rect.left + (rect.width / 2) - 100; style.bottom = (window.innerHeight - rect.top) + 10; } 
@@ -469,6 +515,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">{item.type} {item.rarity}</p>
                 <div className="mb-2 text-[10px] font-bold text-center border-b border-white/5 pb-1"> {item.is_bound ? (<span className="text-red-500">VINCULADO (Soulbound)</span>) : (<span className="text-green-500">TRADEABLE</span>)} </div>
                 <div className="space-y-1 mb-2">
+                    {stats.heal_amount && <p className="text-xs text-green-400">❤️ Recupera {stats.heal_amount} HP</p>}
                     {stats.damage_min || stats.damage ? (
                         <p className={`text-xs flex items-center gap-2 ${isBroken ? 'text-slate-600 line-through' : 'text-slate-300'}`}>
                             <img src={STAT_IMAGES.damage} className="w-5 h-5" /> 
@@ -482,7 +529,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </p>
                     ) : null}
                     {Object.entries(stats).map(([key, val]) => {
-                        if (['damage_min', 'damage_max', 'damage', 'armor'].includes(key)) return null;
+                        if (['damage_min', 'damage_max', 'damage', 'armor', 'heal_amount', 'learn_recipe_id', 'learn_skill_id'].includes(key)) return null;
                         if (!Array.isArray(val) && val <= 0) return null;
                         const iconPath = STAT_IMAGES[key] || '/icons/stats/luck.png'; 
                         return (
@@ -492,10 +539,20 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         );
                     })}
                 </div>
-                <div className="mt-2 pt-1 border-t border-white/10">
-                    <div className="flex justify-between text-[10px] mb-0.5"><span className={isBroken ? "text-red-500 font-bold" : "text-slate-400"}>{isBroken ? "ROTO" : "Durabilidad"}</span><span className={durability < 20 ? "text-red-400" : "text-slate-400"}>{durability}/{maxDurability}</span></div>
-                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden"><div className={`h-full ${durability < 20 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${(durability / maxDurability) * 100}%` }}></div></div>
-                </div>
+                
+                {/* Renderizado condicional de la barra */}
+                {showDurabilityBar && (
+                    <div className="mt-2 pt-1 border-t border-white/10">
+                        <div className="flex justify-between text-[10px] mb-0.5"><span className={isBroken ? "text-red-500 font-bold" : "text-slate-400"}>{isBroken ? "ROTO" : "Durabilidad"}</span><span className={durability < 20 ? "text-red-400" : "text-slate-400"}>{durability}/{maxDurability}</span></div>
+                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden"><div className={`h-full ${durability < 20 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${(durability / maxDurability) * 100}%` }}></div></div>
+                    </div>
+                )}
+                
+                {/* Mensaje de Ayuda para Usar */}
+                {hideDurability && !item.is_equipped && (
+                    <div className="text-[10px] mt-2 text-right text-amber-400 italic border-t border-white/10 pt-1">Clic derecho para usar</div>
+                )}
+                
                 <div className="text-[10px] mt-2 text-right border-t border-white/10 pt-1 flex justify-between items-center"> <span className="text-slate-500">Valor de venta:</span> {formatCurrency(item.price_copper)} </div>
             </div>
         );
@@ -517,6 +574,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 onDrop={(e) => handleDrop(e, { type: 'equipped', slot: slotName })}
                 onMouseEnter={(e) => handleMouseEnter(item, e, tooltipSide)}
                 onMouseLeave={handleMouseLeave}
+                onContextMenu={(e) => item && handleContextMenu(e, item)}
                 draggable={!!item}
                 onDragStart={(e) => handleDragStart(e, item)}
                 onDragEnd={handleDragEnd}
@@ -535,12 +593,35 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     return (
         <div className="min-h-full relative font-sans p-4 flex flex-col gap-4">
             <GlobalTooltip />
+            
+            {/* MENÚ FLOTANTE CONTEXTUAL (Clic Derecho) */}
+            {contextMenu && (
+                <div 
+                    className="fixed z-[10000] bg-slate-900 border border-amber-600 rounded shadow-2xl py-1 w-32 animate-in fade-in zoom-in-95 cursor-pointer" 
+                    style={{ top: contextMenu.y, left: contextMenu.x }} 
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="px-3 py-1 text-xs font-bold text-amber-500 border-b border-slate-800 mb-1 truncate">{contextMenu.item.name}</div>
+                    
+                    {['consumable', 'scroll', 'recipe', 'material'].includes(contextMenu.item.type) && (
+                        <button onClick={() => handleUseItem(contextMenu.item)} className="w-full text-left px-3 py-2 text-xs text-white hover:bg-amber-700 flex items-center gap-2 transition-colors">
+                            <Zap size={12}/> Usar Objeto
+                        </button>
+                    )}
+                    
+                    <button onClick={() => setContextMenu(null)} className="w-full text-left px-3 py-2 text-xs text-slate-400 hover:bg-slate-800 transition-colors">Cancelar</button>
+                </div>
+            )}
+
+            {/* AVISOS */}
+            {successMsg && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-green-900/90 border border-green-500 text-white px-6 py-3 rounded-lg shadow-xl z-[100] animate-bounce flex items-center gap-3"><CheckCircle size={20}/> {successMsg} <button onClick={()=>setSuccessMsg(null)} className="ml-4"><X size={16}/></button></div>}
+            {errorMsg && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-red-900/90 border border-red-500 text-white px-6 py-3 rounded-lg shadow-xl z-[100] animate-bounce flex items-center gap-3"><Ban size={20}/> {errorMsg} <button onClick={()=>setErrorMsg(null)} className="ml-4"><X size={16}/></button></div>}
+
+            {/* ... RESTO DEL DISEÑO (Fondo, Columnas, etc) ... */}
             <div className="absolute inset-0 z-0 pointer-events-none"><img src={raceData.bgImage} className="w-full h-full object-cover opacity-60 fixed inset-0" /><div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/60 to-slate-900/30 fixed inset-0" /></div>
 
-            {/* --- CONTENIDO PRINCIPAL (3 COLUMNAS) --- */}
             <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start animate-in fade-in duration-300">
-                
-                {/* COL 1: PERFIL Y STATS */}
+                {/* COL 1: PERFIL */}
                 <div className="lg:col-span-3 space-y-4">
                     <div className="bg-black/50 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 flex items-center gap-4 shadow-lg">
                         <div className="relative group cursor-zoom-in w-16 h-16 shrink-0" onClick={() => setShowAvatarModal(true)}>
@@ -564,64 +645,28 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </div>
                     </div>
 
+                    {/* Botones y Stats (Mismo código que subiste) */}
                     {evolutionStatus !== 'locked' && evolutionStatus !== 'completed' && (
-                        <button
-                            onClick={() => setShowEvolutionModal(true)}
-                            className={`w-full mb-4 font-bold py-3 px-4 rounded border flex items-center justify-center gap-2 uppercase tracking-widest text-xs hover:scale-105 transition-transform shadow-lg
-                                ${evolutionStatus === 'in_progress'
-                                    ? 'bg-slate-800 border-amber-500 text-amber-400 animate-pulse'
-                                    : 'bg-gradient-to-r from-purple-700 via-pink-700 to-purple-700 bg-[length:200%_auto] animate-gradient text-white border-purple-400'
-                                }`}
-                        >
-                            {evolutionStatus === 'in_progress' ? (
-                                <><ScrollText size={16} /> Misión en Progreso</>
-                            ) : (
-                                <><Zap size={16} className="animate-spin-slow" /> ¡Evolución Disponible!</>
-                            )}
+                        <button onClick={() => setShowEvolutionModal(true)} className={`w-full mb-4 font-bold py-3 px-4 rounded border flex items-center justify-center gap-2 uppercase tracking-widest text-xs hover:scale-105 transition-transform shadow-lg ${evolutionStatus === 'in_progress' ? 'bg-slate-800 border-amber-500 text-amber-400 animate-pulse' : 'bg-gradient-to-r from-purple-700 via-pink-700 to-purple-700 bg-[length:200%_auto] animate-gradient text-white border-purple-400'}`}>
+                            {evolutionStatus === 'in_progress' ? <><ScrollText size={16} /> Misión en Progreso</> : <><Zap size={16} className="animate-spin-slow" /> ¡Evolución Disponible!</>}
                         </button>
                     )}
 
-                    <StatsPanel
-                        stats={user.stats}
-                        bonuses={totalBonuses}
-                        availablePoints={user.stat_points || 0}
-                        maxHp={displayMaxHp}
-                        onSave={handleSaveStats}
-                    />
+                    <StatsPanel stats={user.stats} bonuses={totalBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
                     
+                    {/* Resumen Stats */}
                     <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] space-y-2">
                         <div className="flex justify-between items-center border-b border-amber-500/20 pb-2">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide">
-                                <img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico
-                            </span>
-                            <span className="text-amber-400 font-mono font-extrabold text-sm">
-                                {derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}
-                            </span>
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
+                            <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
                         </div>
                         <div className="flex justify-between items-center border-b border-amber-500/10 pb-2">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide">
-                                <img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa
-                            </span>
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
                             <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide">
-                                <img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud
-                            </span>
-                            <span className="text-red-400 font-mono text-sm">
-                                {user.current_hp} / {derivedStats.maxHp ?? displayMaxHp}
-                            </span>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-white/5">
-                        <div className="bg-slate-900/50 p-1 rounded text-center">
-                            <div className="text-[9px] text-slate-500 flex items-center justify-center gap-1"><img src={STAT_IMAGES.crit} className="w-4 h-4" /> CRÍTICO</div>
-                            <div className="text-green-400 font-bold">{derivedStats.critChance.toFixed(1)}%</div>
-                        </div>
-                        <div className="bg-slate-900/50 p-1 rounded text-center">
-                            <div className="text-[9px] text-slate-500 flex items-center justify-center gap-1"><img src={STAT_IMAGES.block} className="w-4 h-4" /> BLOQUEO</div>
-                            <div className="text-blue-400 font-bold">{derivedStats.blockChance.toFixed(1)}%</div>
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
+                            <span className="text-red-400 font-mono text-sm">{user.current_hp} / {derivedStats.maxHp ?? displayMaxHp}</span>
                         </div>
                     </div>
                 </div>
@@ -633,13 +678,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         <div className="relative w-full h-full max-w-[420px]">
                             <div className="absolute inset-x-0 top-12 bottom-12 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none">
                                 <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50 pointer-events-none" />
-                                <img
-                                    src={getAvatarImage()}
-                                    className="h-full w-auto object-contain drop-shadow-[0_0_25px_rgba(0,0,0,0.9)]"
-                                    style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }}
-                                />
+                                <img src={getAvatarImage()} className="h-full w-auto object-contain drop-shadow-[0_0_25px_rgba(0,0,0,0.9)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
                             </div>
-
                             <div className="absolute top-0 left-1/2 -translate-x-1/2">{renderEquipmentSlot("head", "", "bottom")}</div>
                             <div className="absolute top-4 left-0">{renderEquipmentSlot("earring_1", "", "right")}</div>
                             <div className="absolute top-4 right-0">{renderEquipmentSlot("earring_2", "", "left")}</div>
@@ -651,35 +691,22 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                             <div className="absolute top-24 right-0">{renderEquipmentSlot("chest")}</div>
                             <div className="absolute top-44 right-0">{renderEquipmentSlot("off_hand")}</div>
                             <div className="absolute bottom-36 right-0">{renderEquipmentSlot("ring_2")}</div>
-
-                            <div
-                                className={`absolute bottom-8 right-8 w-16 h-16 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 shadow-lg z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${equippedPet ? 'border-amber-400' : 'border-slate-600 border-dashed'}`}
-                                onClick={() => setShowPetModal(true)}
-                                title="Ver Mascotas"
-                            >
-                                {equippedPet ? (
-                                    <img src={equippedPet.image_url} className="w-full h-full object-cover rounded-full p-1" />
-                                ) : (
-                                    <img src="/icons/slots/pet_slot.png" className="w-10 h-10 opacity-30" />
-                                )}
-                                {equippedPet && equippedPet.current_hunger < 20 && (
-                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />
-                                )}
+                            
+                            {/* Pet Slot */}
+                            <div className={`absolute bottom-8 right-8 w-16 h-16 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 shadow-lg z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${equippedPet ? 'border-amber-400' : 'border-slate-600 border-dashed'}`} onClick={() => setShowPetModal(true)} title="Ver Mascotas">
+                                {equippedPet ? <img src={equippedPet.image_url} className="w-full h-full object-cover rounded-full p-1" /> : <img src="/icons/slots/pet_slot.png" className="w-10 h-10 opacity-30" />}
+                                {equippedPet && equippedPet.current_hunger < 20 && <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* COL 3: MOCHILA (Logica Restaurada) */}
+                {/* COL 3: MOCHILA */}
                 <div className="lg:col-span-4">
                     <div className="bg-slate-900 border-2 border-amber-900/50 rounded-lg p-1 h-[700px] flex flex-col shadow-2xl relative">
                         <div className="flex gap-1 mb-1 px-1 overflow-x-auto">
                             {[1, 2, 3, 4, 5, 6].map((num) => (
-                                <button
-                                    key={num}
-                                    onClick={() => setActiveBag(num)}
-                                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase border-t-2 transition-colors relative ${activeBag === num ? 'bg-amber-900/80 text-amber-100 border-amber-500' : 'bg-slate-800 text-slate-500 border-transparent hover:bg-slate-700'} ${!isBagUnlocked(num) ? 'opacity-70' : ''}`}
-                                >
+                                <button key={num} onClick={() => setActiveBag(num)} className={`flex-1 py-1.5 text-[10px] font-bold uppercase border-t-2 transition-colors relative ${activeBag === num ? 'bg-amber-900/80 text-amber-100 border-amber-500' : 'bg-slate-800 text-slate-500 border-transparent hover:bg-slate-700'} ${!isBagUnlocked(num) ? 'opacity-70' : ''}`}>
                                     {!isBagUnlocked(num) && <Lock size={10} className="absolute top-0.5 right-0.5 text-red-400" />}
                                     {num >= 4 ? <span className="text-purple-400">VIP</span> : `BOLSA ${num}`}
                                 </button>
@@ -690,14 +717,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 z-20">
                                     <Lock size={48} className={activeBag >= 4 ? "text-purple-500 mb-4" : "text-slate-500 mb-4"} />
                                     <h3 className="text-white font-bold mb-2">Mochila Bloqueada</h3>
-                                    {activeBag === 3 ? (
-                                        <p className="text-slate-400 text-xs">Necesitas alcanzar el <span className="text-amber-500">Nivel 20</span>.</p>
-                                    ) : (
-                                        <div>
-                                            <p className="text-slate-400 text-xs mb-4">Esta es una bolsa <span className="text-purple-400 font-bold">Premium</span>.</p>
-                                            <button onClick={() => handleRentBagClick(activeBag)} className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded shadow-lg transition-colors border border-purple-400 flex items-center justify-center gap-2 mx-auto"><Gem size={12} /> 7 días por 50 ónix</button>
-                                        </div>
-                                    )}
+                                    {activeBag === 3 ? <p className="text-slate-400 text-xs">Nivel 20 requerido.</p> : <div><p className="text-slate-400 text-xs mb-4">Premium</p><button onClick={() => handleRentBagClick(activeBag)} className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded flex items-center justify-center gap-2 mx-auto"><Gem size={12} /> 50 ónix</button></div>}
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-5 gap-1.5 h-full content-start">
@@ -714,18 +734,15 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                                 onDragEnd={handleDragEnd}
                                                 onMouseEnter={(e) => handleMouseEnter(item, e, 'left')}
                                                 onMouseLeave={handleMouseLeave}
+                                                onContextMenu={(e) => item && handleContextMenu(e, item)}
                                             >
                                                 {item ? (
                                                     item.image_url ? (
                                                         <>
                                                             <img src={item.image_url} alt={item.name} className="w-full h-full object-contain p-0.5 drop-shadow-md hover:scale-110 transition-transform" />
-                                                            {item.quantity > 1 && (
-                                                                <span className="absolute bottom-0 right-0 bg-black/90 text-[10px] text-white px-1.5 font-mono font-bold border-tl border-slate-700 rounded-tl z-10">{item.quantity}</span>
-                                                            )}
+                                                            {item.quantity > 1 && <span className="absolute bottom-0 right-0 bg-black/90 text-[10px] text-white px-1.5 font-mono font-bold border-tl border-slate-700 rounded-tl z-10">{item.quantity}</span>}
                                                         </>
-                                                    ) : (
-                                                        <span className="text-[8px] text-slate-500">?</span>
-                                                    )
+                                                    ) : <span className="text-[8px] text-slate-500">?</span>
                                                 ) : null}
                                             </div>
                                         );
@@ -735,20 +752,13 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </div>
                         <div className="mt-1 flex justify-between items-center px-2 py-1 text-[10px] text-slate-500 bg-slate-950 rounded-b">
                             <span>Libres: {40 - (user.real_inventory?.filter(i => !i.is_equipped && i.bag_slot >= (activeBag - 1) * 40 && i.bag_slot < activeBag * 40).length || 0)}</span>
-                            {activeBag >= 4 && isBagUnlocked(activeBag) && (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-green-400 font-bold flex items-center gap-1 bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/50"><Clock size={10} /> {getBagTimeRemaining(activeBag)}</span>
-                                    <button onClick={() => handleRentBagClick(activeBag)} className="bg-purple-700 hover:bg-purple-600 text-white rounded p-0.5 transition-colors border border-purple-500 shadow-md" title="Extender 7 días (50 ónix)"><Plus size={12} /></button>
-                                </div>
-                            )}
-                            <button onClick={handleOrganizeInventory} className="text-amber-500 hover:underline hover:text-amber-400 transition-colors text-[10px] uppercase font-bold flex items-center gap-1"><img src="/icons/tabs/organize.png" className="w-4 h-4" /> Organizar</button>
+                            <button onClick={handleOrganizeInventory} className="text-amber-500 hover:underline font-bold uppercase flex items-center gap-1">Organizar</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* --- MODALES Y POPUPS (Restaurados tal cual) --- */}
-            
+            {/* MODALES EXTRA (Avatar, Pet, Background, Evolution) - Mismo código */}
             {showAvatarModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => setShowAvatarModal(false)}>
                     <div className="relative w-full max-w-4xl flex flex-col gap-4" onClick={e => e.stopPropagation()}>
@@ -770,12 +780,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                             {bg.owned ? (
                                                 <span className={`text-[10px] font-bold ${currentBgUrl === bg.image_url ? 'text-green-400' : 'text-slate-400'}`}>{currentBgUrl === bg.image_url ? 'Equipado' : 'Equipar'}</span>
                                             ) : (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleBuyBgClick(bg.id, bg.price_onyx); }}
-                                                    className="w-full text-[10px] bg-purple-700 hover:bg-purple-600 text-white rounded px-1 py-0.5 flex items-center justify-center gap-1"
-                                                >
-                                                    <Gem size={8} /> {bg.price_onyx}
-                                                </button>
+                                                <button onClick={(e) => { e.stopPropagation(); handleBuyBgClick(bg.id, bg.price_onyx); }} className="w-full text-[10px] bg-purple-700 hover:bg-purple-600 text-white rounded px-1 py-0.5 flex items-center justify-center gap-1"><Gem size={8} /> {bg.price_onyx}</button>
                                             )}
                                         </div>
                                     </div>
@@ -800,29 +805,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 </div>
             )}
 
-            {errorMsg && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-slate-900 border-2 border-red-600 rounded-lg p-6 max-w-sm w-full shadow-[0_0_50px_rgba(220,38,38,0.3)] flex flex-col items-center">
-                        <Ban className="text-red-500 mb-4 h-10 w-10" />
-                        <h3 className="text-xl font-serif font-bold text-red-500 mb-2 text-center uppercase tracking-widest">Acción Inválida</h3>
-                        <p className="text-slate-300 text-center text-sm mb-6 leading-relaxed">{errorMsg}</p>
-                        <button onClick={() => setErrorMsg(null)} className="w-full py-2 rounded bg-red-700 hover:bg-red-600 text-white shadow-lg transition-all text-sm font-bold uppercase">Entendido</button>
-                    </div>
-                </div>
-            )}
-
             {showEvolutionModal && (
-                <EvolutionModal
-                    user={user}
-                    status={evolutionStatus}
-                    activeQuestData={evolutionQuestData}
-                    onClose={() => setShowEvolutionModal(false)}
-                    onEvolveSuccess={(updatedUser) => {
-                        onUpdateUser(updatedUser);
-                        setShowEvolutionModal(false);
-                        setEvolutionStatus('completed');
-                    }}
-                />
+                <EvolutionModal user={user} status={evolutionStatus} activeQuestData={evolutionQuestData} onClose={() => setShowEvolutionModal(false)} onEvolveSuccess={(updatedUser) => { onUpdateUser(updatedUser); setShowEvolutionModal(false); setEvolutionStatus('completed'); }} />
             )}
 
             {showPetModal && (
@@ -831,24 +815,13 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         <div className="w-1/3 border-r border-slate-800 bg-black/40 flex flex-col">
                             <h3 className="p-4 text-amber-500 font-serif font-bold uppercase tracking-widest border-b border-slate-800 flex items-center gap-2"><PawPrint size={18} /> Establo</h3>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                                {myPets.length === 0 ? (
-                                    <div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aún.</div>
-                                ) : (
-                                    myPets.map(pet => (
-                                        <div
-                                            key={pet.player_pet_id}
-                                            onClick={() => setActivePet(pet)}
-                                            className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}
-                                        >
-                                            <img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" />
-                                            <div>
-                                                <div className="text-sm text-slate-200 font-bold">{pet.name}</div>
-                                                <div className="text-[10px] text-slate-500">Nivel {pet.tier}</div>
-                                            </div>
-                                            {pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}
-                                        </div>
-                                    ))
-                                )}
+                                {myPets.length === 0 ? <div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aún.</div> : myPets.map(pet => (
+                                    <div key={pet.player_pet_id} onClick={() => setActivePet(pet)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}>
+                                        <img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" />
+                                        <div><div className="text-sm text-slate-200 font-bold">{pet.name}</div><div className="text-[10px] text-slate-500">Nivel {pet.tier}</div></div>
+                                        {pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}
+                                    </div>
+                                ))}
                             </div>
                         </div>
                         <div className="w-2/3 relative flex flex-col bg-slate-950">
@@ -869,36 +842,23 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                             <h4 className="text-amber-500 text-xs uppercase tracking-widest font-bold border-b border-slate-700 pb-1 mb-2">Bonificaciones Activas</h4>
                                             <div className="grid grid-cols-2 gap-2">
                                                 {Object.entries(activePet.bonus_stats || {}).map(([key, val]) => (
-                                                    <div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between">
-                                                        <span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span>
-                                                    </div>
+                                                    <div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between"><span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span></div>
                                                 ))}
                                             </div>
                                         </div>
                                         <div className="w-1/2 flex flex-col justify-between">
                                             <div>
-                                                <div className="flex justify-between text-xs text-slate-300 mb-1 font-bold">
-                                                    <span>Nivel de Saciedad</span>
-                                                    <span className={activePet.current_hunger < 30 ? 'text-red-500' : 'text-green-500'}>{activePet.current_hunger}%</span>
-                                                </div>
-                                                <div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700">
-                                                    <div className={`h-full ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div>
-                                                </div>
+                                                <div className="flex justify-between text-xs text-slate-300 mb-1 font-bold"><span>Nivel de Saciedad</span><span className={activePet.current_hunger < 30 ? 'text-red-500' : 'text-green-500'}>{activePet.current_hunger}%</span></div>
+                                                <div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700"><div className={`h-full ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div></div>
                                             </div>
                                             <div className="flex gap-2 mt-2">
-                                                {activePet.is_active ? (
-                                                    <div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div>
-                                                ) : (
-                                                    <button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>
-                                                )}
+                                                {activePet.is_active ? <div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div> : <button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>}
                                                 <button onClick={() => handleFeedPet(activePet.player_pet_id)} className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase rounded border border-slate-600 transition-colors flex flex-col items-center justify-center gap-1" title={getFeedCostText(activePet.tier)}><Heart size={14} className="text-red-500" /> Comer</button>
                                             </div>
                                         </div>
                                     </div>
                                 </>
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>
-                            )}
+                            ) : <div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>}
                         </div>
                     </div>
                 </div>

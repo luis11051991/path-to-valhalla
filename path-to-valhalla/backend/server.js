@@ -19,6 +19,7 @@ const expeditionRoutes = require('./src/routes/expeditionRoutes');
 const packageRoutes = require('./src/routes/packageRoutes'); 
 const shopRoutes = require('./src/routes/shopRoutes'); 
 const workshopRoutes = require('./src/routes/workshopRoutes'); 
+const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const questRoutes = require('./src/routes/questRoutes');
 
 // CORRECCIÓN AQUÍ: Agregamos el /src/ que faltaba
@@ -37,6 +38,7 @@ app.use('/api/expeditions', expeditionRoutes);
 app.use('/api/packages', packageRoutes); 
 app.use('/api/shop', shopRoutes); 
 app.use('/api/workshop', workshopRoutes); 
+app.use('/api/inventory', inventoryRoutes);
 app.use('/api/quests', questRoutes);
 app.use('/api/bestiary', bestiaryRoutes);
 
