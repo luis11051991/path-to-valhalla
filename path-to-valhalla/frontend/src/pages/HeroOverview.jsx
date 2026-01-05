@@ -264,11 +264,17 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         try {
             const response = await fetch(apiUrl('/api/inventory/organize'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                // ¡AQUÍ ESTÁ LA CLAVE! Agregamos el Token de autorización
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}` 
+                },
                 body: JSON.stringify({ userId: user.id })
             });
             const data = await response.json();
+            
             if (data.success) {
+                // Actualizamos el inventario con lo que devuelve el servidor ordenado
                 onUpdateUser({ ...user, real_inventory: data.inventory });
             } else {
                 setErrorMsg(data.message || "Error al organizar.");
@@ -357,18 +363,31 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const handleDrop = async (e, destination) => {
         e.preventDefault();
         if (!draggedItem) return;
+        
+        // Evitar mover al mismo sitio
         if (destination.type === 'bag' && destination.slot === draggedItem.bag_slot) return;
         if (destination.type === 'equipped' && destination.slot === draggedItem.equipped_slot) return;
 
         try {
             const response = await fetch(apiUrl('/api/inventory/move'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                // ¡AQUÍ ESTABA EL ERROR! Faltaba el token
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}` // <--- ESTO ES VITAL
+                },
                 body: JSON.stringify({ userId: user.id, itemId: draggedItem.id, destination: destination })
             });
             const data = await response.json();
+            
             if (data.success) {
-                await refreshUser();
+                // Si el servidor devuelve el inventario actualizado, úsalo
+                if (data.user && data.inventory) {
+                     onUpdateUser({ ...user, ...data.user, real_inventory: data.inventory });
+                } else {
+                     // Si no, refresca todo el usuario por seguridad
+                     await refreshUser();
+                }
             } else {
                 setErrorMsg(data.message || 'No puedes mover eso ahí.');
             }
@@ -470,7 +489,11 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         let critChance = Math.min(totalStats.dexterity * 0.25, 25);
         let blockChance = Math.min(totalStats.luck * 0.25, 25);
 
-        return { totalDamageMin, totalDamageMax, defense, critChance, blockChance };
+        // --- AGREGAR CÁLCULOS DE INTELIGENCIA (CON TOPE 25%) ---
+        const skillDamagePct = Math.min(totalStats.intelligence * 0.25, 25).toFixed(2); 
+        const healingPct = Math.min(totalStats.intelligence * 0.5, 25).toFixed(2);
+
+        return { totalDamageMin, totalDamageMax, defense, critChance, blockChance, skillDamagePct, healingPct };
     }, [user.stats, totalBonuses]);
 
     const displayMaxHp = user.calculatedMaxHp ?? user.calculated_max_hp ?? 0;
@@ -654,19 +677,49 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
                     <StatsPanel stats={user.stats} bonuses={totalBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
                     
-                    {/* Resumen Stats */}
+                    {/* Resumen Stats ESTANDARIZADO (Sin bordes, 7 stats) */}
                     <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] space-y-2">
-                        <div className="flex justify-between items-center border-b border-amber-500/20 pb-2">
+                        
+                        {/* 1. Vida */}
+                        <div className="flex justify-between items-center pb-1">
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
+                            <span className="text-red-400 font-mono text-sm">{user.current_hp} / {displayMaxHp}</span>
+                        </div>
+
+                        {/* 2. Daño */}
+                        <div className="flex justify-between items-center pb-1">
                             <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
                             <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-amber-500/10 pb-2">
+
+                        {/* 3. Defensa */}
+                        <div className="flex justify-between items-center pb-1">
                             <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
                             <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
                         </div>
+
+                        {/* 4. Crítico (Agregado) */}
+                        <div className="flex justify-between items-center pb-1">
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.crit} className="w-5 h-5 drop-shadow" /> Crítico</span>
+                            <span className="text-yellow-200 font-mono text-sm">{derivedStats.critChance.toFixed(1)}%</span>
+                        </div>
+
+                        {/* 5. Bloqueo (Agregado) */}
+                        <div className="flex justify-between items-center pb-1">
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.block} className="w-5 h-5 drop-shadow" /> Bloqueo</span>
+                            <span className="text-blue-200 font-mono text-sm">{derivedStats.blockChance.toFixed(1)}%</span>
+                        </div>
+
+                        {/* 6. Cura */}
+                        <div className="flex justify-between items-center pb-1">
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.wisdom} className="w-5 h-5 drop-shadow" /> Poder Curación</span>
+                            <span className="text-green-400 font-mono text-sm">+{derivedStats.healingPct}%</span>
+                        </div>
+
+                        {/* 7. Daño Skill */}
                         <div className="flex justify-between items-center">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
-                            <span className="text-red-400 font-mono text-sm">{user.current_hp} / {derivedStats.maxHp ?? displayMaxHp}</span>
+                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.intelligence} className="w-5 h-5 drop-shadow" /> Daño Habilidad</span>
+                            <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
                         </div>
                     </div>
                 </div>

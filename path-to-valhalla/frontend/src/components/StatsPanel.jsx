@@ -63,11 +63,16 @@ const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0 }) => {
         // Aplicamos Topes (Caps)
         const critChance = Math.min(totalDex * 0.25, 25);
         const blockChance = Math.min(totalLuk * 0.25, 25);
-        const healPower = Math.min(totalInt * 0.5, 25);
+        
+        // --- CORRECCIÓN: Calcular Vida Real (100 base + 20 por Constitución) ---
+        const calculatedMaxHp = 100 + (totalCon * 20); 
+        
+        // --- CORRECCIÓN: Fórmulas de Inteligencia ---
+        const healPower = Math.min(totalInt * 0.5, 25); 
         const skillDmg = Math.min(totalInt * 0.25, 25);
-        const backendMaxHp = maxHp || 0;
 
-        return { maxHp: backendMaxHp, damageMin, damageMax, defense, critChance, blockChance, healPower, skillDmg };
+        // Devolvemos calculatedMaxHp en lugar de backendMaxHp
+        return { maxHp: calculatedMaxHp, damageMin, damageMax, defense, critChance, blockChance, healPower, skillDmg };
     }, [pendingStats, bonuses]);
 
     // Botones + y -
@@ -153,26 +158,49 @@ const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0 }) => {
                             <ArrowRight size={12} /> Resultado al Confirmar
                         </h4>
                         
-                        {/* Grid de Previsualización */}
+                        {/* Grid de Previsualización ESTANDARIZADO */}
                         <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs mb-4">
-                            <div className="flex justify-between border-b border-white/5 pb-1">
+                            {/* 1. Vida */}
+                            <div className="flex justify-between pb-1">
                                 <span className="text-slate-400">Vida Máx</span>
-                                <span className="text-white font-mono">{preview.maxHp} <span className="text-amber-400 text-[10px]">(Nuevo)</span></span>
+                                <span className="text-white font-mono">{preview.maxHp}</span>
                             </div>
-                            <div className="flex justify-between border-b border-white/5 pb-1">
+                            {/* 2. Daño */}
+                            <div className="flex justify-between pb-1">
                                 <span className="text-slate-400">Daño</span>
                                 <span className="text-white font-mono">{preview.damageMin} - {preview.damageMax}</span>
                             </div>
-                            <div className="flex justify-between border-b border-white/5 pb-1">
+                            {/* 3. Defensa (AGREGADO) */}
+                            <div className="flex justify-between pb-1">
+                                <span className="text-slate-400">Defensa</span>
+                                <span className="text-white font-mono">{preview.defense}</span>
+                            </div>
+                            {/* 4. Crítico */}
+                            <div className="flex justify-between pb-1">
                                 <span className="text-slate-400">Crítico</span>
                                 <span className={preview.critChance >= 25 ? "text-red-500 font-bold" : "text-white"}>
                                     {preview.critChance.toFixed(1)}% {preview.critChance >= 25 && "(MAX)"}
                                 </span>
                             </div>
-                            <div className="flex justify-between border-b border-white/5 pb-1">
+                            {/* 5. Bloqueo */}
+                            <div className="flex justify-between pb-1">
                                 <span className="text-slate-400">Bloqueo</span>
                                 <span className={preview.blockChance >= 25 ? "text-red-500 font-bold" : "text-white"}>
                                     {preview.blockChance.toFixed(1)}% {preview.blockChance >= 25 && "(MAX)"}
+                                </span>
+                            </div>
+                            {/* 6. Cura */}
+                            <div className="flex justify-between pb-1">
+                                <span className="text-slate-400">Poder Cura</span>
+                                <span className={preview.healPower >= 25 ? "text-green-500 font-bold" : "text-green-400 font-mono"}>
+                                    +{preview.healPower.toFixed(1)}% {preview.healPower >= 25 && "(MAX)"}
+                                </span>
+                            </div>
+                            {/* 7. Daño Skill */}
+                            <div className="flex justify-between pb-1">
+                                <span className="text-slate-400">Daño Skill</span>
+                                <span className={preview.skillDmg >= 25 ? "text-purple-500 font-bold" : "text-purple-400 font-mono"}>
+                                    +{preview.skillDmg.toFixed(1)}% {preview.skillDmg >= 25 && "(MAX)"}
                                 </span>
                             </div>
                         </div>

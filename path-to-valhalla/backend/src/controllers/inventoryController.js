@@ -1,7 +1,9 @@
 const pool = require('../config/db');
 const { hydratePlayer } = require('../shared/player_stats');
 
-// --- HELPER: GENERAR STATS ---
+// ==========================================
+// 1. HELPER: GENERAR STATS
+// ==========================================
 const generateRandomStats = (templateStats) => {
     const finalStats = {};
     if (!templateStats) return {};
@@ -15,7 +17,9 @@ const generateRandomStats = (templateStats) => {
     return finalStats;
 };
 
-// 1. ADMIN: DAR ÍTEM
+// ==========================================
+// 2. ADMIN: DAR ÍTEM
+// ==========================================
 exports.adminGiveItem = async (req, res) => {
     const { userId, templateId } = req.body;
     try {
@@ -24,7 +28,6 @@ exports.adminGiveItem = async (req, res) => {
         const template = templateRes.rows[0];
         const uniqueStats = generateRandomStats(template.base_stats);
         
-        // Lógica de Durabilidad: NULL si es consumible/material/receta
         let durCur = 100, durMax = 100;
         if (['consumable', 'material', 'scroll', 'recipe'].includes(template.type) || template.rarity === 'legendary') {
             durCur = null; durMax = null;
@@ -41,7 +44,9 @@ exports.adminGiveItem = async (req, res) => {
     } catch (err) { console.error(err); res.status(500).json({ message: 'Error server' }); }
 };
 
-// 2. MOVER ÍTEM
+// ==========================================
+// 3. MOVER ÍTEM
+// ==========================================
 exports.moveItem = async (req, res) => {
   const { userId, itemId, destination } = req.body;
   const client = await pool.connect();
@@ -63,7 +68,6 @@ exports.moveItem = async (req, res) => {
                 return res.status(400).json({ message: `Nivel insuficiente (Req: ${sourceItem.min_level}).` });
             }
         }
-        // Validación básica de slot (se puede expandir)
         await client.query(`UPDATE player_items SET is_equipped = true, equipped_slot = $1, bag_slot = NULL, is_bound = true WHERE id = $2`, [destination.slot, itemId]);
     } else if (destination.type === 'bag') {
         const targetBagSlot = destination.slot; 
@@ -93,7 +97,7 @@ exports.moveItem = async (req, res) => {
   } catch (err) { await client.query('ROLLBACK'); console.error(err); res.status(500).json({ message: 'Error de inventario' }); } finally { client.release(); }
 };
 
-// 3. ORGANIZAR
+// 4. ORGANIZAR
 exports.organizeInventory = async (req, res) => {
     const { userId } = req.body;
     const rarityWeight = { 'legendary': 5, 'epic': 4, 'rare': 3, 'uncommon': 2, 'common': 1 };
@@ -119,7 +123,9 @@ exports.organizeInventory = async (req, res) => {
     } catch (err) { console.error(err); res.status(500).json({ message: 'Error al organizar.' }); }
 };
 
-// 4. USAR ÍTEM (NUEVO - Lógica de Consumo)
+// ==========================================
+// 5. USAR ÍTEM (INTELIGENTE: CONSUMIR O EQUIPAR)
+// ==========================================
 exports.useItem = async (req, res) => {
     const userId = req.user.id;
     const { inventoryItemId } = req.body; 
@@ -128,8 +134,9 @@ exports.useItem = async (req, res) => {
     try {
         await client.query('BEGIN');
 
+        // Consultamos también el SLOT y el NIVEL MINIMO para poder equipar
         const itemRes = await client.query(`
-            SELECT pi.id, pi.quantity, pi.template_id, it.type, it.base_stats, it.name
+            SELECT pi.id, pi.quantity, pi.template_id, pi.bag_slot, it.type, it.base_stats, it.name, it.slot, it.min_level
             FROM player_items pi
             JOIN items_templates it ON pi.template_id = it.id
             WHERE pi.id = $1 AND pi.player_id = $2
@@ -142,7 +149,7 @@ exports.useItem = async (req, res) => {
         let msg = '';
         let shouldConsume = false;
 
-        // A. POCIONES
+        // --- A. CONSUMIBLES (Pociones) ---
         if (item.type === 'consumable') {
             if (stats.heal_amount) {
                 const heal = parseInt(stats.heal_amount);
@@ -151,38 +158,69 @@ exports.useItem = async (req, res) => {
                 shouldConsume = true;
             }
         } 
-        // B. RECETAS
+        // --- B. RECETAS ---
         else if (item.type === 'recipe') {
             const recipeId = stats.learn_recipe_id;
             if (!recipeId) throw new Error("Este plano es ilegible.");
-            
             const profRes = await client.query(`SELECT learned_recipes FROM player_professions WHERE player_id = $1`, [userId]);
             if (profRes.rows.length === 0) throw new Error("Necesitas una profesión.");
-            
             let recipes = profRes.rows[0].learned_recipes || [];
             if (recipes.includes(recipeId)) throw new Error("Ya conoces esta receta.");
-
             recipes.push(recipeId);
             await client.query(`UPDATE player_professions SET learned_recipes = $1 WHERE player_id = $2`, [JSON.stringify(recipes), userId]);
             msg = `¡Nueva receta aprendida!`;
             shouldConsume = true;
         }
-        // C. GRIMORIOS (SKILLS)
+        // --- C. GRIMORIOS (SKILLS) ---
         else if (item.type === 'scroll') {
             const skillId = stats.learn_skill_id;
             if (!skillId) throw new Error("El pergamino está vacío.");
-            
             const skillCheck = await client.query(`SELECT * FROM player_skills WHERE player_id = $1 AND skill_id = $2`, [userId, skillId]);
             if (skillCheck.rows.length > 0) throw new Error("Ya conoces esta habilidad.");
-
             await client.query(`INSERT INTO player_skills (player_id, skill_id, skill_level, is_equipped) VALUES ($1, $2, 1, false)`, [userId, skillId]);
             msg = `¡Habilidad aprendida!`;
             shouldConsume = true;
+        }
+        // --- D. EQUIPAMIENTO (Armas/Armaduras/Accesorios) ---
+        // ¡Esta es la parte nueva para que no salga el error!
+        else if (['weapon', 'armor', 'accessory'].includes(item.type)) {
+            
+            // 1. Validar Nivel
+            const playerRes = await client.query('SELECT level FROM players WHERE id = $1', [userId]);
+            const playerLevel = playerRes.rows[0].level;
+            if (playerLevel < 100) {
+                const maxAllowed = playerLevel + 9;
+                if (item.min_level > maxAllowed) throw new Error(`Nivel insuficiente (${item.min_level}).`);
+            }
+
+            // 2. Definir Slot destino
+            let targetSlot = item.slot; 
+            // Manejo básico de anillos (siempre va al 1 por defecto al hacer clic derecho)
+            if (item.slot === 'ring') targetSlot = 'ring_1';
+            if (item.slot === 'earring') targetSlot = 'earring_1';
+
+            if (!targetSlot) throw new Error("Este objeto no se puede equipar.");
+
+            // 3. Swap (Intercambio)
+            const existingRes = await client.query('SELECT * FROM player_items WHERE player_id = $1 AND is_equipped = true AND equipped_slot = $2', [userId, targetSlot]);
+            
+            if (existingRes.rows.length > 0) {
+                // Desequipar el actual a la bolsa del nuevo
+                const oldItem = existingRes.rows[0];
+                await client.query('UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2', [item.bag_slot, oldItem.id]);
+            }
+
+            // Equipar el nuevo
+            await client.query('UPDATE player_items SET is_equipped = true, equipped_slot = $1, bag_slot = NULL, is_bound = true WHERE id = $2', [targetSlot, inventoryItemId]);
+            
+            msg = `Equipado: ${item.name}`;
+            shouldConsume = false; 
         }
         else {
             throw new Error("No puedes usar este objeto aquí.");
         }
 
+        // --- CONSUMIR SI APLICA ---
         if (shouldConsume) {
             if (item.quantity > 1) {
                 await client.query('UPDATE player_items SET quantity = quantity - 1 WHERE id = $1', [inventoryItemId]);
