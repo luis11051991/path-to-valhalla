@@ -7,7 +7,6 @@ const seededRandom = (seedString) => {
     const hash = crypto.createHash('sha256').update(String(seedString || '')).digest();
     let state = hash.readUInt32LE(0);
     return () => {
-        // Mulberry32
         state |= 0;
         state = (state + 0x6D2B79F5) | 0;
         let t = Math.imul(state ^ (state >>> 15), 1 | state);
@@ -48,41 +47,37 @@ const generateEnemyInstance = (enemyRow, playerId, expeditionId) => {
                 ? { hp: 0.12, dmg: 0.10, armor: 0.18 }
                 : { hp: 0.10, dmg: 0.08, armor: 0.15 };
 
-    // Base stats
-    const baseHpT1 = Math.round(40 + 6 * Math.pow(level, 2));
+    // --- BUFF DE ESTADÍSTICAS BASE ---
+    // Aumento de HP y Daño para que no sean tan débiles
+    const baseHpT1 = Math.round(55 + 8 * Math.pow(level, 2)); // Antes: 40 + 6
     const hpBase = baseHpT1 * tierHpFactor;
-    const dmgBase = Math.round(4 + 1.2 * Math.pow(level, 1.25));
+    
+    const dmgBase = Math.round(6 + 1.5 * Math.pow(level, 1.3)); // Antes: 4 + 1.2
     const dmgBaseMin = dmgBase * tierDmgRange[0];
     const dmgBaseMax = dmgBase * tierDmgRange[1];
-    const armorBase = Math.round((1 + level * 0.8) * tierArmorFactor);
+    
+    const armorBase = Math.round((2 + level * 1.0) * tierArmorFactor); // Ligero buff armor
 
-    // Apply overrides if provided, otherwise generate with variation
-    // Overrides only if explicitly provided (both bounds for hp/damage)
     const hasHpOverride = enemyRow.hp_min != null && enemyRow.hp_max != null;
     const hasDmgOverride = enemyRow.damage_min != null && enemyRow.damage_max != null;
     const hasArmorOverride = enemyRow.armor != null;
 
     const hpValue = hasHpOverride
-        ? randomInt(
-            Number(enemyRow.hp_min ?? enemyRow.hp_max ?? hpBase),
-            Number(enemyRow.hp_max ?? enemyRow.hp_min ?? hpBase),
-            rng
-        )
+        ? randomInt(Number(enemyRow.hp_min ?? enemyRow.hp_max), Number(enemyRow.hp_max ?? enemyRow.hp_min), rng)
         : Math.round(hpBase * (1 - variation.hp + (2 * variation.hp * rng())));
 
     const dmgMinValue = hasDmgOverride
-        ? Number(enemyRow.damage_min ?? enemyRow.damage_max ?? dmgBaseMin)
+        ? Number(enemyRow.damage_min ?? enemyRow.damage_max)
         : Math.round(dmgBaseMin * (1 - variation.dmg + (2 * variation.dmg * rng())));
 
     const dmgMaxValue = hasDmgOverride
-        ? Number(enemyRow.damage_max ?? enemyRow.damage_min ?? dmgBaseMax)
+        ? Number(enemyRow.damage_max ?? enemyRow.damage_min)
         : Math.round(dmgBaseMax * (1 - variation.dmg + (2 * variation.dmg * rng())));
 
     const armorValue = hasArmorOverride
         ? Number(enemyRow.armor)
         : Math.round(armorBase * (1 - variation.armor + (2 * variation.armor * rng())));
 
-    // Elite minor (only tiers 1 & 2, non-boss)
     let isEliteMinor = false;
     let hpFinal = hpValue;
     let dmgMinFinal = Math.min(dmgMinValue, dmgMaxValue);
@@ -97,8 +92,6 @@ const generateEnemyInstance = (enemyRow, playerId, expeditionId) => {
         armorFinal = Math.round(armorFinal + 1);
     }
 
-    // Rewards preview (XP uses neutral playerLevel = level here; actual awarded XP will use player level in battle)
-    // Crit / block base by tier or overrides
     const baseCritOverride = enemyRow.crit_chance;
     const baseBlockOverride = enemyRow.block_chance;
 
@@ -144,6 +137,7 @@ const generateEnemyInstance = (enemyRow, playerId, expeditionId) => {
 };
 
 const mapEnemyForBestiary = (enemyRow, enemyInstance) => {
+    // ... (sin cambios aquí)
     const instance = enemyInstance || {};
     return {
         id: enemyRow.id,
@@ -152,10 +146,7 @@ const mapEnemyForBestiary = (enemyRow, enemyInstance) => {
         zone_id: enemyRow.zone_id,
         difficulty_tier: enemyRow.difficulty_tier,
         is_boss: enemyRow.is_boss,
-        level_range: {
-            min_level: enemyRow.min_level,
-            max_level: enemyRow.max_level
-        },
+        level_range: { min_level: enemyRow.min_level, max_level: enemyRow.max_level },
         stats_range_estimate: {
             hp_min_est: instance.hp_min_est || null,
             hp_max_est: instance.hp_max_est || null,

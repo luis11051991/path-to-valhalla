@@ -21,13 +21,11 @@ const generateRandomStats = (templateStats, rng) => {
     return finalStats;
 };
 
-// --- NUEVO: OBTENER BESTIARIO (CON LOOT Y STATS CALCULADOS) ---
+// --- OBTENER BESTIARIO ---
 exports.getBestiary = async (req, res) => {
     const userId = req.user?.id;
     try {
         console.log("-> Solicitando Bestiario...");
-
-        // 1. Consulta SQL (Base + Drops)
         const query = `
             SELECT 
                 e.*,
@@ -51,40 +49,23 @@ exports.getBestiary = async (req, res) => {
         
         const result = await pool.query(query, [userId]);
         
-        // 2. PROCESAMIENTO DE STATS DINÁMICOS
-        // Como la DB tiene nulls porque es escalable, calculamos los rangos aquí.
         const processedBestiary = result.rows.map(enemy => {
-            // Simulamos el monstruo en su nivel mínimo y máximo
-            // Truco: Forzamos el nivel modificando el objeto temporalmente
-            
-            // Versión más débil posible
-            const weakSim = generateEnemyInstance(
-                { ...enemy, min_level: enemy.min_level, max_level: enemy.min_level }, 
-                'sim-weak', 'bestiary'
-            );
-
-            // Versión más fuerte posible
-            const strongSim = generateEnemyInstance(
-                { ...enemy, min_level: enemy.max_level, max_level: enemy.max_level }, 
-                'sim-strong', 'bestiary'
-            );
+            const weakSim = generateEnemyInstance({ ...enemy, min_level: enemy.min_level, max_level: enemy.min_level }, 'sim-weak', 'bestiary');
+            const strongSim = generateEnemyInstance({ ...enemy, min_level: enemy.max_level, max_level: enemy.max_level }, 'sim-strong', 'bestiary');
 
             return {
                 ...enemy,
-                // Agregamos los rangos calculados al objeto
                 calculated_stats: {
                     damage: `${weakSim.damage_min} - ${strongSim.damage_max}`,
                     hp: `${weakSim.hp_max} - ${strongSim.hp_max}`,
                     armor: `${weakSim.armor} - ${strongSim.armor}`,
-                    crit: `${weakSim.crit_chance}%`, // El crítico suele ser estable por tier
+                    crit: `${weakSim.crit_chance}%`,
                     block: `${weakSim.block_chance}%`
                 }
             };
         });
 
-        console.log(`[BESTIARY] Enviando ${processedBestiary.length} enemigos procesados.`);
         res.json({ success: true, bestiary: processedBestiary });
-
     } catch (err) {
         console.error("[BESTIARY ERROR]", err.message);
         res.status(500).json({ message: 'Error cargando el bestiario.' });
@@ -103,7 +84,6 @@ exports.getZoneEnemies = async (req, res) => {
     const userId = req.user?.id;
 
     try {
-        // 1) Revisar quests activas para enemigos ocultos requeridos
         const activeQuestsRes = await pool.query(`
             SELECT pq.progress, q.requirements
             FROM player_quests pq
@@ -115,28 +95,19 @@ exports.getZoneEnemies = async (req, res) => {
         for (const quest of activeQuestsRes.rows) {
             const requirements = quest.requirements || [];
             const progress = quest.progress || {};
-
             for (const req of requirements) {
                 if (req?.type !== 'kill') continue;
                 const targetId = Number(req.target_id);
                 const requiredCount = Number(req.count || 0);
                 const currentCount = Number(progress[req.target_id] || 0);
-
                 if (Number.isFinite(targetId) && currentCount < requiredCount) {
                     visibleHiddenIds.push(targetId);
                 }
             }
         }
 
-        // 2) Traer enemigos visibles + ocultos requeridos por quests
         const enemiesRes = await pool.query(
-            `
-            SELECT *
-            FROM enemies
-            WHERE zone_id = $1
-              AND (is_hidden = false OR id = ANY($2))
-            ORDER BY difficulty_tier ASC, min_level ASC
-            `,
+            `SELECT * FROM enemies WHERE zone_id = $1 AND (is_hidden = false OR id = ANY($2)) ORDER BY difficulty_tier ASC, min_level ASC`,
             [zoneId, visibleHiddenIds]
         );
 
@@ -148,10 +119,9 @@ exports.getZoneEnemies = async (req, res) => {
     } catch (err) { res.status(500).json({ message: 'Error cargando enemigos.' }); }
 };
 
-// --- MOTOR DE COMBATE ---
+// --- MOTOR DE COMBATE (CORREGIDO) ---
 exports.startBattle = async (req, res) => {
     const { userId, enemyId, zoneId } = req.body;
-
     const client = await pool.connect();
 
     try {
@@ -171,17 +141,18 @@ exports.startBattle = async (req, res) => {
         if (player.energy < 5) throw new Error("Energía insuficiente.");
         if (player.current_hp <= 5) throw new Error("Estás muy herido.");
 
+        // --- STATS JUGADOR ---
         const totalStats = player.total_stats || player.stats || {};
         const totalStr = totalStats.strength || 0;
         const totalDex = totalStats.dexterity || 0;
-        const totalInt = totalStats.intelligence || 0; // Necesario para magia
+        const totalInt = totalStats.intelligence || 0; 
         const totalCon = totalStats.constitution || 0;
         const totalArmor = (totalStats.armor || 0) + (totalStats.defense || 0);
 
         const weaponMin = Math.max(0, totalStats.damage_min || 0);
         const weaponMax = Math.max(weaponMin, totalStats.damage_max || weaponMin);
 
-        // --- CARGAR SKILLS EQUIPADOS ---
+        // --- SKILLS ---
         const skillsQuery = `
             SELECT ps.skill_level, s.name, s.damage_min, s.damage_max, s.heal_amount, 
                    s.trigger_chance, s.scaling_stat, s.scaling_factor
@@ -191,8 +162,8 @@ exports.startBattle = async (req, res) => {
             ORDER BY ps.slot_index ASC
         `;
         const equippedSkills = (await client.query(skillsQuery, [userId])).rows;
-        // --------------------------------------
 
+        // --- GENERAR ENEMIGO ---
         const enemyInstance = generateEnemyInstance(baseEnemy, userId, zoneId);
         const playerMaxHp = player.calculatedMaxHp || computeMaxHp(totalCon);
         player.current_hp = Math.min(player.current_hp, playerMaxHp);
@@ -214,15 +185,15 @@ exports.startBattle = async (req, res) => {
 
         let log = [];
         let isWin = false;
-
-        // Variables para tracking de daño total (para el desempate)
         let totalDamageDealtByPlayer = 0;
         let totalDamageDealtByEnemy = 0;
+        let battleEndedPrematurely = false; // Nueva bandera para saber si alguien murió antes
 
+        // --- BUCLE DE COMBATE (10 RONDAS) ---
         for (let r = 1; r <= 10; r++) {
             log.push({ type: 'round', msg: `--- RONDA ${r} ---` });
 
-            // --- 1. TURNO DEL JUGADOR ---
+            // 1. TURNO JUGADOR
             const weaponDmg = weaponMax > weaponMin ? Math.floor(Math.random() * (weaponMax - weaponMin + 1)) + weaponMin : weaponMin;
             const statDmg = Math.floor(Math.max(totalStr, totalDex) * 2);
             const baseTotalDmg = weaponDmg + statDmg;
@@ -231,23 +202,18 @@ exports.startBattle = async (req, res) => {
             let skillDamage = 0;
             let skillHeal = 0;
 
-            // Intentar activar Skill
             for (const skill of equippedSkills) {
                 const chance = Math.min(60, (skill.trigger_chance || 15) + (totalInt * 0.5));
-
                 if (Math.random() * 100 <= chance) {
                     skillTriggered = skill;
                     const lvlMult = 1 + ((skill.skill_level - 1) * 0.1);
-
                     if (skill.damage_min > 0) {
                         const baseSkillDmg = Math.floor(Math.random() * (skill.damage_max - skill.damage_min + 1)) + skill.damage_min;
                         skillDamage = Math.floor(baseSkillDmg * lvlMult);
-
                         if (skill.scaling_stat === 'intelligence') skillDamage += Math.floor(totalInt * (skill.scaling_factor || 1));
                         if (skill.scaling_stat === 'strength') skillDamage += Math.floor(totalStr * (skill.scaling_factor || 1));
                         if (skill.scaling_stat === 'dexterity') skillDamage += Math.floor(totalDex * (skill.scaling_factor || 1));
                     }
-
                     if (skill.heal_amount > 0) {
                         skillHeal = Math.floor(skill.heal_amount * lvlMult + (totalInt * 0.5));
                     }
@@ -260,88 +226,65 @@ exports.startBattle = async (req, res) => {
             totalDamageDealtByPlayer += finalDmgToEnemy;
 
             if (skillTriggered) {
-                log.push({
-                    type: 'player_atk',
-                    msg: `¡Usas ${skillTriggered.name}! (Daño: ${finalDmgToEnemy})`,
-                    isSkill: true,
-                    damage: finalDmgToEnemy,
-                    enemyHp: Math.max(0, enemy.current_hp)
-                });
+                log.push({ type: 'player_atk', msg: `¡Usas ${skillTriggered.name}! (Daño: ${finalDmgToEnemy})`, isSkill: true, damage: finalDmgToEnemy, enemyHp: Math.max(0, enemy.current_hp) });
                 if (skillHeal > 0) {
                     player.current_hp = Math.min(playerMaxHp, player.current_hp + skillHeal);
                     log.push({ type: 'info', msg: `Te curas ${skillHeal} HP.` });
                 }
             } else {
-                log.push({
-                    type: 'player_atk',
-                    msg: `Golpeas por ${finalDmgToEnemy}`,
-                    damage: finalDmgToEnemy,
-                    enemyHp: Math.max(0, enemy.current_hp)
-                });
+                log.push({ type: 'player_atk', msg: `Golpeas por ${finalDmgToEnemy}`, damage: finalDmgToEnemy, enemyHp: Math.max(0, enemy.current_hp) });
             }
 
+            // CHECK VICTORIA (Enemigo muerto)
             if (enemy.current_hp <= 0) {
                 isWin = true;
-                log.push({ type: 'info', msg: "¡Victoria!" });
-                break;
+                battleEndedPrematurely = true;
+                log.push({ type: 'info', msg: "¡Victoria! El enemigo ha caído." });
+                break; // Rompe el bucle, ganaste
             }
 
-            // --- 2. TURNO DEL ENEMIGO ---
+            // 2. TURNO ENEMIGO
             const enemyAttack = randomInt(enemy.damage_min, enemy.damage_max, enemyDamageRng);
             let dmgToPlayer = Math.max(1, enemyAttack - Math.floor((totalArmor + totalCon / 2) / 5));
             player.current_hp -= dmgToPlayer;
             totalDamageDealtByEnemy += dmgToPlayer;
 
-            log.push({
-                type: 'enemy_atk',
-                msg: `Te golpean por ${dmgToPlayer}`,
-                damage: dmgToPlayer,
-                playerHp: Math.max(0, player.current_hp)
-            });
+            log.push({ type: 'enemy_atk', msg: `Te golpean por ${dmgToPlayer}`, damage: dmgToPlayer, playerHp: Math.max(0, player.current_hp) });
 
+            // CHECK DERROTA (Jugador muerto)
             if (player.current_hp <= 0) {
                 isWin = false;
-                player.current_hp = 1;
-                log.push({ type: 'info', msg: "Derrota." });
-                break;
+                battleEndedPrematurely = true;
+                // NO RESETEAMOS HP AQUÍ TODAVÍA, para evitar que el desempate se confunda
+                log.push({ type: 'info', msg: "Has sido derrotado." });
+                break; // Rompe el bucle, perdiste
             }
         }
 
-        // --- 3. LÓGICA DE DESEMPATE (Turno 10) ---
-        if (enemy.current_hp > 0 && player.current_hp > 0) {
+        // --- 3. LÓGICA DE DESEMPATE (Solo si nadie murió) ---
+        if (!battleEndedPrematurely) {
+            // Ambos siguen vivos tras 10 rondas -> Gana quien hizo más daño
             if (totalDamageDealtByPlayer >= totalDamageDealtByEnemy) {
                 isWin = true;
-                log.push({ type: 'info', msg: `¡Tiempo agotado! Ganaste por daño (${totalDamageDealtByPlayer} vs ${totalDamageDealtByEnemy}).` });
+                log.push({ type: 'info', msg: `¡Tiempo agotado! Victoria por daño (${totalDamageDealtByPlayer} vs ${totalDamageDealtByEnemy}).` });
             } else {
                 isWin = false;
-                log.push({ type: 'info', msg: `¡Tiempo agotado! Perdiste por daño (${totalDamageDealtByPlayer} vs ${totalDamageDealtByEnemy}).` });
+                log.push({ type: 'info', msg: `¡Tiempo agotado! Derrota por daño (${totalDamageDealtByPlayer} vs ${totalDamageDealtByEnemy}).` });
             }
         }
 
-        // --- MISIONES Y BESTIARIO ---
+        // --- AHORA SÍ: SI PERDISTE, CURA MÍNIMA PARA DB ---
+        if (player.current_hp <= 0) player.current_hp = 1; 
+
+        // --- LOGICA DE PREMIOS (Mismo código de antes) ---
         let questLogs = [];
         if (isWin) {
-            // A. REGISTRAR BESTIARIO
-            await client.query(`
-                INSERT INTO player_bestiary (player_id, enemy_id, kills, first_kill_at)
-                VALUES ($1, $2, 1, NOW())
-                ON CONFLICT (player_id, enemy_id)
-                DO UPDATE SET kills = player_bestiary.kills + 1
-            `, [userId, baseEnemy.id]);
-
-            // B. MISIONES
-            const activeQuestsRes = await client.query(`
-                SELECT pq.id, pq.progress, q.title, q.requirements 
-                FROM player_quests pq
-                JOIN quests q ON pq.quest_id = q.id
-                WHERE pq.player_id = $1 AND pq.status = 'active'
-            `, [userId]);
-
+            await client.query(`INSERT INTO player_bestiary (player_id, enemy_id, kills, first_kill_at) VALUES ($1, $2, 1, NOW()) ON CONFLICT (player_id, enemy_id) DO UPDATE SET kills = player_bestiary.kills + 1`, [userId, baseEnemy.id]);
+            const activeQuestsRes = await client.query(`SELECT pq.id, pq.progress, q.title, q.requirements FROM player_quests pq JOIN quests q ON pq.quest_id = q.id WHERE pq.player_id = $1 AND pq.status = 'active'`, [userId]);
             for (const quest of activeQuestsRes.rows) {
                 let progress = { ...quest.progress };
                 let updated = false;
                 const requirements = quest.requirements || [];
-
                 for (const req of requirements) {
                     if (req.type === 'kill' && parseInt(req.target_id) === parseInt(baseEnemy.id)) {
                         const currentCount = parseInt(progress[req.target_id] || 0);
@@ -353,13 +296,10 @@ exports.startBattle = async (req, res) => {
                         }
                     }
                 }
-                if (updated) {
-                    await client.query("UPDATE player_quests SET progress = $1 WHERE id = $2", [JSON.stringify(progress), quest.id]);
-                }
+                if (updated) await client.query("UPDATE player_quests SET progress = $1 WHERE id = $2", [JSON.stringify(progress), quest.id]);
             }
         }
 
-        // --- RECOMPENSAS ---
         let rewards = { xp: 0, copper: 0, items: [] };
         let finalGold = parseInt(player.gold || 0);
         let finalSilver = parseInt(player.silver || 0);
@@ -408,7 +348,6 @@ exports.startBattle = async (req, res) => {
                     const tplRes = await client.query('SELECT * FROM items_templates WHERE id = $1', [drop.item_template_id]);
                     const template = tplRes.rows[0];
                     let dropStats = (template.type !== 'material' && template.type !== 'consumable') ? generateRandomStats(template.base_stats) : {};
-
                     await client.query(`INSERT INTO player_packages (player_id, item_template_id, quantity, data) VALUES ($1, $2, $3, $4)`, [userId, drop.item_template_id, qty, dropStats]);
                     rewards.items.push({ name: template.name, qty });
                 }
@@ -430,7 +369,7 @@ exports.startBattle = async (req, res) => {
 
         if (questLogs.length > 0) questLogs.forEach(msg => log.push({ type: 'info', msg: msg }));
 
-        const enemyStats = {
+        const enemyStatsResult = {
             level: enemy.level,
             hp_current: enemy.current_hp,
             hp_max: enemy.max_hp,
@@ -448,7 +387,7 @@ exports.startBattle = async (req, res) => {
                 isWin, log, rewards, leveledUp,
                 initialPlayerHp, initialEnemyHp, finalPlayerHp: player.current_hp,
                 enemyName: baseEnemy.name, enemyImage: baseEnemy.image_url,
-                enemy_stats: enemyStats
+                enemy_stats: enemyStatsResult
             }
         });
 
