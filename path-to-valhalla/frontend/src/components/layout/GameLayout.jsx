@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import TopBar from './TopBar'; // Asegúrate de la ruta correcta según tu estructura
 import Sidebar from './Sidebar';
 
-const GameLayout = ({ user, onLogout, onOpenShop, onNavigate, currentView, children }) => {
+const GameLayout = ({ user, unreadCount, onLogout, onOpenShop, onNavigate, currentView, children }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCompact, setIsSidebarCompact] = useState(false);
@@ -40,7 +40,8 @@ const GameLayout = ({ user, onLogout, onOpenShop, onNavigate, currentView, child
       {/* 1A. BARRA LATERAL DESKTOP */}
       <div className="hidden md:flex md:flex-shrink-0">
         <Sidebar
-          user={user} // <--- ¡ESTO FALTABA! Pasamos el usuario al Sidebar
+          user={user}
+          unreadCount={unreadCount}
           onNavigate={onNavigate}
           currentView={currentView}
           isOpen={true}
@@ -53,7 +54,8 @@ const GameLayout = ({ user, onLogout, onOpenShop, onNavigate, currentView, child
       {/* 1B. BARRA LATERAL MÓVIL */}
       <div className="md:hidden w-0 h-0">
         <Sidebar
-          user={user} // <--- ¡AQUÍ TAMBIÉN!
+          user={user}
+          unreadCount={unreadCount}
           onNavigate={onNavigate}
           currentView={currentView}
           isOpen={sidebarIsOpen}

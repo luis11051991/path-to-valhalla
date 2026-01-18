@@ -1,29 +1,32 @@
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const socket = require('./src/socket');
 
 // --- IMPORTACIONES DE CONTROLADORES ---
 const authController = require('./src/controllers/authController');
-const playerController = require('./src/controllers/playerController'); 
-const bgController = require('./src/controllers/backgroundController'); 
+const playerController = require('./src/controllers/playerController');
+const bgController = require('./src/controllers/backgroundController');
 const inventoryController = require('./src/controllers/inventoryController');
 const petController = require('./src/controllers/petController');
 const skillController = require('./src/controllers/skillController');
 
 // --- IMPORTACIÓN DE MIDDLEWARES ---
-const authMiddleware = require('./src/middleware/authMiddleware'); 
+const authMiddleware = require('./src/middleware/authMiddleware');
 
 // --- IMPORTAR GESTORES DE RUTAS (Routers) ---
 const authRoutes = require('./src/routes/authRoutes');
 const evolutionRoutes = require('./src/routes/evolutionRoutes');
 const expeditionRoutes = require('./src/routes/expeditionRoutes');
-const packageRoutes = require('./src/routes/packageRoutes'); 
-const shopRoutes = require('./src/routes/shopRoutes'); 
-const workshopRoutes = require('./src/routes/workshopRoutes'); 
+const packageRoutes = require('./src/routes/packageRoutes');
+const shopRoutes = require('./src/routes/shopRoutes');
+const workshopRoutes = require('./src/routes/workshopRoutes');
 const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const questRoutes = require('./src/routes/questRoutes');
 
 // CORRECCIÓN AQUÍ: Agregamos el /src/ que faltaba
-const bestiaryRoutes = require('./src/routes/bestiaryRoutes'); 
+const bestiaryRoutes = require('./src/routes/bestiaryRoutes');
+const messageRoutes = require('./src/routes/messageRoutes');
 
 const app = express();
 
@@ -32,15 +35,16 @@ app.use(cors());
 app.use(express.json());
 
 // --- 1. RUTAS NUEVAS (Router) ---
-app.use('/api/auth', authRoutes); 
+app.use('/api/auth', authRoutes);
 app.use('/api/evolution', evolutionRoutes);
 app.use('/api/expeditions', expeditionRoutes);
-app.use('/api/packages', packageRoutes); 
-app.use('/api/shop', shopRoutes); 
-app.use('/api/workshop', workshopRoutes); 
+app.use('/api/packages', packageRoutes);
+app.use('/api/shop', shopRoutes);
+app.use('/api/workshop', workshopRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/quests', questRoutes);
 app.use('/api/bestiary', bestiaryRoutes);
+app.use('/api/messages', messageRoutes);
 
 // --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);
@@ -72,9 +76,15 @@ app.post('/api/inventory/organize', inventoryController.organizeInventory);
 
 // --- 6. RUTAS DE ADMIN / DEBUG ---
 app.post('/api/admin/give-item', inventoryController.adminGiveItem);
+// --- BÚSQUEDA ---
+app.get('/api/search-users', playerController.searchUsers);
 
 // --- ARRANQUE ---
+// --- ARRANQUE ---
 const PORT = 3000;
-app.listen(PORT, () => {
+const server = http.createServer(app);
+socket.init(server);
+
+server.listen(PORT, () => {
   console.log(`⚡ Servidor de Path to Valhalla corriendo en puerto ${PORT}`);
 });

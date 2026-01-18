@@ -4,59 +4,59 @@ import { X, Lock } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE ENLACES (ACTUALIZADA CON GRIMORIO) ---
 const links = [
-    { 
-        section: 'Heroe', 
+    {
+        section: 'Heroe',
         items: [
             { to: '/hero', label: 'Vision General', icon: '/icons/sidebar/hero_overview.png' },
             // NUEVO ENLACE: Grimorio
-            { to: '/grimoire', label: 'Grimorio', icon: '/icons/tabs/tab_grimoire.png' }, 
-            
-            { to: '/inventory', label: 'Paquetes', icon: '/icons/sidebar/hero_packages.png' }, 
-            { to: '/bestiary', label: 'Bestiario', icon: '/icons/sidebar/hero_bestiary.png'},
+            { to: '/grimoire', label: 'Grimorio', icon: '/icons/tabs/tab_grimoire.png' },
+
+            { to: '/inventory', label: 'Paquetes', icon: '/icons/sidebar/hero_packages.png' },
+            { to: '/bestiary', label: 'Bestiario', icon: '/icons/sidebar/hero_bestiary.png' },
             { to: '/achievements', label: 'Logros', icon: '/icons/sidebar/hero_achievements.png', disabled: true },
             { to: '/stats', label: 'Estadísticas', icon: '/icons/sidebar/hero_stats.png', disabled: true },
-            { to: '/messages', label: 'Mensajería', icon: '/icons/sidebar/hero_messages.png', disabled: true }, 
-        ] 
+            { to: '/messages', label: 'Mensajería', icon: '/icons/sidebar/hero_messages.png' },
+        ]
     },
-    { 
-        section: 'Aventura', 
+    {
+        section: 'Aventura',
         items: [
             { to: '/expeditions', label: 'Expediciones', icon: '/icons/sidebar/adv_expeditions.png' },
             { to: '/dungeons', label: 'Mazmorras', icon: '/icons/sidebar/adv_dungeons.png', disabled: true },
             { to: '/tower', label: 'Torre Infinita', icon: '/icons/sidebar/adv_tower.png', disabled: true },
             { to: '/valhalla', label: 'Salon de Valhallus', icon: '/icons/sidebar/adv_valhalla.png' },
-        ] 
+        ]
     },
-    { 
-        section: 'Combate', 
+    {
+        section: 'Combate',
         items: [
             { to: '/coliseum', label: 'Coliseo', icon: '/icons/sidebar/combat_coliseum.png', disabled: true },
-        ] 
+        ]
     },
-    { 
-        section: 'Ciudad', 
+    {
+        section: 'Ciudad',
         items: [
             { to: '/workshop', label: 'Taller', icon: '/icons/sidebar/city_workshop.png', levelLock: 5 },
             { to: '/bank', label: 'Banco', icon: '/icons/sidebar/city_bank.png', disabled: true },
             { to: '/market', label: 'Mercado', icon: '/icons/sidebar/city_market.png' },
-        ] 
+        ]
     },
-    { 
-        section: 'Social', 
+    {
+        section: 'Social',
         items: [
             { to: '/alliance', label: 'Alianza', icon: '/icons/sidebar/social_alliance.png', disabled: true },
             { to: '/calendar', label: 'Agenda', icon: '/icons/sidebar/social_calendar.png', disabled: true },
-        ] 
+        ]
     },
-    { 
-        section: 'Premium', 
+    {
+        section: 'Premium',
         items: [
             { to: '/shop', label: 'Tienda VIP', icon: '/icons/sidebar/shop_vip.png', disabled: true },
-        ] 
+        ]
     },
 ];
 
-const Sidebar = ({ user, isOpen, isCompact, isMobile, onCloseMobile, onToggleCompact }) => {
+const Sidebar = ({ user, unreadCount, isOpen, isCompact, isMobile, onCloseMobile, onToggleCompact }) => {
     const showLabels = !isCompact || isMobile;
     const targetWidth = isMobile ? (isOpen ? 256 : 0) : (isCompact ? 80 : 256);
     const positionClass = isMobile ? 'fixed inset-y-0 left-0' : 'static';
@@ -77,8 +77,8 @@ const Sidebar = ({ user, isOpen, isCompact, isMobile, onCloseMobile, onToggleCom
     const getLinkClasses = ({ isActive, disabled }) => `
         w-full flex items-center ${showLabels ? 'justify-start gap-3 px-6' : 'justify-center px-3'} py-2.5
         transition-all border-l-[3px] group relative
-        ${isActive 
-            ? 'bg-gradient-to-r from-amber-900/40 to-transparent border-amber-500 text-amber-100' 
+        ${isActive
+            ? 'bg-gradient-to-r from-amber-900/40 to-transparent border-amber-500 text-amber-100'
             : 'border-transparent text-slate-400 hover:text-amber-100 hover:bg-white/5'}
         ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'}
     `;
@@ -97,7 +97,7 @@ const Sidebar = ({ user, isOpen, isCompact, isMobile, onCloseMobile, onToggleCom
                         <div className="w-10 h-0.5 bg-amber-700/50 rounded-full mt-1 shadow-[0_0_8px_rgba(245,158,11,0.4)]"></div>
                     </>
                 ) : <h1 className="text-amber-500 font-serif font-bold text-sm drop-shadow-md">M</h1>}
-                
+
                 {isMobile && (
                     <button onClick={onCloseMobile} className="absolute right-3 top-3 p-1 text-slate-400 hover:text-amber-300 transition-colors">
                         <X size={16} />
@@ -112,7 +112,7 @@ const Sidebar = ({ user, isOpen, isCompact, isMobile, onCloseMobile, onToggleCom
                         {section.items.map(item => {
                             const isLocked = item.levelLock && user?.level < item.levelLock;
                             const isDisabled = item.disabled || isLocked;
-                            
+
                             if (isDisabled) {
                                 return (
                                     <div key={item.to} className={getLinkClasses({ isActive: false, disabled: true })}>
@@ -124,9 +124,9 @@ const Sidebar = ({ user, isOpen, isCompact, isMobile, onCloseMobile, onToggleCom
                             }
 
                             return (
-                                <NavLink 
-                                    key={item.to} 
-                                    to={item.to} 
+                                <NavLink
+                                    key={item.to}
+                                    to={item.to}
                                     className={({ isActive }) => getLinkClasses({ isActive, disabled: false })}
                                 >
                                     {({ isActive }) => (
@@ -135,11 +135,17 @@ const Sidebar = ({ user, isOpen, isCompact, isMobile, onCloseMobile, onToggleCom
                                                 src={item.icon}
                                                 alt={item.label}
                                                 className={`w-6 h-6 object-contain transition-transform group-hover:scale-110 ${showLabels ? '' : 'opacity-70'} ${isActive ? 'drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]' : 'group-hover:opacity-100'}`}
-                                                onError={(e) => e.target.style.display = 'none'} 
+                                                onError={(e) => e.target.style.display = 'none'}
                                             />
                                             {showLabels && (
                                                 <span className={`font-sans text-xs uppercase tracking-wide ${isActive ? 'font-bold' : 'font-medium'}`}>
                                                     {item.label}
+                                                </span>
+                                            )}
+                                            {/* BADGE DE NO LEÍDOS */}
+                                            {item.to === '/messages' && unreadCount > 0 && (
+                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse shadow-sm">
+                                                    {unreadCount}
                                                 </span>
                                             )}
                                         </>

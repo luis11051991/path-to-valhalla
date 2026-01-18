@@ -15,14 +15,20 @@ import GameLayout from './components/layout/GameLayout';
 import OnixShopModal from './components/OnixShopModal';
 import Grimoire from './pages/Grimoire';
 import Bestiary from './pages/Bestiary';
+import MessagingPage from './pages/MessagingPage';
 import { apiUrl } from './constants/api';
+
+import { io } from 'socket.io-client';
+import { messageService } from './services/messageService';
 
 function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('auth'); // 'auth', 'race', 'welcome_back', 'game'
   const [isShopOpen, setIsShopOpen] = useState(false);
+  const [socket, setSocket] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // --- LÓGICA DE SESIÓN (INTACTA) ---
+  // --- LÓGICA DE SESIÓN ---
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
@@ -31,28 +37,53 @@ function App() {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
       setView('game');
+      // Iniciar socket y datos
+      initSocket(token);
+      updateUnreadCount();
 
       fetch(apiUrl('/api/auth/profile'), {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-auth-token': token
-        }
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token }
       })
-        .then(res => {
-          if (res.ok) return res.json();
-          throw new Error('Sesión expirada');
-        })
-        .then(data => {
-          if (data.user) handleUserUpdate(data.user);
-        })
+        .then(res => res.ok ? res.json() : Promise.reject('Sesión expirada'))
+        .then(data => data.user && handleUserUpdate(data.user))
         .catch(err => console.log("Error validando sesión:", err));
     }
   }, []);
 
+  const initSocket = (token) => {
+    // Conexión socket
+    const newSocket = io(apiUrl(''), {
+      auth: { token }
+    });
+
+    newSocket.on('connect', () => console.log("Socket conectado"));
+
+    // Escuchar nuevos mensajes GLOBALMENTE para el contador
+    newSocket.on('new_message', () => {
+      updateUnreadCount();
+      // Opcional: Sonido de notificación
+    });
+
+    setSocket(newSocket);
+  };
+
+  const updateUnreadCount = async () => {
+    const count = await messageService.getUnreadCount();
+    setUnreadCount(count);
+  };
+
   const handleAuthSuccess = (userData, isRegistration) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
+    const token = localStorage.getItem('token');
+
+    // Iniciar socket al login
+    if (token) {
+      initSocket(token);
+      updateUnreadCount();
+    }
+
     if (isRegistration) setView('race');
     else setView('welcome_back');
   };
@@ -93,6 +124,7 @@ function App() {
         <div className="w-full h-full font-sans text-slate-100">
           <GameLayout
             user={user}
+            unreadCount={unreadCount} // <--- Pasamos el contador
             onLogout={handleLogout}
             onOpenShop={openShop}
           >
@@ -126,12 +158,18 @@ function App() {
                 element={<Bestiary user={user} onUpdateUser={handleUserUpdate} />}
               />
 
+              {/* Mensajería */}
+              <Route
+                path="/messages"
+                element={<MessagingPage user={user} socket={socket} onMessageRead={updateUnreadCount} />}
+              />
+
               {/* Aventura */}
               <Route
                 path="/expeditions"
                 element={<Expeditions user={user} onUpdateUser={handleUserUpdate} />}
               />
-              
+
               <Route
                 path="/valhalla"
                 element={<ValhallaHall user={user} onUpdateUser={handleUserUpdate} />}
