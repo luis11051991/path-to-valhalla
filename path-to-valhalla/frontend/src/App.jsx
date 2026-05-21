@@ -9,6 +9,7 @@ import Expeditions from './pages/Expeditions';
 import Packages from './pages/Packages';
 import Market from './pages/Market';
 import Workshop from './pages/Workshop';
+import Bank from './pages/Bank';
 import ValhallaHall from './pages/ValhallaHall';
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
@@ -183,6 +184,10 @@ function App() {
               <Route
                 path="/workshop"
                 element={<Workshop user={user} onUpdateUser={handleUserUpdate} />}
+              />
+              <Route
+                path="/bank"
+                element={<Bank user={user} onUpdateUser={handleUserUpdate} />}
               />
 
               {/* Ruta comodín: Si la URL no existe, vuelve a /hero */}
