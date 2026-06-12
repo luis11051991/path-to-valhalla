@@ -1,28 +1,10 @@
-const pool = require('../config/db');
+const { db } = require('../config/db');
 
 const COMMISSION_RATE = 0.05;
 const CURRENCY_TO_COPPER = {
     gold: 10000,
     silver: 100,
-    copper: 1
-};
-
-let ensureColumnsPromise = null;
-
-const ensureBankColumns = async () => {
-    if (!ensureColumnsPromise) {
-        ensureColumnsPromise = pool.query(`
-            ALTER TABLE players
-            ADD COLUMN IF NOT EXISTS bank_gold INTEGER NOT NULL DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS bank_silver INTEGER NOT NULL DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS bank_copper INTEGER NOT NULL DEFAULT 0
-        `).catch((error) => {
-            ensureColumnsPromise = null;
-            throw error;
-        });
-    }
-
-    await ensureColumnsPromise;
+    copper: 1,
 };
 
 const toCopper = (gold, silver, copper) =>
@@ -47,31 +29,16 @@ exports.getBankStatus = async (req, res) => {
     const userId = req.user.id;
 
     try {
-        await ensureBankColumns();
-
-        const result = await pool.query(`
-            SELECT gold, silver, copper, bank_gold, bank_silver, bank_copper
-            FROM players
-            WHERE id = $1
-        `, [userId]);
-
-        if (result.rows.length === 0) {
+        const playerDoc = await db.collection('players').doc(userId).get();
+        if (!playerDoc.exists) {
             return res.status(404).json({ message: 'Jugador no encontrado.' });
         }
 
-        const player = result.rows[0];
+        const p = playerDoc.data();
         return res.json({
             success: true,
-            wallet: {
-                gold: parseInt(player.gold || 0, 10),
-                silver: parseInt(player.silver || 0, 10),
-                copper: parseInt(player.copper || 0, 10)
-            },
-            bank: {
-                gold: parseInt(player.bank_gold || 0, 10),
-                silver: parseInt(player.bank_silver || 0, 10),
-                copper: parseInt(player.bank_copper || 0, 10)
-            }
+            wallet: { gold: parseInt(p.gold || 0), silver: parseInt(p.silver || 0), copper: parseInt(p.copper || 0) },
+            bank: { gold: parseInt(p.bank_gold || 0), silver: parseInt(p.bank_silver || 0), copper: parseInt(p.bank_copper || 0) },
         });
     } catch (error) {
         console.error('Error al consultar banco:', error);
@@ -88,7 +55,6 @@ exports.depositToBank = async (req, res) => {
     if (!Object.prototype.hasOwnProperty.call(CURRENCY_TO_COPPER, normalizedCurrency)) {
         return res.status(400).json({ message: 'Moneda invalida. Usa gold, silver o copper.' });
     }
-
     if (depositAmount === null || depositAmount <= 0) {
         return res.status(400).json({ message: 'Ingresa una cantidad valida para depositar.' });
     }
@@ -97,75 +63,45 @@ exports.depositToBank = async (req, res) => {
     const feeCopper = Math.floor(amountCopper * COMMISSION_RATE);
     const netCopper = amountCopper - feeCopper;
 
-    const client = await pool.connect();
     try {
-        await ensureBankColumns();
-        await client.query('BEGIN');
+        const playerRef = db.collection('players').doc(userId);
+        const result = await db.runTransaction(async (t) => {
+            const playerDoc = await t.get(playerRef);
+            if (!playerDoc.exists) throw new Error('player_not_found');
 
-        const playerResult = await client.query(`
-            SELECT gold, silver, copper, bank_gold, bank_silver, bank_copper
-            FROM players
-            WHERE id = $1
-            FOR UPDATE
-        `, [userId]);
+            const p = playerDoc.data();
+            const walletCopper = toCopper(p.gold, p.silver, p.copper);
+            const bankCopper = toCopper(p.bank_gold || 0, p.bank_silver || 0, p.bank_copper || 0);
 
-        if (playerResult.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ message: 'Jugador no encontrado.' });
-        }
+            if (walletCopper < amountCopper) throw new Error('insufficient_wallet');
 
-        const player = playerResult.rows[0];
-        const walletCopper = toCopper(player.gold, player.silver, player.copper);
-        const bankCopper = toCopper(player.bank_gold, player.bank_silver, player.bank_copper);
+            const updatedWallet = fromCopper(walletCopper - amountCopper);
+            const updatedBank = fromCopper(bankCopper + netCopper);
 
-        if (walletCopper < amountCopper) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ message: 'No tienes saldo suficiente para ese deposito.' });
-        }
+            t.update(playerRef, {
+                gold: updatedWallet.gold,
+                silver: updatedWallet.silver,
+                copper: updatedWallet.copper,
+                bank_gold: updatedBank.gold,
+                bank_silver: updatedBank.silver,
+                bank_copper: updatedBank.copper,
+            });
 
-        const updatedWallet = fromCopper(walletCopper - amountCopper);
-        const updatedBank = fromCopper(bankCopper + netCopper);
-
-        await client.query(`
-            UPDATE players
-            SET gold = $1,
-                silver = $2,
-                copper = $3,
-                bank_gold = $4,
-                bank_silver = $5,
-                bank_copper = $6
-            WHERE id = $7
-        `, [
-            updatedWallet.gold,
-            updatedWallet.silver,
-            updatedWallet.copper,
-            updatedBank.gold,
-            updatedBank.silver,
-            updatedBank.copper,
-            userId
-        ]);
-
-        await client.query('COMMIT');
+            return { wallet: updatedWallet, bank: updatedBank };
+        });
 
         return res.json({
             success: true,
             message: 'Deposito realizado correctamente.',
-            wallet: updatedWallet,
-            bank: updatedBank,
-            summary: {
-                currency: normalizedCurrency,
-                requestedAmount: depositAmount,
-                requestedCopper: amountCopper,
-                feeCopper,
-                netCopper
-            }
+            wallet: result.wallet,
+            bank: result.bank,
+            summary: { currency: normalizedCurrency, requestedAmount: depositAmount, requestedCopper: amountCopper, feeCopper, netCopper },
         });
     } catch (error) {
-        await client.query('ROLLBACK');
+        if (error.message === 'player_not_found') return res.status(404).json({ message: 'Jugador no encontrado.' });
+        if (error.message === 'insufficient_wallet') return res.status(400).json({ message: 'No tienes saldo suficiente para ese deposito.' });
         console.error('Error al depositar en banco:', error);
         return res.status(500).json({ message: 'No se pudo completar el deposito.' });
-    } finally {
-        client.release();
     }
 };
 
@@ -178,81 +114,50 @@ exports.withdrawFromBank = async (req, res) => {
     if (!Object.prototype.hasOwnProperty.call(CURRENCY_TO_COPPER, normalizedCurrency)) {
         return res.status(400).json({ message: 'Moneda invalida. Usa gold, silver o copper.' });
     }
-
     if (withdrawAmount === null || withdrawAmount <= 0) {
         return res.status(400).json({ message: 'Ingresa una cantidad valida para retirar.' });
     }
 
     const amountCopper = withdrawAmount * CURRENCY_TO_COPPER[normalizedCurrency];
 
-    const client = await pool.connect();
     try {
-        await ensureBankColumns();
-        await client.query('BEGIN');
+        const playerRef = db.collection('players').doc(userId);
+        const result = await db.runTransaction(async (t) => {
+            const playerDoc = await t.get(playerRef);
+            if (!playerDoc.exists) throw new Error('player_not_found');
 
-        const playerResult = await client.query(`
-            SELECT gold, silver, copper, bank_gold, bank_silver, bank_copper
-            FROM players
-            WHERE id = $1
-            FOR UPDATE
-        `, [userId]);
+            const p = playerDoc.data();
+            const bankCopper = toCopper(p.bank_gold || 0, p.bank_silver || 0, p.bank_copper || 0);
 
-        if (playerResult.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ message: 'Jugador no encontrado.' });
-        }
+            if (bankCopper < amountCopper) throw new Error('insufficient_bank');
 
-        const player = playerResult.rows[0];
-        const walletCopper = toCopper(player.gold, player.silver, player.copper);
-        const bankCopper = toCopper(player.bank_gold, player.bank_silver, player.bank_copper);
+            const walletCopper = toCopper(p.gold, p.silver, p.copper);
+            const updatedWallet = fromCopper(walletCopper + amountCopper);
+            const updatedBank = fromCopper(bankCopper - amountCopper);
 
-        if (bankCopper < amountCopper) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ message: 'No tienes saldo suficiente en el banco para ese retiro.' });
-        }
+            t.update(playerRef, {
+                gold: updatedWallet.gold,
+                silver: updatedWallet.silver,
+                copper: updatedWallet.copper,
+                bank_gold: updatedBank.gold,
+                bank_silver: updatedBank.silver,
+                bank_copper: updatedBank.copper,
+            });
 
-        const updatedWallet = fromCopper(walletCopper + amountCopper);
-        const updatedBank = fromCopper(bankCopper - amountCopper);
-
-        await client.query(`
-            UPDATE players
-            SET gold = $1,
-                silver = $2,
-                copper = $3,
-                bank_gold = $4,
-                bank_silver = $5,
-                bank_copper = $6
-            WHERE id = $7
-        `, [
-            updatedWallet.gold,
-            updatedWallet.silver,
-            updatedWallet.copper,
-            updatedBank.gold,
-            updatedBank.silver,
-            updatedBank.copper,
-            userId
-        ]);
-
-        await client.query('COMMIT');
+            return { wallet: updatedWallet, bank: updatedBank };
+        });
 
         return res.json({
             success: true,
             message: 'Retiro realizado correctamente.',
-            wallet: updatedWallet,
-            bank: updatedBank,
-            summary: {
-                currency: normalizedCurrency,
-                requestedAmount: withdrawAmount,
-                requestedCopper: amountCopper,
-                feeCopper: 0,
-                netCopper: amountCopper
-            }
+            wallet: result.wallet,
+            bank: result.bank,
+            summary: { currency: normalizedCurrency, requestedAmount: withdrawAmount, requestedCopper: amountCopper, feeCopper: 0, netCopper: amountCopper },
         });
     } catch (error) {
-        await client.query('ROLLBACK');
+        if (error.message === 'player_not_found') return res.status(404).json({ message: 'Jugador no encontrado.' });
+        if (error.message === 'insufficient_bank') return res.status(400).json({ message: 'No tienes saldo suficiente en el banco para ese retiro.' });
         console.error('Error al retirar del banco:', error);
         return res.status(500).json({ message: 'No se pudo completar el retiro.' });
-    } finally {
-        client.release();
     }
 };

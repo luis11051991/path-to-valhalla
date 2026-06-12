@@ -1,45 +1,48 @@
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
+const { verifyFirebaseToken } = require('./config/firebaseAdmin');
 
 let io;
 
 exports.init = (server) => {
     io = socketIo(server, {
-        cors: {
-            origin: "*", // En producción, especificar el dominio del frontend
-            methods: ["GET", "POST"]
-        }
+        cors: { origin: '*', methods: ['GET', 'POST'] }
     });
 
-    io.use((socket, next) => {
-        const token = socket.handshake.auth.token;
-        if (!token) return next(new Error("Authentication error"));
+    io.use(async (socket, next) => {
+        const token = socket.handshake.auth.token || socket.handshake.query.token;
+        if (!token) return next(new Error('Authentication error'));
 
         try {
-            const decoded = jwt.verify(token, 'valhalla_secret_key_odin');
-            socket.user = decoded;
+            // Primero intentar con Firebase token verification
+            const decoded = await verifyFirebaseToken(token);
+            socket.user = { id: decoded.uid };
             next();
         } catch (err) {
-            next(new Error("Authentication error"));
+            // Fallback a JWT secret para tokens legacy del backend
+            try {
+                const LEGACY_SECRET = 'valhalla_secret_key_odin';
+                const legacyDecoded = jwt.verify(token, LEGACY_SECRET);
+                socket.user = { id: legacyDecoded.id };
+                next();
+            } catch (err2) {
+                next(new Error('Authentication error'));
+            }
         }
     });
 
     io.on('connection', (socket) => {
-        // console.log(`User connected: ${socket.user.id}`);
-        // Unirse a una sala específica del usuario para recibir notificaciones privadas
-        socket.join(socket.user.id);
+        if (socket.user && socket.user.id) {
+            socket.join(socket.user.id);
+        }
 
-        socket.on('disconnect', () => {
-            // console.log('User disconnected');
-        });
+        socket.on('disconnect', () => {});
     });
 
     return io;
 };
 
 exports.getIO = () => {
-    if (!io) {
-        throw new Error("Socket.io not initialized!");
-    }
+    if (!io) throw new Error('Socket.io not initialized!');
     return io;
 };

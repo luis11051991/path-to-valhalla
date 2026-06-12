@@ -1,298 +1,297 @@
-﻿const pool = require('../config/db');
+const { db } = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { getRequiredXp } = require('../shared/level_xp');
 
-// --- HELPER: Generar Stats Fijos (Resuelve bug de rangos) ---
 const generateQuestItemStats = (templateStats) => {
     const finalStats = {};
     if (!templateStats) return {};
-
     for (const [key, value] of Object.entries(templateStats)) {
-        // Si es un rango [min, max], elige un número al azar
         if (Array.isArray(value) && value.length === 2) {
             finalStats[key] = Math.floor(Math.random() * (value[1] - value[0] + 1)) + value[0];
         } else {
-            // Si es fijo, lo mantiene
             finalStats[key] = value;
         }
     }
     return finalStats;
 };
 
-// Configuración
 const getMaxQuestSlots = (level) => {
     if (level >= 40) return 5;
     if (level >= 21) return 4;
     if (level >= 11) return 3;
-    return 2; 
+    return 2;
 };
 
-// 1. OBTENER ESTADO (Auto-asigna semanales y gestiona tabs)
+// Helper: obtener cooldown para contexto hall
+const getGlobalCooldown = async (userId) => {
+    const playerDoc = await db.collection('players').doc(userId).get();
+    if (!playerDoc.exists) return { globalCooldown: 0, lastHallActionAt: null };
+    const lastAction = playerDoc.data().last_hall_action_at;
+    if (!lastAction) return { globalCooldown: 0, lastHallActionAt: null };
+
+    const lastActionTime = lastAction.toDate ? lastAction.toDate() : new Date(lastAction);
+    const now = new Date();
+    const diffMinutes = (now - lastActionTime) / (1000 * 60);
+    
+    if (diffMinutes < 30) {
+        return { globalCooldown: Math.ceil(30 - diffMinutes), lastHallActionAt: lastActionTime.toISOString() };
+    }
+    return { globalCooldown: 0, lastHallActionAt: lastActionTime.toISOString() };
+};
+
 exports.getQuestStatus = async (req, res) => {
     const userId = req.user.id;
-    const { context } = req.query; 
+    const context = req.query.context || 'hall'; 
 
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
+        const playerDoc = await db.collection('players').doc(userId).get();
+        if (!playerDoc.exists) return res.status(404).json({ message: 'Jugador no encontrado' });
+        const player = playerDoc.data();
 
-        // Obtener datos jugador
-        const playerRes = await client.query('SELECT level, last_hall_action_at, evolution_quest_status FROM players WHERE id = $1', [userId]);
-        if (playerRes.rows.length === 0) return res.status(404).json({ message: "Jugador no encontrado" });
-        const player = playerRes.rows[0];
-
-        // --- CONTEXTO: EVOLUCIÓN (Sin cambios) ---
         if (context === 'evolution') {
-            const evoQuestRes = await client.query(`SELECT pq.*, q.title, q.description, q.requirements, p.pending_class_id FROM player_quests pq JOIN quests q ON pq.quest_id = q.id JOIN players p ON pq.player_id = p.id WHERE pq.player_id = $1 AND q.type = 'evolution' AND pq.status = 'active'`, [userId]);
-            if (evoQuestRes.rows.length > 0) {
-                const pendingClassId = evoQuestRes.rows[0].pending_class_id;
+            const evoSnap = await db.collection('players').doc(userId).collection('quests')
+                .where('type', '==', 'evolution')
+                .where('status', '==', 'active')
+                .limit(1)
+                .get();
+            
+            if (!evoSnap.empty) {
+                const pqData = evoSnap.docs[0].data();
                 let classInfo = null;
-                if (pendingClassId) {
-                    const cRes = await client.query("SELECT name, image_url FROM classes WHERE id = $1", [pendingClassId]);
-                    if (cRes.rows.length > 0) classInfo = cRes.rows[0];
+                if (pqData.pending_class_id) {
+                    const cDoc = await db.collection('classes').doc(String(pqData.pending_class_id)).get();
+                    if (cDoc.exists) classInfo = { name: cDoc.data().name, image_url: cDoc.data().image_url };
                 }
-                await client.query('COMMIT');
-                return res.json({ status: 'in_progress', quest: evoQuestRes.rows[0], targetClass: classInfo });
+                return res.json({ status: 'in_progress', quest: { ...pqData, id: evoSnap.docs[0].id }, targetClass: classInfo });
             }
-            await client.query('COMMIT');
+
             if (player.level >= 10 && player.evolution_quest_status !== 'completed') return res.json({ status: 'available' });
             return res.json({ status: player.evolution_quest_status === 'completed' ? 'completed' : 'locked' });
         }
 
-        // --- CONTEXTO: SALÓN DE VALHALLUS ---
-        if (context === 'hall') {
-            
-            // 1. LOGICA SEMANAL (AUTO-ASIGNAR)
-            const weeklyCheck = await client.query(`
-                SELECT pq.id FROM player_quests pq 
-                JOIN quests q ON pq.quest_id = q.id 
-                WHERE pq.player_id = $1 AND q.type = 'weekly' AND pq.status = 'active'
-            `, [userId]);
+        // Hall context
+        // Auto-asignar quests semanales si no tiene
+        const weeklySnap = await db.collection('players').doc(userId).collection('quests')
+            .where('type', '==', 'weekly')
+            .where('status', '==', 'active')
+            .get();
 
-            if (weeklyCheck.rows.length === 0) {
-                const newWeeklies = await client.query(`
-                    SELECT id FROM quests 
-                    WHERE type = 'weekly' AND min_level <= $1 
-                    ORDER BY RANDOM() LIMIT 3
-                `, [player.level]);
+        if (weeklySnap.empty) {
+            // Seleccionar 3 quests semanales aleatorias disponibles
+            const availableWeekly = await db.collection('quests')
+                .where('type', '==', 'weekly')
+                .where('min_level', '<=', player.level)
+                .limit(3)
+                .get();
 
-                for (const q of newWeeklies.rows) {
-                    await client.query("INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')", [userId, q.id]);
-                }
+            for (const qDoc of availableWeekly.docs) {
+                await db.collection('players').doc(userId).collection('quests').add({
+                    quest_id: Number(qDoc.id), title: qDoc.data().title, description: qDoc.data().description,
+                    requirements: qDoc.data().requirements || [], progress: {}, type: 'weekly',
+                    min_level: qDoc.data().min_level, reward_xp: qDoc.data().reward_xp, reward_gold: qDoc.data().reward_gold,
+                    reward_silver: qDoc.data().reward_silver, reward_copper: qDoc.data().reward_copper,
+                    status: 'active', created_at: new Date(),
+                });
             }
-
-            // 2. RECUPERAR TODAS LAS ACTIVAS
-            const allActiveRes = await client.query(`
-                SELECT pq.*, q.title, q.description, q.requirements, q.type, q.min_level, q.reward_xp, q.reward_gold, q.reward_silver, q.reward_copper
-                FROM player_quests pq
-                JOIN quests q ON pq.quest_id = q.id
-                WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type != 'evolution'
-            `, [userId]);
-
-            const dailyActive = allActiveRes.rows.filter(q => q.type === 'daily');
-            const weeklyActive = allActiveRes.rows.filter(q => q.type === 'weekly');
-
-            // 3. RECUPERAR TABLÓN DISPONIBLE
-            const dailyAvailable = await client.query(`
-                SELECT * FROM quests 
-                WHERE type = 'daily' 
-                AND min_level <= $1
-                AND id NOT IN (SELECT quest_id FROM player_quests WHERE player_id = $2 AND status = 'active')
-                ORDER BY min_level DESC, RANDOM() 
-                LIMIT 6
-            `, [player.level, userId]);
-
-            // 4. CALCULAR COOLDOWN
-            let globalCooldown = 0;
-            if (player.last_hall_action_at) {
-                const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-                if (diff < 300) globalCooldown = Math.ceil(300 - diff);
-            }
-
-            await client.query('COMMIT');
-
-            return res.json({
-                dailyActive,
-                dailyAvailable: dailyAvailable.rows,
-                weeklyActive,
-                maxSlots: getMaxQuestSlots(player.level),
-                globalCooldown
-            });
         }
 
+        // Recuperar todas las activas
+        const allActiveSnap = await db.collection('players').doc(userId).collection('quests')
+            .where('status', '==', 'active')
+            .where('type', '!=', 'evolution')
+            .get();
+
+        const dailyActive = allActiveSnap.docs.filter(d => d.data().type === 'daily');
+        const weeklyActive = allActiveSnap.docs.filter(d => d.data().type === 'weekly');
+
+        // Tablon disponible (diarias)
+        const dailyAvailableSnap = await db.collection('quests')
+            .where('type', '==', 'daily')
+            .where('min_level', '<=', player.level)
+            .limit(6)
+            .get();
+
+        const availableQuests = [];
+        for (const qDoc of dailyAvailableSnap.docs) {
+            const qData = qDoc.data();
+            // Verificar que no este activa
+            const isActive = allActiveSnap.docs.some(dq => dq.data().quest_id === Number(qDoc.id));
+            if (!isActive) {
+                availableQuests.push({ ...qData, id: qDoc.id });
+            }
+        }
+
+        const cooldown = await getGlobalCooldown(userId);
+
+        res.json({
+            status: 'ok',
+            context,
+            level: player.level,
+            maxQuestSlots: getMaxQuestSlots(player.level),
+            dailyActive: dailyActive.map(d => ({ ...d.data(), id: d.id })),
+            weeklyActive: weeklyActive.map(d => ({ ...d.data(), id: d.id })),
+            availableQuests,
+            globalCooldown: cooldown.globalCooldown,
+            lastHallActionAt: cooldown.lastHallActionAt,
+        });
+
     } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(err);
-        res.status(500).json({ message: "Error interno." });
-    } finally {
-        client.release();
+        console.error('Error en getQuestStatus:', err);
+        res.status(500).json({ message: 'Error obteniendo estado de misiones.' });
     }
 };
 
-// 2. ACEPTAR MISIÓN
 exports.acceptQuest = async (req, res) => {
     const userId = req.user.id;
-    const { questId } = req.body; 
+    const { questId } = req.body;
 
     try {
-        const playerRes = await pool.query('SELECT level, last_hall_action_at FROM players WHERE id = $1', [userId]);
-        const player = playerRes.rows[0];
+        const playerDoc = await db.collection('players').doc(userId).get();
+        if (!playerDoc.exists) return res.status(404).json({ message: 'Jugador no encontrado' });
+        const playerLevel = playerDoc.data().level;
 
-        if (player.last_hall_action_at) {
-            const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-            if (diff < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s para realizar otra acción.` });
+        // Verificar quests activas max slots
+        const activeSnap = await db.collection('players').doc(userId).collection('quests')
+            .where('status', '==', 'active')
+            .get();
+
+        if (activeSnap.size >= getMaxQuestSlots(playerLevel)) {
+            return res.status(400).json({ message: 'No puedes aceptar mas misiones. Usa el Salon de Valhallus para cerrar misiones.' });
         }
 
-        const maxSlots = getMaxQuestSlots(player.level);
-        const countRes = await pool.query(`
-            SELECT COUNT(*) FROM player_quests pq JOIN quests q ON pq.quest_id = q.id 
-            WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type = 'daily'
-        `, [userId]);
-        
-        if (parseInt(countRes.rows[0].count) >= maxSlots) {
-            return res.status(400).json({ message: `Límite de misiones diarias alcanzado (${maxSlots}).` });
+        // Verificar cooldown
+        if (playerDoc.data().last_hall_action_at) {
+            const lastAction = playerDoc.data().last_hall_action_at.toDate ? playerDoc.data().last_hall_action_at.toDate() : new Date(playerDoc.data().last_hall_action_at);
+            if ((new Date() - lastAction) < 30 * 60 * 1000) {
+                return res.status(429).json({ message: 'Debes esperar el cooldown antes de aceptar nueva mision.' });
+            }
         }
 
-        await pool.query("INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')", [userId, questId]);
-        await pool.query("UPDATE players SET last_hall_action_at = NOW() WHERE id = $1", [userId]);
+        const questDoc = await db.collection('quests').doc(String(questId)).get();
+        if (!questDoc.exists) return res.status(404).json({ message: 'Mision no encontrada.' });
+        const questData = questDoc.data();
 
-        res.json({ success: true, message: "Contrato firmado. (Cooldown activado)" });
+        // Verificar nivel requerido
+        if (playerLevel < questData.min_level) {
+            return res.status(400).json({ message: 'Nivel insuficiente. Se requiere nivel ' + questData.min_level + '.' });
+        }
+
+        // Insertar quest activa del jugador
+        await db.collection('players').doc(userId).collection('quests').add({
+            quest_id: Number(questId),
+            title: questData.title,
+            description: questData.description,
+            requirements: questData.requirements || [],
+            progress: {},
+            type: questData.type,
+            min_level: questData.min_level,
+            reward_xp: questData.reward_xp,
+            reward_gold: questData.reward_gold,
+            reward_silver: questData.reward_silver,
+            reward_copper: questData.reward_copper,
+            status: 'active',
+            created_at: new Date(),
+        });
+
+        // Actualizar timestamp
+        await db.collection('players').doc(userId).update({ last_hall_action_at: new Date() });
+
+        res.json({ success: true, message: 'Mision aceptada.' });
 
     } catch (err) {
-        if (err.code === '23505') return res.status(400).json({ message: "Misión ya activa." });
-        res.status(500).json({ message: "Error al aceptar." });
+        console.error(err);
+        res.status(500).json({ message: err.message || 'Error aceptando mision.' });
     }
 };
 
-// 3. REFRESCAR TABLÓN
-exports.refreshBoard = async (req, res) => {
-    const userId = req.user.id;
-    
-    try {
-        const playerRes = await pool.query('SELECT last_hall_action_at FROM players WHERE id = $1', [userId]);
-        const player = playerRes.rows[0];
-
-        if (player.last_hall_action_at) {
-            const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-            if (diff < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s.` });
-        }
-
-        await pool.query("UPDATE players SET last_hall_action_at = NOW() WHERE id = $1", [userId]);
-
-        res.json({ success: true, message: "Tablón actualizado. (Cooldown activado)" });
-    } catch (err) {
-        res.status(500).json({ message: "Error al refrescar." });
-    }
-};
-
-// 4. COMPLETAR (Reclamar Recompensa)
 exports.completeQuest = async (req, res) => {
     const userId = req.user.id;
     const { playerQuestId } = req.body;
 
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
+        const pqDoc = await db.collection('players').doc(userId).collection('quests').doc(playerQuestId).get();
+        if (!pqDoc.exists || pqDoc.data().player_id !== userId || pqDoc.data().status !== 'active') {
+            throw new Error('Mision no valida o ya reclamada.');
+        }
+        const userQuest = pqDoc.data();
 
-        const pqRes = await client.query(`
-            SELECT pq.*, q.requirements, q.reward_xp, q.reward_gold, q.reward_silver, q.reward_copper, q.reward_items, q.type
-            FROM player_quests pq
-            JOIN quests q ON pq.quest_id = q.id
-            WHERE pq.id = $1 AND pq.player_id = $2 AND pq.status = 'active'
-        `, [playerQuestId, userId]);
-
-        if (pqRes.rows.length === 0) throw new Error("Misión no válida o ya reclamada.");
-        const userQuest = pqRes.rows[0];
-        
         // Validar progreso
         let isComplete = true;
-        const progress = userQuest.progress || {};
         (userQuest.requirements || []).forEach(req => {
-            const current = progress[req.target_id || req.type] || 0;
+            const current = userQuest.progress[req.target_id || req.type] || 0;
             if (current < req.count) isComplete = false;
         });
-
-        if (!isComplete) throw new Error("Objetivos incompletos.");
+        if (!isComplete) throw new Error('Objetivos incompletos.');
 
         // Datos jugador
-        const playerData = (await client.query("SELECT level, experience, stat_points, gold, silver, copper FROM players WHERE id = $1", [userId])).rows[0];
-        let currentLevel = parseInt(playerData.level || 1);
-        let currentXp = parseInt(playerData.experience || 0);
-        let currentStatPoints = parseInt(playerData.stat_points || 0);
+        const playerDoc = await db.collection('players').doc(userId).get();
+        let currentLevel = parseInt(playerDoc.data().level || 1);
+        let currentXp = parseInt(playerDoc.data().experience || 0);
+        let currentStatPoints = parseInt(playerDoc.data().stat_points || 0);
 
-        // Economía
+        // Economia
         const rewardTotal = ((userQuest.reward_gold || 0) * 10000) + ((userQuest.reward_silver || 0) * 100) + (userQuest.reward_copper || 0);
-        const normalized = normalizeCurrency(playerData.gold || 0, playerData.silver || 0, playerData.copper || 0, rewardTotal);
+        const normalized = normalizeCurrency(playerDoc.data().gold, playerDoc.data().silver, playerDoc.data().copper, rewardTotal);
 
         // XP y Nivel
         currentXp += (userQuest.reward_xp || 0);
         while (true) {
             const needed = getRequiredXp(currentLevel);
-            if (currentXp >= needed) {
-                currentXp -= needed;
-                currentLevel += 1;
-                currentStatPoints += 5;
-            } else break;
+            if (currentXp >= needed) { currentXp -= needed; currentLevel++; currentStatPoints += 5; }
+            else break;
         }
 
-        // Guardar cambios en Jugador
-        await client.query(
-            `UPDATE players 
-             SET experience = $1, level = $2, stat_points = $3, gold = $4, silver = $5, copper = $6 
-             WHERE id = $7`,
-            [currentXp, currentLevel, currentStatPoints, normalized.newGold, normalized.newSilver, normalized.newCopper, userId]
-        );
-        
-        // --- GUARDAR ITEMS (CORREGIDO CON GENERACIÓN DE STATS) ---
+        // Guardar cambios en jugador
+        await db.collection('players').doc(userId).update({
+            experience: currentXp, level: currentLevel, stat_points: currentStatPoints,
+            gold: normalized.newGold, silver: normalized.newSilver, copper: normalized.newCopper,
+        });
+
+        // Guardar items en paquetes del jugador
         if (userQuest.reward_items) {
             for (const item of userQuest.reward_items) {
-                // 1. Obtener la plantilla para saber sus stats base
-                const tplRes = await client.query('SELECT type, base_stats FROM items_templates WHERE id = $1', [item.template_id]);
-                
-                if (tplRes.rows.length > 0) {
-                    const template = tplRes.rows[0];
+                const tplDoc = await db.collection('items_templates').doc(String(item.template_id)).get();
+                if (tplDoc.exists) {
                     let finalStats = {};
-
-                    // 2. Generar stats únicos si es equipo
-                    if (template.type !== 'material' && template.type !== 'consumable') {
-                         finalStats = generateQuestItemStats(template.base_stats);
+                    if (tplDoc.data().type !== 'material' && tplDoc.data().type !== 'consumable') {
+                        finalStats = generateQuestItemStats(tplDoc.data().base_stats);
                     }
-
-                    // 3. Insertar con datos resueltos
-                    await client.query(
-                        `INSERT INTO player_packages (player_id, item_template_id, quantity, data) VALUES ($1, $2, $3, $4)`, 
-                        [userId, item.template_id, item.qty, finalStats]
-                    );
+                    await db.collection('players').doc(userId).collection('packages').add({
+                        item_template_id: Number(item.template_id), quantity: item.qty, data: finalStats, created_at: new Date(),
+                    });
                 } else {
-                    // Fallback de seguridad
-                    await client.query(`INSERT INTO player_packages (player_id, item_template_id, quantity) VALUES ($1, $2, $3)`, [userId, item.template_id, item.qty]);
+                    await db.collection('players').doc(userId).collection('packages').add({
+                        item_template_id: Number(item.template_id), quantity: item.qty, created_at: new Date(),
+                    });
                 }
             }
         }
 
-        // Cerrar Misión
-        await client.query("UPDATE player_quests SET status = 'completed', completed_at = NOW() WHERE id = $1", [playerQuestId]);
+        // Cerrar mision
+        await db.collection('players').doc(userId).collection('quests').doc(playerQuestId).update({
+            status: 'completed', completed_at: new Date(),
+        });
 
-        // Lógica Evolución
-        let extraMsg = "";
+        // L�gica Evolucion
+        let extraMsg = '';
         if (userQuest.type === 'evolution') {
-             const pData = await client.query("SELECT pending_class_id, level FROM players WHERE id = $1", [userId]);
-             if (pData.rows[0].pending_class_id) {
-                 const cls = (await client.query("SELECT base_stats, name FROM classes WHERE id = $1", [pData.rows[0].pending_class_id])).rows[0];
-                 const refund = (pData.rows[0].level - 1) * 5;
-                 await client.query("UPDATE players SET class_id = $1, pending_class_id = NULL, stats = $2, stat_points = $3, evolution_quest_status = 'completed' WHERE id = $4", [pData.rows[0].pending_class_id, cls.base_stats, refund, userId]);
-                 extraMsg = ` ¡Has ascendido a ${cls.name}!`;
-             }
+            const pDataDoc = await db.collection('players').doc(userId).get();
+            if (pDataDoc.data().pending_class_id) {
+                const clsDoc = await db.collection('classes').doc(String(pDataDoc.data().pending_class_id)).get();
+                if (clsDoc.exists) {
+                    const refund = (currentLevel - 1) * 5;
+                    await db.collection('players').doc(userId).update({
+                        class_id: pDataDoc.data().pending_class_id, pending_class_id: null,
+                        stats: clsDoc.data().base_stats || {}, stat_points: refund, evolution_quest_status: 'completed',
+                    });
+                    extraMsg = ' Has ascendido a ' + clsDoc.data().name + '!';
+                }
+            }
         }
 
-        await client.query('COMMIT');
-        res.json({ success: true, message: `Recompensa reclamada.${extraMsg}` });
+        res.json({ success: true, message: 'Recompensa reclamada.' + extraMsg });
 
     } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(400).json({ message: err.message });
-    } finally {
-        client.release();
+        res.status(400).json({ message: err.message || 'Error completando mision.' });
     }
 };
-module.exports = exports;

@@ -1,47 +1,40 @@
-const pool = require('../config/db');
+const { db } = require('../config/db');
 
-// --- 1. OBTENER OPCIONES DE EVOLUCIÓN ---
-// --- 1. OBTENER OPCIONES DE EVOLUCIÓN ---
 exports.getEvolutionOptions = async (req, res) => {
     const userId = req.user.id; 
 
     try {
-        const playerQuery = `
-            SELECT p.id, p.level, p.race, p.class_id, c.tier, c.name as class_name
-            FROM players p
-            LEFT JOIN classes c ON p.class_id = c.id
-            WHERE p.id = $1
-        `;
-        const playerRes = await pool.query(playerQuery, [userId]);
-        if (playerRes.rows.length === 0) return res.status(404).json({ message: 'Jugador no encontrado' });
+        const playerDoc = await db.collection('players').doc(userId).get();
+        if (!playerDoc.exists) return res.status(404).json({ message: 'Jugador no encontrado' });
         
-        const player = playerRes.rows[0];
-        let currentTier = player.tier !== null ? player.tier : 0;
+        const player = playerDoc.data();
+        let currentTier = player.tier != null ? player.tier : 0;
         let currentClassId = player.class_id;
 
         if (!currentClassId) {
-            const baseClassRes = await pool.query("SELECT id FROM classes WHERE name ILIKE $1", [player.race]);
-            if (baseClassRes.rows.length > 0) currentClassId = baseClassRes.rows[0].id;
+            const baseClassSnap = await db.collection('classes').where('name', '==', player.race).limit(1).get();
+            if (!baseClassSnap.empty) currentClassId = Number(baseClassSnap.docs[0].id);
         }
 
-        const optionsQuery = `SELECT * FROM classes WHERE parent_id = $1`;
-        const parentToSearch = currentClassId || 99999;
-        const optionsRes = await pool.query(optionsQuery, [parentToSearch]);
+        const optionsSnap = await db.collection('classes')
+            .where('parent_id', '==', currentClassId || 99999)
+            .get();
 
-        // --- NUEVO: BUSCAR LA QUEST DE EVOLUCIÓN CORRESPONDIENTE ---
-        // Busca la quest de tipo evolución más alta que el usuario pueda hacer por su nivel
-        const questRes = await pool.query(
-            "SELECT * FROM quests WHERE type = 'evolution' AND min_level <= $1 ORDER BY min_level DESC LIMIT 1", 
-            [player.level]
-        );
-        const questPreview = questRes.rows.length > 0 ? questRes.rows[0] : null;
-        // -----------------------------------------------------------
+        // Buscar la quest de evolucion correspondiente
+        const questSnap = await db.collection('quests')
+            .where('type', '==', 'evolution')
+            .where('min_level', '<=', player.level)
+            .orderBy('min_level', 'desc')
+            .limit(1)
+            .get();
+        
+        const questPreview = !questSnap.empty ? { ...questSnap.docs[0].data(), id: questSnap.docs[0].id } : null;
 
         res.json({
             available: true,
             currentTier: currentTier,
-            options: optionsRes.rows,
-            questData: questPreview // <--- Enviamos esto al frontend
+            options: optionsSnap.docs.map(d => ({ ...d.data(), id: d.id })),
+            questData: questPreview,
         });
 
     } catch (err) {
@@ -50,52 +43,79 @@ exports.getEvolutionOptions = async (req, res) => {
     }
 };
 
-// --- 2. INICIAR EL CAMINO (Con protección anti-duplicados) ---
 exports.startEvolutionPath = async (req, res) => {
     const userId = req.user.id;
     const { targetClassId } = req.body;
 
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
+        const result = await db.runTransaction(async (t) => {
+            // Buscar quest adecuada
+            const questSnap = await t.get(
+                db.collection('quests')
+                    .where('type', '==', 'evolution')
+                    .where('min_level', '<=', db.collection('players').doc(userId).get())
+                    .limit(1)
+            );
 
-        // Buscar quest adecuada
-        const questRes = await client.query("SELECT * FROM quests WHERE type = 'evolution' AND min_level <= (SELECT level FROM players WHERE id = $1) ORDER BY min_level DESC LIMIT 1", [userId]);
-        
-        if (questRes.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ message: "No hay pruebas divinas disponibles." });
-        }
-        const quest = questRes.rows[0];
+            // Alternative approach: read player level first
+            const playerDoc = await t.get(db.collection('players').doc(userId));
+            if (!playerDoc.exists) throw new Error('player_not_found');
+            
+            const questQuery = db.collection('quests')
+                .where('type', '==', 'evolution')
+                .where('min_level', '<=', playerDoc.data().level)
+                .limit(1);
+            const questSnap2 = await t.get(questQuery);
 
-        // --- VALIDACIÓN DOBLE: Por Quest ID Específico O por Tipo 'evolution' ---
-        const check = await client.query(`
-            SELECT pq.id FROM player_quests pq
-            JOIN quests q ON pq.quest_id = q.id
-            WHERE pq.player_id = $1 AND pq.status = 'active' AND (pq.quest_id = $2 OR q.type = 'evolution')
-        `, [userId, quest.id]);
+            if (questSnap2.empty) throw new Error('no_evolution_quest');
+            const quest = { ...questSnap2.docs[0].data(), id: questSnap2.docs[0].id };
 
-        if (check.rows.length > 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ message: "Ya has aceptado el desafío de los dioses." });
-        }
+            // Validacion anti-duplicados
+            const playerQuestsSnap = await t.get(
+                db.collection('players').doc(userId).collection('quests')
+                    .where('status', '==', 'active')
+                    .get()
+            );
+            
+            let hasActiveEvolution = false;
+            for (const pq of playerQuestsSnap.docs) {
+                const pqData = pq.data();
+                if (pqData.quest_id === quest.id || pqData.type === 'evolution') {
+                    hasActiveEvolution = true;
+                    break;
+                }
+            }
 
-        // Guardar elección
-        await client.query("UPDATE players SET pending_class_id = $1, evolution_quest_status = 'in_progress' WHERE id = $2", [targetClassId, userId]);
-        
-        await client.query(
-            "INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')",
-            [userId, quest.id]
-        );
+            if (hasActiveEvolution) throw new Error('already_have_evolution_quest');
 
-        await client.query('COMMIT');
-        res.json({ success: true, message: "Los dioses han hablado. Ve al Salón de Valhallus.", quest });
+            // Guardar eleccion
+            t.update(db.collection('players').doc(userId), {
+                pending_class_id: targetClassId,
+                evolution_quest_status: 'in_progress',
+            });
+
+            // Insertar quest activa en subcoleccion del jugador
+            await t.create(
+                db.collection('players').doc(userId).collection('quests').doc(),
+                {
+                    quest_id: Number(quest.id),
+                    status: 'active',
+                    progress: {},
+                    type: 'evolution',
+                    created_at: new Date(),
+                }
+            );
+
+            return { quest };
+        });
+
+        res.json({ success: true, message: 'Los dioses han hablado. Ve al Salon de Valhallus.', quest: result.quest });
 
     } catch (err) {
-        await client.query('ROLLBACK');
+        if (err.message === 'player_not_found') return res.status(404).json({ message: 'Jugador no encontrado' });
+        if (err.message === 'no_evolution_quest') return res.status(404).json({ message: 'No hay pruebas divinas disponibles.' });
+        if (err.message === 'already_have_evolution_quest') return res.status(400).json({ message: 'Ya has aceptado el desafio de los dioses.' });
         console.error(err);
         res.status(500).json({ message: err.message });
-    } finally {
-        client.release();
     }
 };

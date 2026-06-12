@@ -1,35 +1,32 @@
-const pool = require('../config/db');
+const { db } = require('../config/db');
 
-// ==========================================
-// 1. OBTENER MIS PAQUETES
-// ==========================================
 exports.getMyPackages = async (req, res) => {
     const userId = req.user.id;
     const page = parseInt(req.query.page) || 1;
     const limit = 10;
-    const offset = (page - 1) * limit;
 
     try {
-        const countRes = await pool.query('SELECT COUNT(*) FROM player_packages WHERE player_id = $1', [userId]);
-        const totalItems = parseInt(countRes.rows[0].count);
+        const countSnap = await db.collection('players').doc(userId).collection('packages')
+            .count()
+            .get();
+        const totalItems = countSnap.data().count;
         const totalPages = Math.ceil(totalItems / limit);
 
-        // Aquí traemos los datos del paquete. 'pp.data' contiene los stats ya calculados (fijos).
-        const query = `
-            SELECT pp.*, 
-                   it.name, it.image_url, it.rarity, it.type, it.description, it.stackable 
-            FROM player_packages pp
-            JOIN items_templates it ON pp.item_template_id = it.id
-            WHERE pp.player_id = $1
-            ORDER BY pp.created_at DESC
-            LIMIT $2 OFFSET $3
-        `;
-        const result = await pool.query(query, [userId, limit, offset]);
+        const startAfter = page > 1 ? (await db.collection('players').doc(userId).collection('packages')
+            .orderBy('created_at', 'desc')
+            .limit(1)
+            .offset((page - 1) * limit)
+            .get()).docs[(page - 1) * limit - 1] : null;
+
+        let query = db.collection('players').doc(userId).collection('packages').orderBy('created_at', 'desc').limit(limit);
+        
+        const packagesSnap = await query.get();
+        const packages = packagesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
 
         res.json({
             success: true,
-            packages: result.rows,
-            pagination: { page, totalPages, totalItems }
+            packages,
+            pagination: { page, totalPages, totalItems },
         });
 
     } catch (err) {
@@ -38,126 +35,105 @@ exports.getMyPackages = async (req, res) => {
     }
 };
 
-// ==========================================
-// 2. RECLAMAR PAQUETE (STACKING Y STATS FIJOS)
-// ==========================================
 exports.claimPackage = async (req, res) => {
     const userId = req.user.id;
     const { packageId, targetSlot } = req.body; 
 
-    const client = await pool.connect();
-
     try {
-        await client.query('BEGIN');
-
-        // A. Obtener info del paquete
-        const pkgRes = await client.query(`
-            SELECT pp.*, it.stackable, it.name, it.base_stats as template_stats
-            FROM player_packages pp
-            JOIN items_templates it ON pp.item_template_id = it.id
-            WHERE pp.id = $1 AND pp.player_id = $2
-        `, [packageId, userId]);
-
-        if (pkgRes.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ message: 'Paquete no encontrado.' });
-        }
-
-        const pkg = pkgRes.rows[0];
+        const pkgRef = db.collection('players').doc(userId).collection('packages').doc(packageId);
+        const pkgDoc = await pkgRef.get();
         
-        // --- LÓGICA CRÍTICA DE STATS ---
-        // Usamos pkg.data (stats fijos generados al craftear/dropear).
-        // Si por alguna razón está vacío, usamos el template como fallback.
-        let finalItemStats = pkg.data;
+        if (!pkgDoc.exists) return res.status(404).json({ message: 'Paquete no encontrado.' });
+        const pkg = { ...pkgDoc.data(), id: packageId };
+
+        // Obtener template
+        const tplDoc = await db.collection('items_templates').doc(String(pkg.item_template_id)).get();
+        if (!tplDoc.exists) throw new Error('Template not found');
+        const itemTpl = tplDoc.data();
+
+        // Stats finales del item
+        let finalItemStats = pkg.data || {};
         if (!finalItemStats || Object.keys(finalItemStats).length === 0) {
-            finalItemStats = pkg.template_stats || {};
+            finalItemStats = itemTpl.base_stats || {};
         }
 
         let itemToUpdateId = null;
         let finalSlotToInsert = -1;
 
-        // --- LÓGICA DE STACKING (Solo si es stackable) ---
-        if (pkg.stackable) {
-            const existingStackRes = await client.query(`
-                SELECT pi.id 
-                FROM player_items pi
-                JOIN items_templates it ON pi.template_id = it.id
-                WHERE pi.player_id = $1 
-                  AND it.name = $2 
-                  AND pi.is_equipped = false
-                LIMIT 1
-            `, [userId, pkg.name]);
+        // Stacking (Solo si es stackable)
+        if (itemTpl.stackable && pkg.quantity > 1) {
+            const existingSnap = await db.collection('players').doc(userId).collection('items')
+                .where('is_equipped', '==', false)
+                .where('template_id', '==', pkg.item_template_id)
+                .limit(1)
+                .get();
 
-            if (existingStackRes.rows.length > 0) {
-                itemToUpdateId = existingStackRes.rows[0].id;
+            if (!existingSnap.empty) {
+                itemToUpdateId = existingSnap.docs[0].id;
             }
         }
 
-        // --- BUSCAR SLOT VACÍO ---
+        // Buscar slot vacio
         if (!itemToUpdateId) {
-            // A. Intento en slot específico (Drag & Drop)
             if (targetSlot !== undefined && targetSlot !== null) {
-                 const slotCheck = await client.query('SELECT id FROM player_items WHERE player_id = $1 AND bag_slot = $2', [userId, targetSlot]);
-                 if (slotCheck.rows.length === 0) {
-                     finalSlotToInsert = targetSlot;
-                 }
-            } 
-            
-            // B. Búsqueda automática
-            if (finalSlotToInsert === -1) {
-                const slotsRes = await client.query('SELECT bag_slot FROM player_items WHERE player_id = $1 AND bag_slot IS NOT NULL', [userId]);
-                const occupiedSlots = new Set(slotsRes.rows.map(row => row.bag_slot));
-                
-                for (let i = 0; i < 40; i++) { // Asumiendo mochila base de 40
-                    if (!occupiedSlots.has(i)) {
-                        finalSlotToInsert = i;
-                        break;
-                    }
+                const slotCheck = await db.collection('players').doc(userId).collection('items')
+                    .where('bag_slot', '==', targetSlot)
+                    .get();
+                if (slotCheck.empty) {
+                    finalSlotToInsert = targetSlot;
                 }
             }
 
             if (finalSlotToInsert === -1) {
-                await client.query('ROLLBACK');
-                return res.status(400).json({ message: 'Inventario lleno.' });
+                const slotsSnap = await db.collection('players').doc(userId).collection('items')
+                    .where('bag_slot', '!=', null)
+                    .get();
+                const occupiedSlots = new Set(slotsSnap.docs.map(d => d.data().bag_slot));
+                
+                for (let i = 0; i < 40; i++) {
+                    if (!occupiedSlots.has(i)) { finalSlotToInsert = i; break; }
+                }
+            }
+
+            if (finalSlotToInsert === -1) return res.status(400).json({ message: 'Inventario lleno.' });
+        }
+
+        // Ejecucion
+        if (itemToUpdateId) {
+            await db.collection('players').doc(userId).collection('items').doc(itemToUpdateId).update({
+                quantity: (pkg.quantity || 1),
+            });
+        } else {
+            await db.collection('players').doc(userId).collection('items').add({
+                template_id: pkg.item_template_id,
+                bag_slot: finalSlotToInsert,
+                quantity: pkg.quantity,
+                base_stats: finalItemStats,
+                is_equipped: false,
+                durability_current: 100,
+                durability_max: 100,
+                is_bound: false,
+            });
+        }
+
+        // Eliminar paquete
+        await pkgRef.delete();
+
+        // Retornar inventario actualizado
+        const invSnap = await db.collection('players').doc(userId).collection('items').orderBy('bag_slot', 'asc').get();
+        const inventoryItems = [];
+        for (const itemDoc of invSnap.docs) {
+            const data = itemDoc.data();
+            const tDoc = await db.collection('items_templates').doc(String(data.template_id)).get();
+            if (tDoc.exists) {
+                inventoryItems.push({ ...data, id: itemDoc.id, name: tDoc.data().name, type: tDoc.data().type, slot: tDoc.data().slot, rarity: tDoc.data().rarity, icon: tDoc.data().icon, image_url: tDoc.data().image_url });
             }
         }
 
-        // --- EJECUCIÓN ---
-        if (itemToUpdateId) {
-            await client.query(`UPDATE player_items SET quantity = quantity + $1 WHERE id = $2`, [pkg.quantity, itemToUpdateId]);
-        } else {
-            // INSERTAMOS CON LOS STATS FIJOS (finalItemStats)
-            await client.query(`
-                INSERT INTO player_items 
-                (player_id, template_id, bag_slot, quantity, base_stats, is_equipped, durability_current, durability_max, is_bound)
-                VALUES ($1, $2, $3, $4, $5, false, 100, 100, false)
-            `, [userId, pkg.item_template_id, finalSlotToInsert, pkg.quantity, finalItemStats]);
-        }
-
-        await client.query('DELETE FROM player_packages WHERE id = $1', [packageId]);
-        await client.query('COMMIT');
-
-        // --- CORRECCIÓN FINAL: RECUPERAR INVENTARIO ---
-        // IMPORTANTE: NO seleccionamos 'it.base_stats'.
-        // Al hacer 'SELECT pi.*', ya estamos trayendo los stats fijos guardados en la tabla player_items.
-        // Si seleccionamos 'it.base_stats', sobrescribiríamos lo fijo con el rango del template.
-        const inventoryRes = await client.query(`
-            SELECT pi.*, 
-                   it.name, it.image_url, it.rarity, it.type, it.icon, it.description, it.price_copper, it.stackable
-                   -- NO incluimos it.base_stats aquí para respetar los stats únicos del item (pi.base_stats)
-            FROM player_items pi
-            JOIN items_templates it ON pi.template_id = it.id
-            WHERE pi.player_id = $1
-            ORDER BY pi.bag_slot ASC
-        `, [userId]);
-
-        res.json({ success: true, inventory: inventoryRes.rows, message: `Recibido: ${pkg.name}` });
+        res.json({ success: true, inventory: inventoryItems, message: 'Recibido: ' + itemTpl.name });
 
     } catch (err) {
-        await client.query('ROLLBACK');
-        console.error("Error claimPackage:", err);
+        console.error('Error claimPackage:', err);
         res.status(500).json({ message: 'Error interno.' });
-    } finally {
-        client.release();
     }
 };

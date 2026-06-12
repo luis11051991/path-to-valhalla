@@ -1,40 +1,30 @@
-// ============================================================
-// Firebase Admin SDK - Server Side (Backend)
-// Used for: Verifying Firebase Auth tokens, Firestore access
-// ============================================================
-
+// Firebase Admin SKD - Server Side
 const { initializeApp, applicationDefault, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
-
-let firebaseApp;
+let firebaseApp = null;
+let auth = null;
+let db = null;
 
 try {
-  // Check if we have service account credentials (production)
   const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-
   if (serviceAccountPath) {
     const serviceAccount = require(serviceAccountPath);
-    firebaseApp = initializeApp({
-      credential: cert(serviceAccount),
-    });
+    firebaseApp = initializeApp({ credential: cert(serviceAccount) });
   } else {
-    // Use application default credentials (Firebase CLI / GCloud SDK)
     firebaseApp = initializeApp(applicationDefault());
   }
 } catch (error) {
-  console.warn('⚠️ Firebase Admin SDK not configured. Token verification will be disabled.');
-  console.warn('   Set FIREBASE_SERVICE_ACCOUNT_PATH in .env or run "firebase login"');
+  console.warn('Firebase Admin SDK not configured.');
 }
 
-const auth = firebaseApp ? getAuth() : null;
-const db = firebaseApp ? getFirestore() : null;
+if (firebaseApp) {
+  auth = getAuth(firebaseApp);
+  db = getFirestore(firebaseApp);
+}
 
-// Verify a Firebase ID token and return the decoded claims
 async function verifyFirebaseToken(idToken) {
-  if (!auth) {
-    throw new Error('Firebase Admin SDK not initialized');
-  }
+  if (!auth) throw new Error('Firebase Admin SDK not initialized');
   try {
     const decodedToken = await auth.verifyIdToken(idToken);
     return {

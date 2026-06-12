@@ -1,0 +1,98 @@
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() { return request.auth != null; }
+    function isOwner(docField) { return isAuthenticated() && (resource.data[player_id] == request.auth.uid || resource.data[id] == request.auth.uid); }
+
+    // Players - solo el dueño puede leer/escribir su propio documento
+    match /players/{playerId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == playerId;
+
+      // Subcolecciones de jugadores (items, pets, quests, etc.)
+      match /{subcollection}/{docId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && request.resource.data.player_id == request.auth.uid || true;
+        allow update: if isAuthenticated();
+        allow delete: if isAuthenticated();
+      }
+
+      // Subcolecciones de mensajes
+      match /messages/{msgId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Messages (mensajes globales)
+    match /messages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.recipient_id != null;
+      allow update: if isAuthenticated() && (resource.data.recipient_id == request.auth.uid || resource.data.sender_id == request.auth.uid);
+    }
+
+    // Player Backgrounds
+    match /player_backgrounds/{bgId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (resource.data.player_id == request.auth.uid || request.resource.data.player_id == request.auth.uid);
+    }
+
+    // ==========================================
+    // Datos estáticos (solo lectura pública)
+    // ==========================================
+    match /classes/{classId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /items_templates/{itemId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /enemies/{enemyId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /enemies/{enemyId}/drops/{dropId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /expeditions/{expeditionId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /quests/{questId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /skills/{skillId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /pets/{petId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /backgrounds/{bgId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /professions/{profId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /recipes/{recipeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

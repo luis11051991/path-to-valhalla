@@ -11,7 +11,7 @@ const inventoryController = require('./src/controllers/inventoryController');
 const petController = require('./src/controllers/petController');
 const skillController = require('./src/controllers/skillController');
 
-// --- IMPORTACIÓN DE MIDDLEWARES ---
+// --- IMPORTACION DE MIDDLEWARES ---
 const authMiddleware = require('./src/middleware/authMiddleware');
 
 // --- IMPORTAR GESTORES DE RUTAS (Routers) ---
@@ -26,7 +26,7 @@ const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const questRoutes = require('./src/routes/questRoutes');
 const bankRoutes = require('./src/routes/bankRoutes');
 
-// CORRECCIÓN AQUÍ: Agregamos el /src/ que faltaba
+// Rutas
 const bestiaryRoutes = require('./src/routes/bestiaryRoutes');
 const messageRoutes = require('./src/routes/messageRoutes');
 
@@ -36,7 +36,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- 1. RUTAS NUEVAS (Router) ---
+// --- RUTAS (Router) ---
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', firebaseAuthRoutes);
 app.use('/api/evolution', evolutionRoutes);
@@ -50,11 +50,11 @@ app.use('/api/bank', bankRoutes);
 app.use('/api/bestiary', bestiaryRoutes);
 app.use('/api/messages', messageRoutes);
 
-// --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
+// --- RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);
 app.post('/api/login', authController.login);
 
-// --- 3. RUTAS DE JUGADOR ---
+// --- RUTAS DE JUGADOR ---
 app.post('/api/choose-race', playerController.chooseRace);
 app.post('/api/train-stats', playerController.trainStats);
 app.post('/api/rent-bag', playerController.rentBag);
@@ -69,26 +69,25 @@ app.get('/api/my-pets', authMiddleware, petController.getMyPets);
 app.post('/api/equip-pet', authMiddleware, petController.equipPet);
 app.post('/api/feed-pet', authMiddleware, petController.feedPet);
 
-// --- 4. RUTAS DE FONDOS ---
+// --- RUTAS DE FONDOS ---
 app.get('/api/backgrounds', bgController.getBackgrounds);
 app.post('/api/equip-background', bgController.equipBackground);
 app.post('/api/buy-background', bgController.buyBackground);
 
-// --- 5. RUTAS DE INVENTARIO ---
+// --- RUTAS DE INVENTARIO ---
 app.post('/api/inventory/move', inventoryController.moveItem);
 app.post('/api/inventory/organize', inventoryController.organizeInventory);
 
-// --- 6. RUTAS DE ADMIN / DEBUG ---
+// --- RUTAS DE ADMIN / DEBUG ---
 app.post('/api/admin/give-item', inventoryController.adminGiveItem);
-// --- BÚSQUEDA ---
+// --- BUSQUEDA ---
 app.get('/api/search-users', playerController.searchUsers);
 
-// --- ARRANQUE ---
 // --- ARRANQUE ---
 const PORT = 3000;
 const server = http.createServer(app);
 socket.init(server);
 
 server.listen(PORT, () => {
-  console.log(`⚡ Servidor de Path to Valhalla corriendo en puerto ${PORT}`);
+  console.log('Servidor de Path to Valhalla corriendo en puerto ' + PORT);
 });

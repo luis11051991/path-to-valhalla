@@ -1,4 +1,4 @@
-const pool = require('../config/db');
+const { db } = require('../config/db');
 const { hydratePlayer } = require('../shared/player_stats');
 
 // ==========================================
@@ -17,230 +17,278 @@ const generateRandomStats = (templateStats) => {
     return finalStats;
 };
 
-// ==========================================
-// 2. ADMIN: DAR ÍTEM
-// ==========================================
 exports.adminGiveItem = async (req, res) => {
     const { userId, templateId } = req.body;
     try {
-        const templateRes = await pool.query('SELECT * FROM items_templates WHERE id = $1', [templateId]);
-        if (templateRes.rows.length === 0) return res.status(404).json({ message: 'Template no existe.' });
-        const template = templateRes.rows[0];
+        const templateDoc = await db.collection('items_templates').doc(String(templateId)).get();
+        if (!templateDoc.exists) return res.status(404).json({ message: 'Template no existe.' });
+        const template = templateDoc.data();
         const uniqueStats = generateRandomStats(template.base_stats);
-        
+
         let durCur = 100, durMax = 100;
         if (['consumable', 'material', 'scroll', 'recipe'].includes(template.type) || template.rarity === 'legendary') {
             durCur = null; durMax = null;
         }
 
-        const slotsRes = await pool.query('SELECT bag_slot FROM player_items WHERE player_id = $1 AND bag_slot IS NOT NULL', [userId]);
-        const occupiedSlots = slotsRes.rows.map(row => row.bag_slot);
+        const slotsSnap = await db.collection('players').doc(userId).collection('items')
+            .where('bag_slot', '!=', null)
+            .get();
+        const occupiedSlots = new Set(slotsSnap.docs.map(d => d.data().bag_slot));
         let targetSlot = -1;
-        for (let i = 0; i < 40; i++) { if (!occupiedSlots.includes(i)) { targetSlot = i; break; } }
+        for (let i = 0; i < 40; i++) { if (!occupiedSlots.has(i)) { targetSlot = i; break; } }
         if (targetSlot === -1) return res.status(400).json({ message: 'Inventario lleno.' });
 
-        await pool.query(`INSERT INTO player_items (player_id, template_id, is_equipped, bag_slot, base_stats, durability_current, durability_max, is_bound, quantity) VALUES ($1, $2, false, $3, $4, $5, $6, false, 1)`, [userId, templateId, targetSlot, uniqueStats, durCur, durMax]);
-        res.json({ success: true, message: `Recibido: ${template.name}`, stats: uniqueStats });
-    } catch (err) { console.error(err); res.status(500).json({ message: 'Error server' }); }
-};
-
-// ==========================================
-// 3. MOVER ÍTEM
-// ==========================================
-exports.moveItem = async (req, res) => {
-  const { userId, itemId, destination } = req.body;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const playerRes = await client.query('SELECT level FROM players WHERE id = $1', [userId]);
-    const playerLevel = playerRes.rows[0].level;
-
-    const itemQuery = `SELECT pi.*, it.slot as valid_slot_type, it.name, it.stackable, it.min_level FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.id = $1 AND pi.player_id = $2`;
-    const itemRes = await client.query(itemQuery, [itemId, userId]);
-    if (itemRes.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Ítem no encontrado.' }); }
-    const sourceItem = itemRes.rows[0];
-
-    if (destination.type === 'equipped') {
-        if (playerLevel < 100) {
-            const maxAllowedLevel = playerLevel + 9;
-            if (sourceItem.min_level > maxAllowedLevel) {
-                await client.query('ROLLBACK');
-                return res.status(400).json({ message: `Nivel insuficiente (Req: ${sourceItem.min_level}).` });
-            }
-        }
-        await client.query(`UPDATE player_items SET is_equipped = true, equipped_slot = $1, bag_slot = NULL, is_bound = true WHERE id = $2`, [destination.slot, itemId]);
-    } else if (destination.type === 'bag') {
-        const targetBagSlot = destination.slot; 
-        const targetItemRes = await client.query('SELECT pi.*, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 AND pi.is_equipped = false AND pi.bag_slot = $2', [userId, targetBagSlot]);
-
-        if (targetItemRes.rows.length > 0) {
-            const targetItem = targetItemRes.rows[0];
-            if (sourceItem.stackable && targetItem.stackable && sourceItem.template_id === targetItem.template_id && sourceItem.id !== targetItem.id) {
-                const newQuantity = (targetItem.quantity || 1) + (sourceItem.quantity || 1);
-                await client.query('UPDATE player_items SET quantity = $1 WHERE id = $2', [newQuantity, targetItem.id]);
-                await client.query('DELETE FROM player_items WHERE id = $1', [sourceItem.id]);
-            } else {
-                await client.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [sourceItem.bag_slot, targetItem.id]); 
-                await client.query('UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2', [targetBagSlot, itemId]);
-            }
-        } else {
-            await client.query('UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2', [targetBagSlot, itemId]);
-        }
-    }
-    await client.query('COMMIT');
-    
-    const inventoryRes = await client.query(`SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.image_url, it.price_copper, it.description, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 ORDER BY pi.bag_slot ASC`, [userId]);
-    const hydrated = await hydratePlayer(userId);
-    const user = { ...hydrated, real_inventory: inventoryRes.rows };
-    res.json({ success: true, inventory: inventoryRes.rows, user });
-
-  } catch (err) { await client.query('ROLLBACK'); console.error(err); res.status(500).json({ message: 'Error de inventario' }); } finally { client.release(); }
-};
-
-// 4. ORGANIZAR
-exports.organizeInventory = async (req, res) => {
-    const { userId } = req.body;
-    const rarityWeight = { 'legendary': 5, 'epic': 4, 'rare': 3, 'uncommon': 2, 'common': 1 };
-    const typeWeight = { 'weapon': 4, 'armor': 3, 'accessory': 2, 'consumable': 1 };
-    try {
-        const itemsRes = await pool.query(`SELECT pi.id, pi.template_id, it.rarity, it.type, it.min_level, it.name FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 AND pi.is_equipped = false`, [userId]);
-        let items = itemsRes.rows;
-        items.sort((a, b) => {
-            const rA = rarityWeight[a.rarity] || 0; const rB = rarityWeight[b.rarity] || 0;
-            if (rA !== rB) return rB - rA;
-            const tA = typeWeight[a.type] || 0; const tB = typeWeight[b.type] || 0;
-            if (tA !== tB) return tB - tA;
-            return 0; 
+        await db.collection('players').doc(userId).collection('items').add({
+            template_id: Number(templateId),
+            is_equipped: false,
+            bag_slot: targetSlot,
+            base_stats: uniqueStats,
+            durability_current: durCur,
+            durability_max: durMax,
+            is_bound: false,
+            quantity: 1,
+            created_at: new Date(),
         });
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            for (let i = 0; i < items.length; i++) { await client.query('UPDATE player_items SET bag_slot = $1 WHERE id = $2', [i, items[i].id]); }
-            await client.query('COMMIT');
-            const inventoryRes = await client.query(`SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.image_url, it.price_copper, it.description FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1`, [userId]);
-            res.json({ success: true, inventory: inventoryRes.rows, message: "Inventario organizado." });
-        } finally { client.release(); }
-    } catch (err) { console.error(err); res.status(500).json({ message: 'Error al organizar.' }); }
+
+        res.json({ success: true, message: 'Recibido: ' + template.name, stats: uniqueStats });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error server' });
+    }
 };
 
-// ==========================================
-// 5. USAR ÍTEM (INTELIGENTE: CONSUMIR O EQUIPAR)
-// ==========================================
-exports.useItem = async (req, res) => {
+exports.moveItem = async (req, res) => {
+    const { itemId, destination } = req.body; // userId se obtiene del token
     const userId = req.user.id;
-    const { inventoryItemId } = req.body; 
 
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
+        const itemRef = db.collection('players').doc(userId).collection('items').doc(itemId);
+        const itemDoc = await itemRef.get();
+        if (!itemDoc.exists) return res.status(404).json({ message: 'Item no encontrado.' });
+        const sourceItem = { ...itemDoc.data(), id: itemId };
 
-        // Consultamos también el SLOT y el NIVEL MINIMO para poder equipar
-        const itemRes = await client.query(`
-            SELECT pi.id, pi.quantity, pi.template_id, pi.bag_slot, it.type, it.base_stats, it.name, it.slot, it.min_level
-            FROM player_items pi
-            JOIN items_templates it ON pi.template_id = it.id
-            WHERE pi.id = $1 AND pi.player_id = $2
-        `, [inventoryItemId, userId]);
+        const tplDoc = await db.collection('items_templates').doc(String(sourceItem.template_id)).get();
+        if (!tplDoc.exists) throw new Error('Template not found');
+        const itemTpl = tplDoc.data();
 
-        if (itemRes.rows.length === 0) throw new Error("Ítem no encontrado.");
-        const item = itemRes.rows[0];
-        const stats = item.base_stats || {};
+        const playerDoc = await db.collection('players').doc(userId).get();
+        const playerLevel = playerDoc.data().level;
 
-        let msg = '';
-        let shouldConsume = false;
-
-        // --- A. CONSUMIBLES (Pociones) ---
-        if (item.type === 'consumable') {
-            if (stats.heal_amount) {
-                const heal = parseInt(stats.heal_amount);
-                await client.query(`UPDATE players SET current_hp = LEAST(current_hp + $1, 1000) WHERE id = $2`, [heal, userId]); 
-                msg = `Te curaste ${heal} HP.`;
-                shouldConsume = true;
-            }
-        } 
-        // --- B. RECETAS ---
-        else if (item.type === 'recipe') {
-            const recipeId = stats.learn_recipe_id;
-            if (!recipeId) throw new Error("Este plano es ilegible.");
-            const profRes = await client.query(`SELECT learned_recipes FROM player_professions WHERE player_id = $1`, [userId]);
-            if (profRes.rows.length === 0) throw new Error("Necesitas una profesión.");
-            let recipes = profRes.rows[0].learned_recipes || [];
-            if (recipes.includes(recipeId)) throw new Error("Ya conoces esta receta.");
-            recipes.push(recipeId);
-            await client.query(`UPDATE player_professions SET learned_recipes = $1 WHERE player_id = $2`, [JSON.stringify(recipes), userId]);
-            msg = `¡Nueva receta aprendida!`;
-            shouldConsume = true;
-        }
-        // --- C. GRIMORIOS (SKILLS) ---
-        else if (item.type === 'scroll') {
-            const skillId = stats.learn_skill_id;
-            if (!skillId) throw new Error("El pergamino está vacío.");
-            const skillCheck = await client.query(`SELECT * FROM player_skills WHERE player_id = $1 AND skill_id = $2`, [userId, skillId]);
-            if (skillCheck.rows.length > 0) throw new Error("Ya conoces esta habilidad.");
-            await client.query(`INSERT INTO player_skills (player_id, skill_id, skill_level, is_equipped) VALUES ($1, $2, 1, false)`, [userId, skillId]);
-            msg = `¡Habilidad aprendida!`;
-            shouldConsume = true;
-        }
-        // --- D. EQUIPAMIENTO (Armas/Armaduras/Accesorios) ---
-        // ¡Esta es la parte nueva para que no salga el error!
-        else if (['weapon', 'armor', 'accessory'].includes(item.type)) {
-            
-            // 1. Validar Nivel
-            const playerRes = await client.query('SELECT level FROM players WHERE id = $1', [userId]);
-            const playerLevel = playerRes.rows[0].level;
+        if (destination.type === 'equipped') {
             if (playerLevel < 100) {
-                const maxAllowed = playerLevel + 9;
-                if (item.min_level > maxAllowed) throw new Error(`Nivel insuficiente (${item.min_level}).`);
+                const maxAllowedLevel = playerLevel + 9;
+                if (itemTpl.min_level > maxAllowedLevel) {
+                    return res.status(400).json({ message: 'Nivel insuficiente (Req: ' + itemTpl.min_level + ').' });
+                }
             }
 
-            // 2. Definir Slot destino
-            let targetSlot = item.slot; 
-            // Manejo básico de anillos (siempre va al 1 por defecto al hacer clic derecho)
-            if (item.slot === 'ring') targetSlot = 'ring_1';
-            if (item.slot === 'earring') targetSlot = 'earring_1';
+            // Desequipar si habia algo equipado en ese slot
+            const existingSnap = await db.collection('players').doc(userId).collection('items')
+                .where('is_equipped', '==', true)
+                .where('equipped_slot', '==', destination.slot)
+                .get();
 
-            if (!targetSlot) throw new Error("Este objeto no se puede equipar.");
-
-            // 3. Swap (Intercambio)
-            const existingRes = await client.query('SELECT * FROM player_items WHERE player_id = $1 AND is_equipped = true AND equipped_slot = $2', [userId, targetSlot]);
-            
-            if (existingRes.rows.length > 0) {
-                // Desequipar el actual a la bolsa del nuevo
-                const oldItem = existingRes.rows[0];
-                await client.query('UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2', [item.bag_slot, oldItem.id]);
+            if (!existingSnap.empty) {
+                const oldItem = existingSnap.docs[0];
+                await db.collection('players').doc(userId).collection('items').doc(oldItem.id).update({
+                    is_equipped: false,
+                    equipped_slot: null,
+                    bag_slot: sourceItem.bag_slot,
+                });
             }
 
-            // Equipar el nuevo
-            await client.query('UPDATE player_items SET is_equipped = true, equipped_slot = $1, bag_slot = NULL, is_bound = true WHERE id = $2', [targetSlot, inventoryItemId]);
-            
-            msg = `Equipado: ${item.name}`;
-            shouldConsume = false; 
-        }
-        else {
-            throw new Error("No puedes usar este objeto aquí.");
-        }
+            await itemRef.update({
+                is_equipped: true,
+                equipped_slot: destination.slot,
+                bag_slot: null,
+                is_bound: true,
+            });
+        } else if (destination.type === 'bag') {
+            const targetBagSlot = destination.slot;
+            const targetSnap = await db.collection('players').doc(userId).collection('items')
+                .where('is_equipped', '==', false)
+                .where('bag_slot', '==', targetBagSlot)
+                .get();
 
-        // --- CONSUMIR SI APLICA ---
-        if (shouldConsume) {
-            if (item.quantity > 1) {
-                await client.query('UPDATE player_items SET quantity = quantity - 1 WHERE id = $1', [inventoryItemId]);
+            if (!targetSnap.empty) {
+                const targetItem = targetSnap.docs[0];
+                // Si es stackable y mismo template, sumar cantidad
+                if (itemTpl.stackable && sourceItem.quantity > 1 && sourceItem.template_id === targetItem.data().template_id) {
+                    await db.collection('players').doc(userId).collection('items').doc(targetItem.id).update({
+                        quantity: (targetItem.data().quantity || 1) + (sourceItem.quantity || 1),
+                    });
+                    await itemRef.delete();
+                } else {
+                    // Intercambiar slots
+                    const swapTargetSnap = await db.collection('players').doc(userId).collection('items')
+                        .where('is_equipped', '==', false)
+                        .where('bag_slot', '==', sourceItem.bag_slot)
+                        .get();
+
+                    if (!swapTargetSnap.empty) {
+                        const swapTarget = swapTargetSnap.docs[0];
+                        await db.collection('players').doc(userId).collection('items').doc(swapTarget.id).update({ bag_slot: targetBagSlot });
+                    }
+
+                    await itemRef.update({
+                        is_equipped: false,
+                        equipped_slot: null,
+                        bag_slot: targetBagSlot,
+                    });
+                }
             } else {
-                await client.query('DELETE FROM player_items WHERE id = $1', [inventoryItemId]);
+                await itemRef.update({ bag_slot: targetBagSlot });
             }
         }
 
-        await client.query('COMMIT');
-        
-        const inventoryRes = await client.query(`SELECT pi.*, it.name, it.type, it.slot, it.rarity, it.icon, it.image_url, it.price_copper, it.description, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 ORDER BY pi.bag_slot ASC`, [userId]);
-        const hydrated = await hydratePlayer(userId);
-        
-        res.json({ success: true, message: msg, inventory: inventoryRes.rows, user: hydrated });
+        // Retornar inventario actualizado
+        const invSnap = await db.collection('players').doc(userId).collection('items').orderBy('bag_slot', 'asc').get();
+        const inventoryItems = [];
+        for (const itemDoc of invSnap.docs) {
+            const data = itemDoc.data();
+            const tplDc = await db.collection('items_templates').doc(String(data.template_id)).get();
+            if (tplDc.exists) {
+                inventoryItems.push({ ...data, id: itemDoc.id, name: tplDc.data().name, type: tplDc.data().type, slot: tplDc.data().slot, rarity: tplDc.data().rarity, icon: tplDc.data().icon, image_url: tplDc.data().image_url });
+            }
+        }
+
+        res.json({ success: true, message: 'Movimiento completado.', inventory: inventoryItems });
 
     } catch (err) {
-        await client.query('ROLLBACK');
         console.error(err);
         res.status(400).json({ message: err.message });
-    } finally {
-        client.release();
+    }
+};
+
+exports.organizeInventory = async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const itemsSnap = await db.collection('players').doc(userId).collection('items')
+            .where('is_equipped', '==', false)
+            .orderBy('bag_slot', 'asc')
+            .get();
+
+        // Separar equipados de desequipados
+        const unequippedSnap = await db.collection('players').doc(userId).collection('items')
+            .where('is_equipped', '==', false)
+            .orderBy('bag_slot', 'asc')
+            .get();
+
+        let nextSlot = 0;
+        for (const itemDoc of unequippedSnap.docs) {
+            const data = itemDoc.data();
+            if (data.bag_slot !== nextSlot) {
+                await db.collection('players').doc(userId).collection('items').doc(itemDoc.id).update({ bag_slot: nextSlot });
+            }
+            nextSlot++;
+        }
+
+        res.json({ success: true, message: 'Inventario organizado.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al organizar.' });
+    }
+};
+
+exports.useItem = async (req, res) => {
+    const userId = req.user.id;
+    const { itemId, type } = req.body;
+
+    try {
+        const itemRef = db.collection('players').doc(userId).collection('items').doc(itemId);
+        const itemDoc = await itemRef.get();
+        if (!itemDoc.exists) return res.status(404).json({ message: 'Item no encontrado.' });
+        const inventoryItemId = itemDoc.id;
+
+        let shouldConsume = false;
+        let msg = '';
+
+        const tplSnap = await db.collection('items_templates').doc(String(itemDoc.data().template_id)).get();
+        if (!tplSnap.exists) throw new Error('Template not found');
+        const item = { ...itemDoc.data(), ...tplSnap.data() };
+
+        if (type === 'use') {
+            // Pociones
+            if (item.type === 'consumable') {
+                const stats = item.base_stats || {};
+                if (stats.heal_amount) {
+                    const heal = parseInt(stats.heal_amount);
+                    await db.collection('players').doc(userId).update({ current_hp: Math.min(1000, (itemDoc.data().current_hp || 0) + heal) });
+                    msg = 'Te curaste ' + heal + ' HP.';
+                    shouldConsume = true;
+                }
+            }
+            // Recetas
+            else if (item.type === 'recipe') {
+                const recipeId = item.stats?.learn_recipe_id;
+                if (!recipeId) throw new Error('Este plano es ilegible.');
+                await db.collection('players').doc(userId).collection('recipes').doc(String(recipeId)).set({ learned_at: new Date() }, { merge: true });
+                msg = 'Nueva receta aprendida!';
+                shouldConsume = true;
+            }
+            // Grimorios (Skills)
+            else if (item.type === 'scroll') {
+                const skillId = item.stats?.learn_skill_id;
+                if (!skillId) throw new Error('El pergamino esta vacio.');
+                const hasSkillSnap = await db.collection('players').doc(userId).collection('skills')
+                    .where('skill_id', '==', Number(skillId))
+                    .limit(1)
+                    .get();
+                if (!hasSkillSnap.empty) throw new Error('Ya conoces esta habilidad.');
+                await db.collection('players').doc(userId).collection('skills').add({
+                    skill_id: Number(skillId), is_equipped: false, skill_level: 1, slot_index: 0, created_at: new Date(),
+                });
+                msg = 'Habilidad aprendida!';
+                shouldConsume = true;
+            }
+            // Equipamiento
+            else if (['weapon', 'armor', 'accessory'].includes(item.type)) {
+                const playerDoc = await db.collection('players').doc(userId).get();
+                const playerLevel = playerDoc.data().level;
+                if (playerLevel < 100) {
+                    const maxAllowed = playerLevel + 9;
+                    if (item.min_level > maxAllowed) throw new Error('Nivel insuficiente (' + item.min_level + ').');
+                }
+
+                let targetSlot = item.slot;
+                if (item.slot === 'ring') targetSlot = 'ring_1';
+                if (item.slot === 'earring') targetSlot = 'earring_1';
+                if (!targetSlot) throw new Error('Este objeto no se puede equipar.');
+
+                const existingSnap = await db.collection('players').doc(userId).collection('items')
+                    .where('is_equipped', '==', true)
+                    .where('equipped_slot', '==', targetSlot)
+                    .get();
+
+                if (!existingSnap.empty) {
+                    const oldItem = existingSnap.docs[0];
+                    await db.collection('players').doc(userId).collection('items').doc(oldItem.id).update({
+                        is_equipped: false, equipped_slot: null, bag_slot: itemDoc.data().bag_slot,
+                    });
+                }
+
+                await itemRef.update({ is_equipped: true, equipped_slot: targetSlot, bag_slot: null, is_bound: true });
+                msg = 'Equipado: ' + item.name;
+                shouldConsume = false;
+            }
+        } else {
+            throw new Error('No puedes usar este objeto aqui.');
+        }
+
+        // Consumir si aplica
+        if (shouldConsume) {
+            const currentQty = itemDoc.data().quantity || 1;
+            if (currentQty > 1) {
+                await itemRef.update({ quantity: currentQty - 1 });
+            } else {
+                await itemRef.delete();
+            }
+        }
+
+        res.json({ success: true, message: msg });
+
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ message: err.message });
     }
 };

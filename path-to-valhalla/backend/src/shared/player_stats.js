@@ -1,16 +1,14 @@
-const pool = require('../config/db');
+const { db, decodeDoc } = require('../config/db');
 
-// --- CONSTANTES DE REGENERACIÓN ---
+// --- CONSTANTES DE REGENERACION ---
 const HP_REGEN_AMOUNT = 1;
 const HP_REGEN_EVERY_SECONDS = 3;
-
 const ENERGY_REGEN_AMOUNT = 1;
-const ENERGY_REGEN_EVERY_SECONDS = 120; // 2 minutos
-const ENERGY_MAX_DEFAULT = 100;
-
+const ENERGY_REGEN_EVERY_SECONDS = 120;
 const VALOR_REGEN_AMOUNT = 1;
-const VALOR_REGEN_EVERY_SECONDS = 1800; // 30 minutos
+const VALOR_REGEN_EVERY_SECONDS = 1800;
 const VALOR_MAX_DEFAULT = 5;
+const HP_MAX_DEFAULT = 100;
 
 const normalizeStats = (stats) => {
     if (!stats) return {};
@@ -23,9 +21,7 @@ const normalizeStats = (stats) => {
 const addStats = (target, source) => {
     if (!source) return;
     Object.entries(source).forEach(([key, val]) => {
-        const numeric = Array.isArray(val)
-            ? Math.floor((Number(val[0]) + Number(val[1])) / 2)
-            : Number(val);
+        const numeric = Array.isArray(val) ? Math.floor((Number(val[0]) + Number(val[1])) / 2) : Number(val);
         if (Number.isNaN(numeric)) return;
         target[key] = (target[key] || 0) + numeric;
     });
@@ -40,171 +36,176 @@ const computeTotalStats = ({ baseStats = {}, equippedItems = [], petBonuses = {}
 
 const computeMaxHp = (totalConstitution = 0) => {
     const con = Number(totalConstitution) || 0;
-    return 100 + (con * 20); // Fórmula base + constitución
+    return 100 + (con * 20);
 };
 
-// --- NUEVA LÓGICA DE REGENERACIÓN UNIFICADA ---
-const applyRegen = ({ 
-    currentHp = 0, maxHp = 0, 
-    currentEnergy = 0, maxEnergy = 100, 
-    currentValor = 0, maxValor = 5, 
-    lastRegenAt, 
-    now = new Date() 
-}) => {
-    const last = lastRegenAt ? new Date(lastRegenAt) : new Date(now);
-    // Calculamos el tiempo total pasado en segundos
+// Firestore compatible timestamp handling
+const toDate = (val) => {
+    if (!val) return new Date();
+    if (val instanceof Date) return val;
+    if (val.toDate && typeof val.toDate === 'function') return val.toDate();
+    if (val.seconds) return new Date(val.seconds * 1000);
+    return new Date(val);
+};
+
+const applyRegen = ({ currentHp = 0, maxHp = 0, currentEnergy = 0, maxEnergy = 100, currentValor = 0, maxValor = 5, lastRegenAt, now = new Date() }) => {
+    const last = toDate(lastRegenAt);
     const diffSeconds = Math.max(0, Math.floor((now - last) / 1000));
 
-    // 1. Calcular Ticks para cada recurso
     const hpTicks = Math.floor(diffSeconds / HP_REGEN_EVERY_SECONDS);
     const energyTicks = Math.floor(diffSeconds / ENERGY_REGEN_EVERY_SECONDS);
     const valorTicks = Math.floor(diffSeconds / VALOR_REGEN_EVERY_SECONDS);
 
-    // 2. Aplicar Ganancias
     let updatedHp = currentHp;
-    if (hpTicks > 0 && currentHp < maxHp) {
-        updatedHp = Math.min(maxHp, currentHp + (hpTicks * HP_REGEN_AMOUNT));
-    }
+    if (hpTicks > 0 && currentHp < maxHp) { updatedHp = Math.min(maxHp, currentHp + (hpTicks * HP_REGEN_AMOUNT)); }
 
     let updatedEnergy = currentEnergy;
-    if (energyTicks > 0 && currentEnergy < maxEnergy) {
-        updatedEnergy = Math.min(maxEnergy, currentEnergy + (energyTicks * ENERGY_REGEN_AMOUNT));
-    }
+    if (energyTicks > 0 && currentEnergy < maxEnergy) { updatedEnergy = Math.min(maxEnergy, currentEnergy + (energyTicks * ENERGY_REGEN_AMOUNT)); }
 
     let updatedValor = currentValor;
-    if (valorTicks > 0 && currentValor < maxValor) {
-        updatedValor = Math.min(maxValor, currentValor + (valorTicks * VALOR_REGEN_AMOUNT));
-    }
+    if (valorTicks > 0 && currentValor < maxValor) { updatedValor = Math.min(maxValor, currentValor + (valorTicks * VALOR_REGEN_AMOUNT)); }
 
-    // 3. Actualizar Timestamp
-    // Avanzamos el reloj solo por la cantidad de "tiempo de Vida" consumido (el intervalo más corto).
-    // Esto evita perder la sincronía fina, aunque implica que si refrescas cada 10 segs, 
-    // la energía podría tardar un poco más en sentirse. Es el mejor compromiso con una sola columna de fecha.
     let updatedLast = last;
-    if (hpTicks > 0) {
-        updatedLast = new Date(last.getTime() + (hpTicks * HP_REGEN_EVERY_SECONDS * 1000));
-    }
+    if (hpTicks > 0) { updatedLast = new Date(last.getTime() + (hpTicks * HP_REGEN_EVERY_SECONDS * 1000)); }
 
-    // Si ya estamos a tope de todo, reseteamos el timer al ahora para no acumular tiempo infinito
     const isFull = updatedHp >= maxHp && updatedEnergy >= maxEnergy && updatedValor >= maxValor;
-    if (isFull) {
-        updatedLast = new Date(now);
+    if (isFull) { updatedLast = new Date(now); }
+
+    return { currentHp: updatedHp, currentEnergy: updatedEnergy, currentValor: updatedValor, lastRegenAt: updatedLast };
+};
+
+const getEquippedStats = async (playerId) => {
+    const res = await db.collection('players').doc(playerId).collection('items')
+        .where('is_equipped', '==', true)
+        .get();
+    
+    // Join con items_templates para obtener base_stats del template
+    const statsPromises = [];
+    for (const doc of res.docs) {
+        const data = doc.data();
+        if (data.base_stats && Object.keys(data.base_stats).length > 0) {
+            statsPromises.push(Promise.resolve(normalizeStats(data.base_stats)));
+        } else {
+            // Fallback: obtener template
+            const tplDoc = await db.collection('items_templates').doc(String(data.template_id)).get();
+            if (tplDoc.exists && tplDoc.data().base_stats) {
+                statsPromises.push(Promise.resolve(normalizeStats(tplDoc.data().base_stats)));
+            } else {
+                statsPromises.push(Promise.resolve({}));
+            }
+        }
     }
-
-    return { 
-        currentHp: updatedHp, 
-        currentEnergy: updatedEnergy, 
-        currentValor: updatedValor, 
-        lastRegenAt: updatedLast 
-    };
+    
+    // Si no items equipados con base_stats, intentar desde templates
+    if (res.empty) return [];
+    
+    const results = await Promise.all(statsPromises);
+    return results;
 };
 
-const getDb = (client) => client || pool;
+const getActivePetBonuses = async (playerId) => {
+    const petSnap = await db.collection('players').doc(playerId).collection('pets')
+        .where('is_active', '==', true)
+        .limit(1)
+        .get();
+    
+    if (petSnap.empty) return {};
 
-const getEquippedStats = async (playerId, client) => {
-    const db = getDb(client);
-    const res = await db.query(
-        `SELECT COALESCE(pi.base_stats, it.base_stats) AS stats
-         FROM player_items pi
-         JOIN items_templates it ON pi.template_id = it.id
-         WHERE pi.player_id = $1 AND pi.is_equipped = true`,
-        [playerId]
-    );
-    return res.rows.map((row) => normalizeStats(row.stats));
+    // Obtener bonus_stats desde el catalogo de pets
+    const petData = petSnap.docs[0].data();
+    const tplDoc = await db.collection('pets').doc(String(petData.pet_id)).get();
+    if (!tplDoc.exists) return {};
+    
+    const bonusStats = tplDoc.data().bonus_stats;
+    if (!bonusStats) return {};
+    
+    // Verificar hunger > 0 en Firestore
+    const activePetSnap = await db.collection('players').doc(playerId).collection('pets')
+        .where('is_active', '==', true)
+        .where('current_hunger', '>', 0)
+        .limit(1)
+        .get();
+    
+    if (activePetSnap.empty) return {};
+    
+    return normalizeStats(bonusStats);
 };
 
-const getActivePetBonuses = async (playerId, client) => {
-    const db = getDb(client);
-    const res = await db.query(
-        `SELECT p.bonus_stats 
-         FROM player_pets pp 
-         JOIN pets p ON pp.pet_id = p.id 
-         WHERE pp.player_id = $1 AND pp.is_active = true AND pp.current_hunger > 0 
-         LIMIT 1`,
-        [playerId]
-    );
-    return normalizeStats(res.rows[0]?.bonus_stats);
-};
-
-const hydratePlayer = async (userOrId, client) => {
-    const db = getDb(client);
+const hydratePlayer = async (userOrId, id) => {
     let basePlayer;
 
-    if (userOrId && typeof userOrId === 'object') {
+    if (userOrId && typeof userOrId === 'object' && !id) {
+        // Si es un objeto con datos directos (como login), lo usamos directamente
         basePlayer = { ...userOrId };
-    } else {
-        const res = await db.query('SELECT * FROM players WHERE id = $1', [userOrId]);
-        if (res.rows.length === 0) throw new Error('Jugador no encontrado');
-        basePlayer = res.rows[0];
+    } else if (userOrId && id) {
+        basePlayer = { ...userOrId };
+        basePlayer.id = id;
     }
 
-    const equippedStats = await getEquippedStats(basePlayer.id, db);
-    const petBonuses = await getActivePetBonuses(basePlayer.id, db);
+    const equippedStats = await getEquippedStats(basePlayer.id);
+    const petBonuses = await getActivePetBonuses(basePlayer.id);
+
+    // Parsear stats si es string
+    let baseStatsRaw = basePlayer.stats;
+    if (typeof baseStatsRaw === 'string') {
+        try { baseStatsRaw = JSON.parse(baseStatsRaw); } catch (e) { baseStatsRaw = {}; }
+    }
 
     const totalStats = computeTotalStats({
-        baseStats: basePlayer.stats,
+        baseStats: baseStatsRaw || {},
         equippedItems: equippedStats,
         petBonuses
     });
 
     const maxHp = computeMaxHp(totalStats.constitution || 0);
-    
-    // --- NUEVO: Usar applyRegen para todo ---
+
+    let lastRegenAt = basePlayer.last_regen_at;
+    if (lastRegenAt) lastRegenAt = toDate(lastRegenAt);
+
     const regenResult = applyRegen({
         currentHp: Number(basePlayer.current_hp) || 0,
         maxHp,
         currentEnergy: Number(basePlayer.energy) || 0,
-        maxEnergy: ENERGY_MAX_DEFAULT, // O basePlayer.max_energy si existiera
+        maxEnergy: 100,
         currentValor: Number(basePlayer.valor) || 0,
         maxValor: VALOR_MAX_DEFAULT,
-        lastRegenAt: basePlayer.last_regen_at,
+        lastRegenAt,
         now: new Date()
     });
 
     let currentHp = regenResult.currentHp;
     let currentEnergy = regenResult.currentEnergy;
     let currentValor = regenResult.currentValor;
-    const lastRegenAt = regenResult.lastRegenAt;
 
-    // Clamp de seguridad
     if (currentHp > maxHp) currentHp = maxHp;
 
-    const lastPersisted = basePlayer.last_regen_at ? new Date(basePlayer.last_regen_at).getTime() : null;
-    const lastComputed = lastRegenAt ? new Date(lastRegenAt).getTime() : null;
-    
-    // Detectar si hubo cambios en CUALQUIER stat
-    const needsUpdate = 
-        currentHp !== basePlayer.current_hp || 
-        currentEnergy !== basePlayer.energy || 
-        currentValor !== basePlayer.valor || 
-        (lastComputed && lastComputed !== lastPersisted);
+    // Si hay cambios, actualizar Firestore
+    const lastPersisted = basePlayer.last_regen_at ? toDate(basePlayer.last_regen_at).getTime() : null;
+    const lastComputed = regenResult.lastRegenAt.getTime();
+
+    const needsUpdate = currentHp !== (basePlayer.current_hp || 0) || currentEnergy !== (basePlayer.energy || 0) || currentValor !== (basePlayer.valor || 0) || (lastComputed && lastComputed !== lastPersisted);
 
     if (needsUpdate) {
-        // --- QUERY ACTUALIZADA: Guarda Energía y Valor ---
-        await db.query(
-            'UPDATE players SET current_hp = $1, energy = $2, valor = $3, last_regen_at = $4 WHERE id = $5',
-            [currentHp, currentEnergy, currentValor, lastRegenAt, basePlayer.id]
-        );
+        await db.collection('players').doc(basePlayer.id).update({
+            current_hp: currentHp, energy: currentEnergy, valor: currentValor, last_regen_at: regenResult.lastRegenAt,
+        });
     }
+
+    // Si stats es un string, devolverlo como objeto normalizado
+    const finalStats = typeof basePlayer.stats === 'string' ? JSON.stringify(totalStats) : totalStats;
 
     return {
         ...basePlayer,
-        stats: normalizeStats(basePlayer.stats),
-        current_hp: currentHp,
-        energy: currentEnergy, // Devolvemos valor actualizado
-        valor: currentValor,   // Devolvemos valor actualizado
-        last_regen_at: lastRegenAt,
-        calculatedMaxHp: maxHp,
-        calculated_max_hp: maxHp,
-        total_stats: totalStats
+        last_regen_at: regenResult.lastRegenAt,
+        current_hp: currentHp, energy: currentEnergy, valor: currentValor,
+        calculatedMaxHp: maxHp, calculated_max_hp: maxHp, total_stats: totalStats,
+        stats: baseStatsRaw || {},
     };
 };
 
-module.exports = {
-    HP_REGEN_AMOUNT,
-    HP_REGEN_EVERY_SECONDS,
-    computeTotalStats,
-    computeMaxHp,
-    applyRegen, // Exportamos la nueva función
-    hydratePlayer
-};
+hydratePlayer.normalizeStats = normalizeStats;
+hydratePlayer.computeTotalStats = computeTotalStats;
+hydratePlayer.computeMaxHp = computeMaxHp;
+hydratePlayer.applyRegen = applyRegen;
+
+module.exports = { HP_REGEN_AMOUNT, HP_REGEN_EVERY_SECONDS, computeTotalStats, computeMaxHp, applyRegen, hydratePlayer };

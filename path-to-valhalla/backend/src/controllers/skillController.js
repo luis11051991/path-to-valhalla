@@ -1,87 +1,58 @@
-const pool = require('../config/db');
+const { db } = require('../config/db');
 
-// Upgrade skill using copper-based pricing
 exports.upgradeSkill = async (req, res) => {
     const userId = req.user.id;
     const { playerSkillId } = req.body;
 
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
+        // 1) Cargar skill data y verificar ownership
+        const skillDoc = await db.collection('players').doc(userId).collection('skills').doc(String(playerSkillId)).get();
+        if (!skillDoc.exists || skillDoc.data().player_id !== userId) throw new Error('Habilidad no encontrada o no te pertenece.');
 
-        // 1) Load skill data and verify ownership
-        const skillQuery = `
-            SELECT ps.id, ps.skill_level, ps.player_id,
-                   s.name, s.price_gold AS base_price, s.max_level
-            FROM player_skills ps
-            JOIN skills s ON ps.skill_id = s.id
-            WHERE ps.id = $1 AND ps.player_id = $2
-        `;
-        const skillRes = await client.query(skillQuery, [playerSkillId, userId]);
+        const skillData = skillDoc.data();
+        // Cargar datos de la skill desde el catalogo
+        const tplDoc = await db.collection('skills').doc(String(skillData.skill_id)).get();
+        if (!tplDoc.exists) throw new Error('Skill template not found');
+        
+        const currentLevel = Number(skillData.skill_level) || 1;
+        const maxLevel = Number(tplDoc.data().max_level) || 10;
+        const basePriceInCopper = Number(tplDoc.data().price_gold || 100);
 
-        if (skillRes.rows.length === 0) {
-            throw new Error('Habilidad no encontrada o no te pertenece.');
-        }
+        if (currentLevel >= maxLevel) throw new Error('Esta habilidad ya esta en su nivel maximo!');
 
-        const skill = skillRes.rows[0];
-        const currentLevel = Number(skill.skill_level) || 1;
-        const maxLevel = Number(skill.max_level) || 10;
-
-        if (currentLevel >= maxLevel) {
-            throw new Error('Esta habilidad ya esta en su nivel maximo!');
-        }
-
-        // DB stores price_gold already in copper (e.g. 10000 = 1 gold)
-        const basePriceInCopper = Number(skill.base_price ?? 100);
+        // Calcular costo
         const costInCopper = Math.floor(basePriceInCopper * Math.pow(1.3, currentLevel - 1));
 
-        // 2) Check player funds
-        const playerRes = await client.query('SELECT gold, silver, copper FROM players WHERE id = $1', [userId]);
-        const player = playerRes.rows[0];
-
-        const gold = Number(player.gold) || 0;
-        const silver = Number(player.silver) || 0;
-        const copper = Number(player.copper) || 0;
-        let totalCopper = (gold * 10000) + (silver * 100) + copper;
+        // 2) Verificar fondos del jugador
+        const playerDoc = await db.collection('players').doc(userId).get();
+        const p = playerDoc.data();
+        let totalCopper = (Number(p.gold || 0) * 10000) + (Number(p.silver || 0) * 100) + Number(p.copper || 0);
 
         if (totalCopper < costInCopper) {
             const g = Math.floor(costInCopper / 10000);
             const s = Math.floor((costInCopper % 10000) / 100);
             const c = costInCopper % 100;
-            throw new Error(`Fondos insuficientes. Costo: ${g}g ${s}s ${c}c`);
+            throw new Error('Fondos insuficientes. Costo: ' + g + 'g ' + s + 's ' + c + 'c');
         }
 
-        // 3) Charge player and upgrade skill
+        // 3) Cobrar y actualizar skill
         totalCopper -= costInCopper;
 
-        const newGold = Math.floor(totalCopper / 10000);
-        const remainder = totalCopper % 10000;
-        const newSilver = Math.floor(remainder / 100);
-        const newCopper = remainder % 100;
-
-        await client.query(
-            'UPDATE players SET gold = $1, silver = $2, copper = $3 WHERE id = $4',
-            [newGold, newSilver, newCopper, userId]
-        );
-
-        await client.query(
-            'UPDATE player_skills SET skill_level = $1 WHERE id = $2',
-            [currentLevel + 1, playerSkillId]
-        );
-
-        await client.query('COMMIT');
-
-        res.json({
-            success: true,
-            message: `${skill.name} subio a Nivel ${currentLevel + 1}!`,
-            newLevel: currentLevel + 1,
-            newFunds: { gold: newGold, silver: newSilver, copper: newCopper }
+        await db.runTransaction(async (t) => {
+            t.update(db.collection('players').doc(userId), {
+                gold: Math.floor(totalCopper / 10000),
+                silver: Math.floor((totalCopper % 10000) / 100),
+                copper: totalCopper % 100,
+            });
+            t.update(db.collection('players').doc(userId).collection('skills').doc(String(playerSkillId)), {
+                skill_level: currentLevel + 1,
+            });
         });
+
+        res.json({ success: true, message: tplDoc.data().name + ' subio a Nivel ' + (currentLevel + 1) + '!', newLevel: currentLevel + 1 });
+
     } catch (err) {
-        await client.query('ROLLBACK');
         console.error(err);
         res.status(400).json({ message: err.message });
-    } finally {
-        client.release();
     }
 };

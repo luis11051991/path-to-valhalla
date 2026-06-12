@@ -1,26 +1,12 @@
-const pool = require('../config/db');
+const { db } = require('../config/db');
 
-// --- CONSTANTES ---
-const MAX_REFRESHES = 6; 
-const ITEMS_PER_ROTATION = 20; // <--- AUMENTADO A 20 ÍTEMS
+const MAX_REFRESHES = 6;
+const ITEMS_PER_ROTATION = 20;
 
-// --- HELPERS ---
 const getRefreshCost = (timesUsed) => {
-    if (timesUsed === 0) return 0; 
-    if (timesUsed >= MAX_REFRESHES) return -1; 
-    return timesUsed * 10; 
-};
-
-const normalizeCurrency = (currentGold, currentSilver, currentCopper, changeAmount) => {
-    let totalCopper = (parseInt(currentGold) * 10000) + (parseInt(currentSilver) * 100) + parseInt(currentCopper) + parseInt(changeAmount);
-    if (totalCopper < 0) return null; 
-    
-    const newGold = Math.floor(totalCopper / 10000);
-    totalCopper %= 10000;
-    const newSilver = Math.floor(totalCopper / 100);
-    const newCopper = totalCopper % 100;
-
-    return { gold: newGold, silver: newSilver, copper: newCopper }; 
+    if (timesUsed === 0) return 0;
+    if (timesUsed >= MAX_REFRESHES) return -1;
+    return timesUsed * 10;
 };
 
 const generateConcreteStats = (templateStats) => {
@@ -36,234 +22,213 @@ const generateConcreteStats = (templateStats) => {
     return finalStats;
 };
 
-const generateNewStock = async (client, userId) => {
-    const randomTemplates = await client.query(`
-        SELECT * FROM items_templates 
-        WHERE in_shop = true 
-        ORDER BY RANDOM() LIMIT $1
-    `, [ITEMS_PER_ROTATION]);
+const generateNewStock = async (userId) => {
+    const randomTemplatesSnap = await db.collection('items_templates')
+        .where('in_shop', '==', true)
+        .limit(ITEMS_PER_ROTATION)
+        .get();
 
-    const stockItems = randomTemplates.rows.map((tpl, index) => {
-        return {
-            shop_id: index, 
-            template_id: tpl.id,
-            name: tpl.name,
-            type: tpl.type,
-            rarity: tpl.rarity,
-            icon: tpl.icon,
-            image_url: tpl.image_url,
-            description: tpl.description,
-            min_level: tpl.min_level,
-            specific_stats: generateConcreteStats(tpl.base_stats), 
-            price_copper: tpl.price_copper,
-            buy_price: tpl.price_copper * 5,
-            stackable: tpl.stackable
-        };
-    });
+    // Firestore no tiene ORDER BY RANDOM(), asi que traemos todos y ordenamos en memoria
+    const allShopSnap = await db.collection('items_templates').where('in_shop', '==', true).get();
+    const allTemplates = allShopSnap.docs.map(d => d.data());
+    
+    // Shuffle en memoria
+    for (let i = allTemplates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allTemplates[i], allTemplates[j]] = [allTemplates[j], allTemplates[i]];
+    }
 
-    await client.query(
-        'UPDATE players SET current_shop_stock = $1, last_shop_reset = NOW() WHERE id = $2',
-        [JSON.stringify(stockItems), userId]
-    );
+    const stockItems = allTemplates.slice(0, ITEMS_PER_ROTATION).map((tpl, index) => ({
+        shop_id: index, template_id: Number(tpl.id), name: tpl.name, type: tpl.type, rarity: tpl.rarity,
+        icon: tpl.icon, image_url: tpl.image_url, description: tpl.description, min_level: tpl.min_level,
+        specific_stats: generateConcreteStats(tpl.base_stats), price_copper: tpl.price_copper,
+        buy_price: tpl.price_copper * 5, stackable: tpl.stackable || false,
+    }));
+
+    // Guardar stock como array en el jugador
+    await db.collection('players').doc(userId).set({
+        current_shop_stock: stockItems, last_shop_reset: new Date(), shop_refreshes_used: 0,
+    }, { merge: true });
 
     return stockItems;
 };
 
-// 1. OBTENER TIENDA
 exports.getShopItems = async (req, res) => {
     const userId = req.user.id;
-    const client = await pool.connect();
 
     try {
-        await client.query('BEGIN');
-
-        const playerRes = await client.query('SELECT shop_refreshes_used, last_shop_reset, current_shop_stock FROM players WHERE id = $1', [userId]);
-        const player = playerRes.rows[0];
+        const playerDoc = await db.collection('players').doc(userId).get();
+        if (!playerDoc.exists) return res.status(404).json({ message: 'Jugador no encontrado.' });
         
-        let currentStock = player.current_shop_stock || [];
-        
-        const lastReset = new Date(player.last_shop_reset);
-        const now = new Date();
-        const isNewDay = lastReset.getDate() !== now.getDate() || lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear();
+        let currentStock = playerDoc.data().current_shop_stock || [];
+        const playerShopRefreshesUsed = playerDoc.data().shop_refreshes_used || 0;
 
-        if (isNewDay) {
-            await client.query('UPDATE players SET shop_refreshes_used = 0 WHERE id = $1', [userId]);
-            player.shop_refreshes_used = 0;
-            currentStock = []; 
-        }
+        // Verificar si es nuevo dia
+        const lastReset = playerDoc.data().last_shop_reset;
+        if (lastReset) {
+            const lastResetDate = lastReset.toDate ? lastReset.toDate() : new Date(lastReset);
+            const now = new Date();
+            const isNewDay = lastResetDate.getDate() !== now.getDate() || lastResetDate.getMonth() !== now.getMonth();
 
-        if (!currentStock || currentStock.length === 0) {
-            currentStock = await generateNewStock(client, userId);
-        }
-
-        await client.query('COMMIT');
-
-        res.json({ 
-            success: true, 
-            items: currentStock, 
-            refreshesUsed: player.shop_refreshes_used,
-            nextRefreshCost: getRefreshCost(player.shop_refreshes_used)
-        });
-
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(err);
-        res.status(500).json({ message: 'Error cargando tienda.' });
-    } finally {
-        client.release();
-    }
-};
-
-// 2. REFRESCAR TIENDA
-exports.refreshShop = async (req, res) => {
-    const userId = req.user.id;
-    const client = await pool.connect();
-
-    try {
-        await client.query('BEGIN');
-
-        const playerRes = await client.query('SELECT onix, shop_refreshes_used FROM players WHERE id = $1', [userId]);
-        const player = playerRes.rows[0];
-        const cost = getRefreshCost(player.shop_refreshes_used);
-
-        if (cost === -1) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Límite diario alcanzado.' }); }
-        if (player.onix < cost) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'No tienes suficiente Ónix.' }); }
-
-        if (cost > 0) {
-            await client.query('UPDATE players SET onix = onix - $1 WHERE id = $2', [cost, userId]);
-        }
-
-        await client.query('UPDATE players SET shop_refreshes_used = shop_refreshes_used + 1 WHERE id = $1', [userId]);
-
-        const newStock = await generateNewStock(client, userId);
-
-        await client.query('COMMIT');
-
-        res.json({
-            success: true,
-            message: '¡Tienda refrescada!',
-            items: newStock,
-            refreshesUsed: player.shop_refreshes_used + 1,
-            nextRefreshCost: getRefreshCost(player.shop_refreshes_used + 1),
-            newOnix: player.onix - cost
-        });
-
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(err);
-        res.status(500).json({ message: 'Error al refrescar.' });
-    } finally {
-        client.release();
-    }
-};
-
-// 3. COMPRAR ÍTEM (CORREGIDO PARA EVITAR RANGOS EN INVENTARIO)
-exports.buyItem = async (req, res) => {
-    const userId = req.user.id;
-    const { shopId, quantity } = req.body; 
-    const qty = quantity || 1;
-
-    const client = await pool.connect();
-
-    try {
-        await client.query('BEGIN');
-
-        const playerCheck = await client.query('SELECT current_shop_stock, gold, silver, copper FROM players WHERE id = $1', [userId]);
-        let currentStock = playerCheck.rows[0].current_shop_stock || [];
-        const player = playerCheck.rows[0];
-
-        // Buscar ítem
-        const targetItemIndex = currentStock.findIndex(i => i.shop_id === parseInt(shopId));
-        
-        if (targetItemIndex === -1) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ message: 'Este ítem ya se vendió.' });
-        }
-
-        const targetItem = currentStock[targetItemIndex];
-
-        // Cobrar
-        const totalCost = targetItem.buy_price * qty;
-        const newBalance = normalizeCurrency(player.gold, player.silver, player.copper, -totalCost);
-        
-        if (!newBalance) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Dinero insuficiente.' }); }
-
-        await client.query('UPDATE players SET gold = $1, silver = $2, copper = $3 WHERE id = $4', [newBalance.gold, newBalance.silver, newBalance.copper, userId]);
-
-        // Entregar ítem
-        let itemAdded = false;
-        if (targetItem.stackable) {
-            const existingRes = await client.query('SELECT id FROM player_items WHERE player_id = $1 AND template_id = $2 AND is_equipped = false LIMIT 1', [userId, targetItem.template_id]);
-            if (existingRes.rows.length > 0) {
-                await client.query('UPDATE player_items SET quantity = quantity + $1 WHERE id = $2', [qty, existingRes.rows[0].id]);
-                itemAdded = true;
+            if (isNewDay) {
+                await db.collection('players').doc(userId).update({ shop_refreshes_used: 0, current_shop_stock: [] });
+                currentStock = [];
             }
         }
 
-        if (!itemAdded) {
-            const slotsRes = await client.query('SELECT bag_slot FROM player_items WHERE player_id = $1 AND bag_slot IS NOT NULL', [userId]);
-            const occupiedSlots = new Set(slotsRes.rows.map(r => r.bag_slot));
-            let targetSlot = -1;
-            for (let i = 0; i < 200; i++) { if (!occupiedSlots.has(i)) { targetSlot = i; break; } }
-            if (targetSlot === -1) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Inventario lleno.' }); }
-
-            // --- CORRECCIÓN AQUÍ ---
-            // Forzamos la generación de stats concretos AHORA MISMO.
-            // Si el stock tenía rangos [4, 7], esto lo convierte en un número fijo (ej: 5) antes de guardarlo.
-            const finalStats = generateConcreteStats(targetItem.specific_stats);
-
-            await client.query(`
-                INSERT INTO player_items (player_id, template_id, bag_slot, quantity, base_stats, is_equipped, durability_current, durability_max, is_bound) 
-                VALUES ($1, $2, $3, $4, $5, false, 100, 100, false)
-            `, [userId, targetItem.template_id, targetSlot, qty, finalStats]);
+        if (!currentStock || currentStock.length === 0) {
+            currentStock = await generateNewStock(userId);
         }
 
-        // Eliminar del stock
-        currentStock.splice(targetItemIndex, 1);
-        
-        await client.query('UPDATE players SET current_shop_stock = $1 WHERE id = $2', [JSON.stringify(currentStock), userId]);
-
-        await client.query('COMMIT');
-        
-        // Retornar inventario actualizado
-        const invRes = await client.query(`SELECT pi.*, it.name, it.image_url, it.rarity, it.type, it.price_copper, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 ORDER BY pi.bag_slot ASC`, [userId]);
-
         res.json({ 
-            success: true, 
-            message: `Compraste ${qty}x ${targetItem.name}`, 
-            inventory: invRes.rows, 
-            newMoney: newBalance,
-            updatedStock: currentStock
+            success: true, items: currentStock, refreshesUsed: playerShopRefreshesUsed,
+            nextRefreshCost: getRefreshCost(playerShopRefreshesUsed),
         });
 
-    } catch (err) { await client.query('ROLLBACK'); console.error(err); res.status(500).json({ message: err.message }); } finally { client.release(); }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error cargando tienda.' });
+    }
 };
 
-// 4. VENDER ÍTEM
+exports.refreshShop = async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        const playerDoc = await db.collection('players').doc(userId).get();
+        if (!playerDoc.exists) return res.status(404).json({ message: 'Jugador no encontrado.' });
+        
+        const cost = getRefreshCost(playerDoc.data().shop_refreshes_used || 0);
+        if (cost === -1) return res.status(400).json({ message: 'Limite diario alcanzado.' });
+        if ((playerDoc.data().onix || 0) < cost) return res.status(400).json({ message: 'No tienes suficiente Onix.' });
+
+        await db.runTransaction(async (t) => {
+            const playerRef = db.collection('players').doc(userId);
+            const updatedRefreshes = (playerDoc.data().shop_refreshes_used || 0) + 1;
+
+            if (cost > 0) {
+                t.update(playerRef, { onix: (playerDoc.data().onix || 0) - cost });
+            }
+            t.update(playerRef, { shop_refreshes_used: updatedRefreshes });
+        });
+
+        const newStock = await generateNewStock(userId);
+
+        res.json({ success: true, items: newStock, refreshesUsed: (playerDoc.data().shop_refreshes_used || 0) + 1, nextRefreshCost: getRefreshCost((playerDoc.data().shop_refreshes_used || 0) + 1) });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error refrescando tienda.' });
+    }
+};
+
+exports.buyItem = async (req, res) => {
+    const userId = req.user.id;
+    const { itemId, quantity } = req.body; // itemId es el shop_id del stock actual
+
+    try {
+        const playerDoc = await db.collection('players').doc(userId).get();
+        if (!playerDoc.exists) return res.status(404).json({ message: 'Jugador no encontrado.' });
+        
+        let currentStock = playerDoc.data().current_shop_stock || [];
+        const targetItemIndex = Number(itemId);
+        
+        if (targetItemIndex >= currentStock.length) throw new Error('Item no esta en el stock.');
+        const targetItem = currentStock[targetItemIndex];
+        
+        if (!targetItem) throw new Error('Item no encontrado.');
+
+        const qty = quantity || 1;
+        const totalCost = targetItem.buy_price * qty;
+
+        // Verificar fondos suficientes (gold/silver/copper)
+        const walletCopper = (parseInt(playerDoc.data().gold || 0) * 10000) + (parseInt(playerDoc.data().silver || 0) * 100) + parseInt(playerDoc.data().copper);
+        if (walletCopper < totalCost) throw new Error('Fondos insuficientes.');
+
+        await db.runTransaction(async (t) => {
+            const playerRef = db.collection('players').doc(userId);
+            
+            // Pagar
+            t.update(playerRef, {
+                copper: walletCopper - totalCost >= 0 ? (walletCopper - totalCost) : 0,
+            });
+
+            // Insertar en inventario del jugador
+            await t.create(db.collection('players').doc(userId).collection('items'), {
+                template_id: targetItem.template_id, bag_slot: null, quantity: qty,
+                base_stats: targetItem.specific_stats || {}, is_equipped: false,
+                durability_current: 100, durability_max: 100, is_bound: false, created_at: new Date(),
+            });
+        });
+
+        // Actualizar stock local
+        const playerDoc2 = await db.collection('players').doc(userId).get();
+        currentStock = playerDoc2.data().current_shop_stock || [];
+        currentStock.splice(targetItemIndex, 1);
+        await db.collection('players').doc(userId).update({ current_shop_stock: currentStock });
+
+        const invSnap = await db.collection('players').doc(userId).collection('items').orderBy('bag_slot', 'asc').get();
+        const inventoryItems = [];
+        for (const itemDoc of invSnap.docs) {
+            const data = itemDoc.data();
+            const tplDoc = await db.collection('items_templates').doc(String(data.template_id)).get();
+            if (tplDoc.exists) inventoryItems.push({ ...data, id: itemDoc.id, name: tplDoc.data().name });
+        }
+
+        res.json({ success: true, message: 'Compraste ' + qty + 'x ' + targetItem.name, inventory: inventoryItems, updatedStock: currentStock });
+
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ message: err.message });
+    }
+};
+
 exports.sellItem = async (req, res) => {
     const userId = req.user.id;
     const { itemId, quantity } = req.body;
-    const client = await pool.connect();
+
     try {
-        await client.query('BEGIN');
-        const itemRes = await client.query(`SELECT pi.*, it.name, it.price_copper FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.id = $1 AND pi.player_id = $2`, [itemId, userId]);
-        if (itemRes.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Ítem no encontrado.' }); }
-        const item = itemRes.rows[0];
-        if (item.price_copper <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'No tiene valor.' }); }
-
-        let qtyToSell = quantity || item.quantity;
-        if (qtyToSell > item.quantity) qtyToSell = item.quantity;
-        const totalValue = item.price_copper * qtyToSell;
-
-        if (qtyToSell >= item.quantity) { await client.query('DELETE FROM player_items WHERE id = $1', [itemId]); } 
-        else { await client.query('UPDATE player_items SET quantity = quantity - $1 WHERE id = $2', [qtyToSell, itemId]); }
-
-        const playerRes = await client.query('SELECT gold, silver, copper FROM players WHERE id = $1', [userId]);
-        const newMoney = normalizeCurrency(playerRes.rows[0].gold, playerRes.rows[0].silver, playerRes.rows[0].copper, totalValue);
-        await client.query('UPDATE players SET gold = $1, silver = $2, copper = $3 WHERE id = $4', [newMoney.gold, newMoney.silver, newMoney.copper, userId]);
+        const itemRef = db.collection('players').doc(userId).collection('items').doc(itemId);
+        const itemDoc = await itemRef.get();
+        if (!itemDoc.exists) return res.status(404).json({ message: 'Item no encontrado.' });
         
-        await client.query('COMMIT');
-        const invRes = await client.query(`SELECT pi.*, it.name, it.image_url, it.rarity, it.type, it.price_copper, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 ORDER BY pi.bag_slot ASC`, [userId]);
-        res.json({ success: true, message: `Vendiste ${qtyToSell}x ${item.name}`, inventory: invRes.rows, newMoney });
-    } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ message: 'Error venta' }); } finally { client.release(); }
+        const itemData = itemDoc.data();
+        const tplDoc = await db.collection('items_templates').doc(String(itemData.template_id)).get();
+        if (!tplDoc.exists || tplDoc.data().price_copper <= 0) return res.status(400).json({ message: 'No tiene valor.' });
+
+        let qtyToSell = quantity || itemData.quantity;
+        if (qtyToSell > itemData.quantity) qtyToSell = itemData.quantity;
+        const totalValue = tplDoc.data().price_copper * qtyToSell;
+
+        // Eliminar item o reducir cantidad
+        if (qtyToSell >= itemData.quantity) {
+            await itemRef.delete();
+        } else {
+            await itemRef.update({ quantity: itemData.quantity - qtyToSell });
+        }
+
+        // Agregar al wallet
+        const playerDoc = await db.collection('players').doc(userId).get();
+        const newTotalCopper = (playerDoc.data().gold || 0) * 10000 + (playerDoc.data().silver || 0) * 100 + (playerDoc.data().copper || 0) + totalValue;
+
+        await db.collection('players').doc(userId).update({
+            gold: Math.floor(newTotalCopper / 10000),
+            silver: Math.floor((newTotalCopper % 10000) / 100),
+            copper: newTotalCopper % 100,
+        });
+
+        const invSnap = await db.collection('players').doc(userId).collection('items').orderBy('bag_slot', 'asc').get();
+        const inventoryItems = [];
+        for (const itemDoc of invSnap.docs) {
+            const data = itemDoc.data();
+            const tplDc = await db.collection('items_templates').doc(String(data.template_id)).get();
+            if (tplDc.exists) inventoryItems.push({ ...data, id: itemDoc.id, name: tplDc.data().name });
+        }
+
+        res.json({ success: true, message: 'Vendiste ' + qtyToSell + 'x', inventory: inventoryItems });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: err.message });
+    }
 };
