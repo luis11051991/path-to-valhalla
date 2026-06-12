@@ -1,4 +1,4 @@
-const { initializeApp, cert } = require('firebase-admin/app');
+const { initializeApp, getApp, getApps, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 
@@ -6,11 +6,13 @@ let db, auth;
 
 try {
   const serviceAccount = require('../serviceAccountKey.json');
-  const app = initializeApp({
-    credential: cert(serviceAccount),
-  });
-  db = getFirestore(app);
-  auth = getAuth(app);
+  if (getApps().length === 0) {
+    initializeApp({ credential: cert(serviceAccount) });
+  } else {
+    getApp();
+  }
+  db = getFirestore(getApp());
+  auth = getAuth(getApp());
 } catch (error) {
   console.error('Firestore initialization error:', error.message);
   db = null;

@@ -1,5 +1,6 @@
 // Firebase Admin SKD - Server Side
-const { initializeApp, applicationDefault, cert } = require('firebase-admin/app');
+const path = require('path');
+const { initializeApp, getApp, getApps, applicationDefault, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 let firebaseApp = null;
@@ -7,15 +8,16 @@ let auth = null;
 let db = null;
 
 try {
-  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  if (serviceAccountPath) {
-    const serviceAccount = require(serviceAccountPath);
+  const serviceAccountPath = path.resolve(__dirname, '../serviceAccountKey.json');
+  const serviceAccount = require(serviceAccountPath);
+  
+  if (getApps().length === 0) {
     firebaseApp = initializeApp({ credential: cert(serviceAccount) });
   } else {
-    firebaseApp = initializeApp(applicationDefault());
+    firebaseApp = getApp();
   }
 } catch (error) {
-  console.warn('Firebase Admin SDK not configured.');
+  console.warn('Firebase Admin SDK not configured:', error.message);
 }
 
 if (firebaseApp) {

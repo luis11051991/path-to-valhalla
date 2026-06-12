@@ -1,67 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 // 1. Importamos las herramientas del Router
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Auth from './components/Auth';
-import RaceSelection from './components/RaceSelection';
-import HeroOverview from './pages/HeroOverview';
-import Expeditions from './pages/Expeditions';
-import Packages from './pages/Packages';
-import Market from './pages/Market';
-import Workshop from './pages/Workshop';
-import Bank from './pages/Bank';
-import ValhallaHall from './pages/ValhallaHall';
-import WelcomeBack from './components/WelcomeBack';
-import GameLayout from './components/layout/GameLayout';
-import OnixShopModal from './components/OnixShopModal';
-import Grimoire from './pages/Grimoire';
-import Bestiary from './pages/Bestiary';
-import MessagingPage from './pages/MessagingPage';
-import { apiUrl } from './constants/api';
+import Auth from "./components/Auth";
+import RaceSelection from "./components/RaceSelection";
+import HeroOverview from "./pages/HeroOverview";
+import Expeditions from "./pages/Expeditions";
+import Packages from "./pages/Packages";
+import Market from "./pages/Market";
+import Workshop from "./pages/Workshop";
+import Bank from "./pages/Bank";
+import ValhallaHall from "./pages/ValhallaHall";
+import WelcomeBack from "./components/WelcomeBack";
+import GameLayout from "./components/layout/GameLayout";
+import OnixShopModal from "./components/OnixShopModal";
+import Grimoire from "./pages/Grimoire";
+import Bestiary from "./pages/Bestiary";
+import MessagingPage from "./pages/MessagingPage";
+import { apiUrl } from "./constants/api";
+import { signOutFirebase, auth } from "./lib/firebase";
 
-import { io } from 'socket.io-client';
-import { messageService } from './services/messageService';
+import { io } from "socket.io-client";
+import { messageService } from "./services/messageService";
 
 function App() {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('auth'); // 'auth', 'race', 'welcome_back', 'game'
+  const [view, setView] = useState("auth"); // 'auth', 'race', 'welcome_back', 'game'
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [socket, setSocket] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
   // --- LÓGICA DE SESIÓN ---
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
+    const storedUser = localStorage.getItem("user");
+    const token = localStorage.getItem("token");
 
     if (storedUser && token) {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
-      setView('game');
+      setView("game");
       // Iniciar socket y datos
       initSocket(token);
       updateUnreadCount();
 
-      fetch(apiUrl('/api/auth/profile'), {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json', 'x-auth-token': token }
+      fetch(apiUrl("/api/auth/profile"), {
+        method: "GET",
+        headers: { "Content-Type": "application/json", "x-auth-token": token },
       })
-        .then(res => res.ok ? res.json() : Promise.reject('Sesión expirada'))
-        .then(data => data.user && handleUserUpdate(data.user))
-        .catch(err => console.log("Error validando sesión:", err));
+        .then((res) => (res.ok ? res.json() : Promise.reject("Sesión expirada")))
+        .then((data) => data.user && handleUserUpdate(data.user))
+        .catch((err) => console.log("Error validando sesi\u00f3n:", err));
     }
   }, []);
 
   const initSocket = (token) => {
     // Conexión socket
-    const newSocket = io(apiUrl(''), {
-      auth: { token }
+    const newSocket = io(apiUrl(""), {
+      auth: { token },
     });
 
-    newSocket.on('connect', () => console.log("Socket conectado"));
+    newSocket.on("connect", () => console.log("Socket conectado"));
 
     // Escuchar nuevos mensajes GLOBALMENTE para el contador
-    newSocket.on('new_message', () => {
+    newSocket.on("new_message", () => {
       updateUnreadCount();
       // Opcional: Sonido de notificación
     });
@@ -76,8 +77,8 @@ function App() {
 
   const handleAuthSuccess = (userData, isRegistration) => {
     setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-    const token = localStorage.getItem('token');
+    localStorage.setItem("user", JSON.stringify(userData));
+    const token = localStorage.getItem("token");
 
     // Iniciar socket al login
     if (token) {
@@ -85,27 +86,31 @@ function App() {
       updateUnreadCount();
     }
 
-    if (isRegistration) setView('race');
-    else setView('welcome_back');
+    if (isRegistration) setView("race");
+    else setView("welcome_back");
   };
 
   const handleRaceSelected = (updatedUserData) => {
     setUser(updatedUserData);
-    localStorage.setItem('user', JSON.stringify(updatedUserData));
-    setView('game');
+    localStorage.setItem("user", JSON.stringify(updatedUserData));
+    setView("game");
   };
 
   const handleUserUpdate = (updatedData) => {
     const newUserState = { ...user, ...updatedData };
     setUser(newUserState);
-    localStorage.setItem('user', JSON.stringify(newUserState));
+    localStorage.setItem("user", JSON.stringify(newUserState));
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  // --- Logout con Firebase Auth ---
+  const handleLogout = async () => {
+    try {
+      await signOutFirebase();
+    } catch (e) {
+      console.log("Error en logout:", e);
+    }
     setUser(null);
-    setView('auth');
+    setView("auth");
     setIsShopOpen(false);
   };
 
@@ -114,12 +119,12 @@ function App() {
 
   // --- RENDERIZADO ---
 
-  if (view === 'auth') return <Auth onLoginSuccess={handleAuthSuccess} />;
-  if (view === 'race') return <RaceSelection onRaceSelect={handleRaceSelected} />;
-  if (view === 'welcome_back' && user) return <WelcomeBack user={user} onComplete={() => setView('game')} />;
+  if (view === "auth") return <Auth onLoginSuccess={handleAuthSuccess} />;
+  if (view === "race") return <RaceSelection onRaceSelect={handleRaceSelected} />;
+  if (view === "welcome_back" && user) return <WelcomeBack user={user} onComplete={() => setView("game")} />;
 
   // AQUÍ COMIENZA EL ROUTER (Solo cuando el usuario ya entró al juego)
-  if (view === 'game' && user) {
+  if (view === "game" && user) {
     return (
       <BrowserRouter>
         <div className="w-full h-full font-sans text-slate-100">
@@ -150,7 +155,7 @@ function App() {
               {/* Inventario (Paquetes) */}
               <Route
                 path="/inventory"
-                element={<Packages user={user} token={localStorage.getItem('token')} onUpdateUser={handleUserUpdate} />}
+                element={<Packages user={user} token={localStorage.getItem("token")} onUpdateUser={handleUserUpdate} />}
               />
 
               {/* Bestiario */}
@@ -201,7 +206,11 @@ function App() {
     );
   }
 
-  return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-amber-500 font-bold animate-pulse">Cargando Valhalla...</div>;
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center text-amber-500 font-bold animate-pulse">
+      Cargando Valhalla...
+    </div>
+  );
 }
 
 export default App;
