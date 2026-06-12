@@ -47,3 +47,5 @@ temp/
 # Firebase
 .firestore/
 .firebase/
+path-to-valhalla/backend/package-lock.json
+path-to-valhalla/frontend/package-lock.json
