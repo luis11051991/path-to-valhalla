@@ -16,6 +16,7 @@ const authMiddleware = require('./src/middleware/authMiddleware');
 
 // --- IMPORTAR GESTORES DE RUTAS (Routers) ---
 const authRoutes = require('./src/routes/authRoutes');
+const firebaseAuthRoutes = require('./src/routes/firebaseAuthRoutes');
 const evolutionRoutes = require('./src/routes/evolutionRoutes');
 const expeditionRoutes = require('./src/routes/expeditionRoutes');
 const packageRoutes = require('./src/routes/packageRoutes');
@@ -37,6 +38,7 @@ app.use(express.json());
 
 // --- 1. RUTAS NUEVAS (Router) ---
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', firebaseAuthRoutes);
 app.use('/api/evolution', evolutionRoutes);
 app.use('/api/expeditions', expeditionRoutes);
 app.use('/api/packages', packageRoutes);

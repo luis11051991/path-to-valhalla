@@ -49,3 +49,4 @@ temp/
 .firebase/
 path-to-valhalla/backend/package-lock.json
 path-to-valhalla/frontend/package-lock.json
+path-to-valhalla/backend/serviceAccountKey.json
