@@ -2,8 +2,8 @@
 node_modules/
 
 # Environment & config
-.env
-.env.*
+# .env
+# .env.*
 !.env.example
 
 # Build output
@@ -49,5 +49,5 @@ temp/
 .firebase/
 path-to-valhalla/backend/package-lock.json
 path-to-valhalla/frontend/package-lock.json
-path-to-valhalla/backend/serviceAccountKey.json
-path-to-valhalla/backend/src/serviceAccountKey.json
+# path-to-valhalla/backend/serviceAccountKey.json
+# path-to-valhalla/backend/src/serviceAccountKey.json
