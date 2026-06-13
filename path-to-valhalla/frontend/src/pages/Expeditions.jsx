@@ -111,7 +111,7 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 setLoading(false);
             })
             .catch(err => console.error(err));
-    }, [user?.level]); 
+    }, [user]); 
 
     // --- CÁLCULO DE STATS REALES ---
     const playerStats = useMemo(() => {
@@ -403,7 +403,6 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                     <EnemyCard
                                         key={enemy.id}
                                         enemy={enemy}
-                                        user={user}
                                         onAttack={() => handleAttack(enemy)}
                                         disabled={isBattling || cooldownSeconds > 0}
                                     />
@@ -417,10 +416,10 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 {view === 'BATTLE' && battleResult && (
                     <BattleModal
                         result={battleResult}
-                        user={user}
                         baseEnemy={currentEnemy}
                         playerImage={getAvatarImage()}
                         playerBg={getPlayerBackground()}
+                        playerName={user.username}
                         playerStats={playerStats}
                         zoneImage={selectedZone?.image_url}
                         onClose={() => { setView('ENEMIES'); setBattleResult(null); setCurrentEnemy(null); }}
@@ -432,7 +431,7 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 };
 
 // --- COMPONENTE CARTA ENEMIGO ---
-const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
+const EnemyCard = ({ enemy, onAttack, disabled }) => {
     const DIFFICULTY_CONFIG = {
         1: { label: 'Fácil', color: 'text-green-400', border: 'border-green-900/30' },
         2: { label: 'Medio', color: 'text-yellow-400', border: 'border-yellow-900/30' },
@@ -514,7 +513,7 @@ const EnemyCard = ({ enemy, user, onAttack, disabled }) => {
 };
 
 // --- COMPONENTE MODAL DE BATALLA ---
-const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, playerStats, zoneImage }) => {
+const BattleModal = ({ result, onClose, playerImage, playerBg, playerName, baseEnemy, playerStats, zoneImage }) => {
     const enemyStats = result.enemy_stats || {};
     const isEnemyReady = enemyStats.hp_max != null;
     const initialEnemyHpValue = enemyStats.hp_max ?? result.initialEnemyHp ?? 0;
@@ -532,13 +531,6 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
     useEffect(() => {
         let idx = 0;
         const log = result.log || [];
-
-        setCurrentHp({
-            player: result.initialPlayerHp,
-            enemy: initialEnemyHpCurrent
-        });
-        
-        setTotalDamage({ player: 0, enemy: 0 });
 
         timerRef.current = setInterval(() => {
             if (idx < log.length) {
@@ -571,7 +563,7 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
         }, 600); 
 
         return () => clearInterval(timerRef.current);
-    }, [result]);
+    }, [initialEnemyHpCurrent, result]);
 
     const handleSkip = () => {
         if (timerRef.current) clearInterval(timerRef.current);
@@ -657,7 +649,7 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                                     <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900 to-transparent h-10 z-20" />
                                 </div>
                                 <div className="p-2 bg-slate-950 text-center border-t border-slate-800">
-                                    <div className="text-amber-500 font-bold text-xs md:text-sm truncate uppercase tracking-wider">{user.username}</div>
+                                    <div className="text-amber-500 font-bold text-xs md:text-sm truncate uppercase tracking-wider">{playerName}</div>
                                     <div className="w-full h-3 bg-slate-800 rounded-full mt-2 overflow-hidden border border-slate-700 relative">
                                         <div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500" style={{ width: `${playerPct}%` }} />
                                     </div>

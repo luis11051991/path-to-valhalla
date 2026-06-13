@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom'; 
 import { BookOpen, Skull, Sword, Shield, Info, HelpCircle, X, Heart, Crosshair, Ban, Gift } from 'lucide-react';
 import { apiUrl } from '../constants/api';
@@ -6,6 +6,7 @@ import { apiUrl } from '../constants/api';
 const Bestiary = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const contextData = useOutletContext();
     const user = propUser || (contextData ? contextData[0] : null);
+    void propOnUpdateUser;
     
     const [enemies, setEnemies] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -14,11 +15,7 @@ const Bestiary = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     // CORRECCIÓN: Siempre inicia en la pestaña 0 (Niveles 1-10) por defecto
     const [activeTabTier, setActiveTabTier] = useState(0); 
 
-    useEffect(() => {
-        if(user) fetchBestiary();
-    }, [user]);
-
-    const fetchBestiary = async () => {
+    const fetchBestiary = useCallback(async () => {
         try {
             const res = await fetch(apiUrl('/api/bestiary'), { 
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -33,7 +30,15 @@ const Bestiary = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        if (!user) return;
+        const timer = setTimeout(() => {
+            void fetchBestiary();
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [fetchBestiary, user]);
 
     // --- LÓGICA DE FILTRADO POR PESTAÑAS ---
     const groupedEnemies = useMemo(() => {
@@ -101,11 +106,10 @@ const Bestiary = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     // --- MODAL DE DETALLE (CON DATOS REALES) ---
-    const DetailModal = () => {
-        if (!selectedEnemy) return null;
+    const detailModal = selectedEnemy ? (() => {
         const e = selectedEnemy;
         const drops = e.drops || []; 
-        const stats = e.calculated_stats || {}; // Usamos los stats calculados del backend
+        const stats = e.calculated_stats || {};
 
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in p-4" onClick={() => setSelectedEnemy(null)}>
@@ -185,7 +189,7 @@ const Bestiary = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 </div>
             </div>
         );
-    };
+    })() : null;
 
     if (!user) return null;
 
@@ -250,7 +254,7 @@ const Bestiary = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 </div>
             )}
 
-            <DetailModal />
+            {detailModal}
         </div>
     );
 };

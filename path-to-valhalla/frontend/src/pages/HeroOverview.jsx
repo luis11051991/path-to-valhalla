@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
     Maximize2, ScrollText, Image as ImageIcon, AlertTriangle, Ban,
@@ -61,10 +61,32 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     });
     const [evolutionQuestData, setEvolutionQuestData] = useState(null);
 
-    const raceData = useMemo(
-        () => RACES.find((race) => race.id === user?.race) || RACES[0],
-        [user?.race]
-    );
+    const raceData = RACES.find((race) => race.id === user?.race) || RACES[0];
+
+    const fetchPets = useCallback(() => {
+        fetch(apiUrl('/api/my-pets'), { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setMyPets(data.pets);
+                    const equipped = data.pets.find(p => p.is_active);
+                    if (equipped) setActivePet(equipped);
+                    else if (data.pets.length > 0) setActivePet(data.pets[0]);
+                }
+            });
+    }, []);
+
+    const refreshUser = useCallback(async () => {
+        try {
+            const res = await fetch(apiUrl('/api/auth/profile'), {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            if (data.user) onUpdateUser(data.user);
+        } catch (error) {
+            console.error('Error refrescando perfil:', error);
+        }
+    }, [onUpdateUser]);
 
     // --- EFECTOS DE CARGA ---
     useEffect(() => {
@@ -79,15 +101,17 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     if (data.quest) setEvolutionQuestData(data);
                 })
                 .catch(err => console.error('Error cargando estado evolución:', err));
-        } else if (user.evolution_quest_status === 'completed') {
-            setEvolutionStatus('completed');
         } else {
-            setEvolutionStatus('locked');
+            const nextStatus = user.evolution_quest_status === 'completed' ? 'completed' : 'locked';
+            const timer = setTimeout(() => {
+                setEvolutionStatus(nextStatus);
+            }, 0);
+            return () => clearTimeout(timer);
         }
         
         // Refrescar inventario al cargar para asegurar consistencia
-        refreshUser();
-    }, [user?.level, user?.evolution_quest_status]);
+        void refreshUser();
+    }, [refreshUser, user]);
 
     // Cerrar menú contextual al hacer click en cualquier lado
     useEffect(() => {
@@ -105,33 +129,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     }, [showAvatarModal, user?.id]);
 
     useEffect(() => {
-        fetchPets();
-    }, []);
-
-    const fetchPets = () => {
-        fetch(apiUrl('/api/my-pets'), { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    setMyPets(data.pets);
-                    const equipped = data.pets.find(p => p.is_active);
-                    if (equipped) setActivePet(equipped);
-                    else if (data.pets.length > 0) setActivePet(data.pets[0]);
-                }
-            });
-    };
-
-    const refreshUser = async () => {
-        try {
-            const res = await fetch(apiUrl('/api/auth/profile'), {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-            });
-            const data = await res.json();
-            if (data.user) onUpdateUser(data.user);
-        } catch (error) {
-            console.error('Error refrescando perfil:', error);
-        }
-    };
+        void fetchPets();
+    }, [fetchPets]);
 
     // --- ACCIONES DE ÍTEMS (USAR) ---
     const handleUseItem = async (item) => {
@@ -148,7 +147,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             } else {
                 setErrorMsg(data.message);
             }
-        } catch (err) { setErrorMsg("Error de conexión al usar objeto."); }
+        } catch { setErrorMsg("Error de conexión al usar objeto."); }
         setContextMenu(null);
     };
 
@@ -298,19 +297,6 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         if (bagNumber === 3) return user.level >= 20;
         if (bagNumber >= 4) return user.rented_bags?.some(b => b.bag_number === bagNumber);
         return false;
-    };
-
-    const getBagTimeRemaining = (bagNumber) => {
-        const bag = user.rented_bags?.find(b => b.bag_number === bagNumber);
-        if (!bag) return null;
-        const now = new Date();
-        const expires = new Date(bag.expires_at);
-        const diffMs = expires - now;
-        if (diffMs <= 0) return "Expirado";
-        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        if (days > 0) return `${days}d ${hours}h`;
-        return `${hours}h restantes`;
     };
 
     const getEquippedItem = (slotName) => user.real_inventory?.find(i => i.is_equipped && i.equipped_slot === slotName);
@@ -471,14 +457,15 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         return combined;
     }, [itemBonuses, petBonuses]);
 
-    const derivedStats = useMemo(() => {
+    const derivedStats = (() => {
+        const baseStats = user?.stats || {};
         const totalStats = {
-            strength: (user.stats.strength || 0) + (totalBonuses.strength || 0),
-            dexterity: (user.stats.dexterity || 0) + (totalBonuses.dexterity || 0),
-            constitution: (user.stats.constitution || 0) + (totalBonuses.constitution || 0),
-            intelligence: (user.stats.intelligence || 0) + (totalBonuses.intelligence || 0),
-            charisma: (user.stats.charisma || 0) + (totalBonuses.charisma || 0),
-            luck: (user.stats.luck || 0) + (totalBonuses.luck || 0),
+            strength: (baseStats.strength || 0) + (totalBonuses.strength || 0),
+            dexterity: (baseStats.dexterity || 0) + (totalBonuses.dexterity || 0),
+            constitution: (baseStats.constitution || 0) + (totalBonuses.constitution || 0),
+            intelligence: (baseStats.intelligence || 0) + (totalBonuses.intelligence || 0),
+            charisma: (baseStats.charisma || 0) + (totalBonuses.charisma || 0),
+            luck: (baseStats.luck || 0) + (totalBonuses.luck || 0),
         };
 
         const strBonus = totalStats.strength * 2;
@@ -494,7 +481,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         const healingPct = Math.min(totalStats.intelligence * 0.5, 25).toFixed(2);
 
         return { totalDamageMin, totalDamageMax, defense, critChance, blockChance, skillDamagePct, healingPct };
-    }, [user.stats, totalBonuses]);
+    })();
 
     const displayMaxHp = user.calculatedMaxHp ?? user.calculated_max_hp ?? 0;
     const equippedPet = myPets.find(p => p.is_active);
@@ -510,8 +497,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     // --- RENDERIZADO DE COMPONENTES UI ---
-    const GlobalTooltip = () => {
-        if (!tooltipData) return null;
+    const globalTooltip = tooltipData ? (() => {
         const { item, rect, side } = tooltipData;
         const stats = item.base_stats || {};
         const durability = item.durability_current !== undefined ? item.durability_current : 100;
@@ -579,7 +565,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 <div className="text-[10px] mt-2 text-right border-t border-white/10 pt-1 flex justify-between items-center"> <span className="text-slate-500">Valor de venta:</span> {formatCurrency(item.price_copper)} </div>
             </div>
         );
-    };
+    })() : null;
 
     const renderEquipmentSlot = (slotName, className = '', tooltipSide = 'top') => {
         const item = getEquippedItem(slotName);
@@ -615,7 +601,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
     return (
         <div className="min-h-full relative font-sans p-4 flex flex-col gap-4">
-            <GlobalTooltip />
+            {globalTooltip}
             
             {/* MENÚ FLOTANTE CONTEXTUAL (Clic Derecho) */}
             {contextMenu && (
@@ -675,7 +661,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </button>
                     )}
 
-                    <StatsPanel stats={user.stats} bonuses={totalBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
+                    <StatsPanel stats={user?.stats || {}} bonuses={totalBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
                     
                     {/* Resumen Stats ESTANDARIZADO (Sin bordes, 7 stats) */}
                     <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] space-y-2">
@@ -882,7 +868,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                             {activePet ? (
                                 <>
                                     <div className="flex-1 relative w-full bg-black overflow-hidden flex items-center justify-center">
-                                        <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div>
+                                        <div className="absolute inset-0 bg-[url('/patterns/hex.svg')] opacity-20"></div>
                                         <img src={activePet.image_url} className="h-full w-full object-contain p-0 animate-in zoom-in duration-500 z-10" />
                                         <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 to-transparent z-20"></div>
                                         <div className="absolute bottom-4 left-0 right-0 text-center z-30">

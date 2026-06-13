@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Package, ArrowRight, Clock, Archive, Lock } from 'lucide-react';
 import { apiUrl } from '../constants/api';
@@ -22,16 +22,12 @@ const Packages = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [loading, setLoading] = useState(false);
     
     const [activeBag, setActiveBag] = useState(1);
-    const [localInventory, setLocalInventory] = useState(user?.real_inventory || []);
     const [tooltipData, setTooltipData] = useState(null);
     const [draggedPackage, setDraggedPackage] = useState(null);
-
-    useEffect(() => {
-        if (user?.real_inventory) setLocalInventory(user.real_inventory);
-    }, [user?.real_inventory]);
+    const inventory = user?.real_inventory || [];
 
     // --- API CALLS ---
-    const fetchPackages = async (pageNum) => {
+    const fetchPackages = useCallback(async (pageNum) => {
         setLoading(true);
         try {
             const res = await fetch(apiUrl(`/api/packages/my-packages?page=${pageNum}`), {
@@ -44,9 +40,14 @@ const Packages = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 setPage(data.pagination.page);
             }
         } catch (err) { console.error(err); } finally { setLoading(false); }
-    };
+    }, [token]);
 
-    useEffect(() => { fetchPackages(page); }, [page]);
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            void fetchPackages(page);
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [fetchPackages, page]);
 
     const handleClaim = async (packageId, targetSlot = null) => {
         try {
@@ -58,7 +59,6 @@ const Packages = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             const data = await res.json();
             if (data.success) {
                 setPackages(prev => prev.filter(p => p.id !== packageId));
-                setLocalInventory(data.inventory);
                 if (onUpdateUser) onUpdateUser({ ...user, real_inventory: data.inventory });
             }
         } catch (err) { console.error("Error claim:", err); }
@@ -101,19 +101,18 @@ const Packages = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     const isBagUnlocked = (n) => n <= 2 || (n === 3 && user.level >= 20) || (n >= 4 && user.rented_bags?.some(b => b.bag_number === n));
-    const getBagItem = (i) => localInventory.find(x => !x.is_equipped && x.bag_slot === ((activeBag - 1) * 40) + i);
-    const getFreeSlotsCount = () => 40 - localInventory.filter(x => !x.is_equipped && x.bag_slot >= (activeBag-1)*40 && x.bag_slot < activeBag*40).length;
+    const getBagItem = (i) => inventory.find(x => !x.is_equipped && x.bag_slot === ((activeBag - 1) * 40) + i);
+    const getFreeSlotsCount = () => 40 - inventory.filter(x => !x.is_equipped && x.bag_slot >= (activeBag-1)*40 && x.bag_slot < activeBag*40).length;
     
     const formatCurrency = (c) => {
         if (!c) return <span className="text-orange-700 font-bold">0c</span>;
         return <span className="flex items-center gap-1 justify-end">{Math.floor(c/10000) > 0 && <span className="text-yellow-500 font-bold">{Math.floor(c/10000)}g</span>} {(Math.floor(c%10000/100)) > 0 && <span className="text-slate-300 font-bold">{Math.floor(c%10000/100)}s</span>} <span className="text-orange-700 font-bold">{c%100}c</span></span>;
     };
 
-    const GlobalTooltip = () => {
-        if (!tooltipData) return null;
+    const globalTooltip = tooltipData ? (() => {
         const { item, rect, side } = tooltipData;
         const isBroken = item.durability_current === 0;
-        let style = { position: 'fixed', zIndex: 9999, top: rect.top };
+        const style = { position: 'fixed', zIndex: 9999, top: rect.top };
         if (side === 'left') style.left = rect.right + 10; else style.right = (window.innerWidth - rect.left) + 10;
 
         return (
@@ -133,13 +132,13 @@ const Packages = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 {item.price_copper !== undefined && <div className="text-[10px] mt-2 text-right border-t border-white/10 pt-1 flex justify-between"> <span className="text-slate-500">Valor:</span> {formatCurrency(item.price_copper)} </div>}
             </div>
         );
-    };
+    })() : null;
 
     if (!user) return null;
 
     return (
         <div className="h-full p-4 md:p-6 overflow-hidden flex flex-col font-sans select-none relative">
-            <GlobalTooltip />
+            {globalTooltip}
             <h2 className="text-xl font-serif font-bold text-amber-500 mb-4 flex items-center gap-2"><Package className="text-amber-400" size={24} /> Logística & Almacén</h2>
             <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden">
                 {/* IZQUIERDA: PAQUETES */}

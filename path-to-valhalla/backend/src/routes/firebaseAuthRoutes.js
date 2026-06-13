@@ -10,8 +10,7 @@ const jwt = require("jsonwebtoken");
 const { verifyFirebaseToken } = require("../config/firebaseAdmin");
 const { hydratePlayer } = require("../shared/player_stats");
 const { db } = require("../config/db");
-
-const SECRET_KEY = process.env.JWT_SECRET || "valhalla_secret_key_odin";
+const { SECRET_KEY } = require("../utils/sessionAuth");
 
 // --- LOGIN/REGISTER VIA FIREBASE (Google + Email/Password) ---
 router.post("/firebase-login", async (req, res) => {
@@ -23,15 +22,15 @@ router.post("/firebase-login", async (req, res) => {
     const firebaseUser = await verifyFirebaseToken(idToken);
 
     // Find player in Firestore by email
+    const email = firebaseUser.email?.toLowerCase() || "";
+
     const userSnap = await db.collection("players")
-      .where("email", "==", firebaseUser.email)
+      .where("email", "==", email)
       .limit(1)
       .get();
 
     if (userSnap.empty) {
       // --- NEW PLAYER: Auto-register ---
-      const email = firebaseUser.email?.toLowerCase() || "";
-
       // Use displayName from Google profile, or generate one from username/display name
       let username;
       if (firebaseUser.displayName) {
@@ -44,7 +43,6 @@ router.post("/firebase-login", async (req, res) => {
         username = `${fallbackName}_${randomNum}`;
       }
 
-      const defaultRace = "human";
       const defaultGender = firebaseUser.displayName?.toLowerCase().includes("woman") || firebaseUser.email.includes("woman") ? "female" : "male";
 
       // Generate a real password hash since Firebase doesn't expose the password for email users
@@ -53,16 +51,16 @@ router.post("/firebase-login", async (req, res) => {
       const newPlayerRef = db.collection("players").doc();
       await newPlayerRef.set({
         username,
-        email: firebaseUser.email,
+        email,
+        firebase_uid: firebaseUser.uid,
         password_hash: fakeHash,
         auth_provider: "firebase",
-        race: defaultRace,
         gender: defaultGender,
         class_id: 1,
         level: 1,
         experience: 0,
         stat_points: 0,
-        stats: JSON.stringify({ strength: 5, dexterity: 5, constitution: 5, intelligence: 5, luck: 5, charisma: 5 }),
+        stats: { strength: 5, dexterity: 5, constitution: 5, intelligence: 5, luck: 5, charisma: 5 },
         gold: 10,
         silver: 50,
         copper: 100,
@@ -77,7 +75,8 @@ router.post("/firebase-login", async (req, res) => {
         created_at: new Date(),
       });
 
-      const player = { ...newPlayerRef.data ? await newPlayerRef.get().then((d) => d.data()) : {}, id: newPlayerRef.id };
+      const freshDoc = await newPlayerRef.get();
+      const player = { ...freshDoc.data(), id: newPlayerRef.id };
 
       // Register initial background
       await db.collection("player_backgrounds").add({ player_id: newPlayerRef.id, background_id: 1 });
@@ -86,7 +85,7 @@ router.post("/firebase-login", async (req, res) => {
       const bgUrl = bgDoc.exists ? (bgDoc.data().image_url || "") : "";
 
       // Hydrate and generate token
-      let hydrated = hydratePlayer({ ...player, id: newPlayerRef.id }, newPlayerRef.id);
+      const hydrated = await hydratePlayer(player, newPlayerRef.id);
       const token = jwt.sign({ id: newPlayerRef.id }, SECRET_KEY, { expiresIn: "7d" });
 
       return res.status(201).json({
@@ -98,14 +97,24 @@ router.post("/firebase-login", async (req, res) => {
     }
 
     // --- EXISTING PLAYER: Login ---
-    let player = { ...userSnap.docs[0].data(), id: userSnap.docs[0].id };
-    const hydrated = hydratePlayer(player, player.id);
+    const playerDoc = userSnap.docs[0];
+    let player = { ...playerDoc.data(), id: playerDoc.id };
+
+    await db.collection("players").doc(player.id).update({
+      firebase_uid: firebaseUser.uid,
+      last_login_at: new Date(),
+    });
+
+    player = {
+      ...player,
+      firebase_uid: firebaseUser.uid,
+      last_login_at: new Date(),
+    };
+
+    const hydrated = await hydratePlayer(player, player.id);
 
     const bgDoc2 = await db.collection("backgrounds").doc(String(player.active_background_id || 1)).get();
     const bgUrl = bgDoc2.exists ? (bgDoc2.data().image_url || "") : "";
-
-    // Update last login time
-    await db.collection("players").doc(player.id).update({ last_login_at: new Date() });
 
     const token = jwt.sign({ id: player.id }, SECRET_KEY, { expiresIn: "7d" });
 

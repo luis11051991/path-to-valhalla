@@ -16,7 +16,12 @@ const RACE_CLASSES = {
 };
 
 exports.chooseRace = async (req, res) => {
-    const { userId, race, stats, backgroundId, gender } = req.body;
+    const userId = req.user?.id;
+    const { race, stats, backgroundId, gender } = req.body;
+
+    if (!userId) {
+        return res.status(401).json({ message: 'Sesion invalida. Inicia sesion de nuevo.' });
+    }
 
     try {
         const raceKey = race ? race.toLowerCase() : 'human';
@@ -24,32 +29,39 @@ exports.chooseRace = async (req, res) => {
         const activeBg = backgroundId || correctBgId;
         const correctClassId = RACE_CLASSES[raceKey] || 1;
         const safeGender = (gender === 'female') ? 'female' : 'male';
+        const safeStats = (stats && typeof stats === 'object' && !Array.isArray(stats)) ? stats : {};
+        const playerRef = db.collection('players').doc(userId);
+        const playerBackgroundsRef = db.collection('player_backgrounds');
+        const bgQuery = playerBackgroundsRef
+            .where('player_id', '==', userId)
+            .where('background_id', '==', activeBg)
+            .limit(1);
 
         await db.runTransaction(async (t) => {
-            t.update(db.collection('players').doc(userId), {
+            const playerDoc = await t.get(playerRef);
+            const bgCheck = await t.get(bgQuery);
+
+            if (!playerDoc.exists) {
+                throw new Error('player_not_found');
+            }
+
+            t.update(playerRef, {
                 race: raceKey,
-                stats,
+                stats: safeStats,
                 active_background_id: activeBg,
                 gender: safeGender,
                 class_id: correctClassId,
             });
 
-            // Registrar fondo si no existe
-            const bgCheck = await t.get(
-                db.collection('player_backgrounds')
-                    .where('player_id', '==', userId)
-                    .where('background_id', '==', activeBg)
-                    .limit(1)
-            );
             if (bgCheck.empty) {
-                t.create(db.collection('player_backgrounds').doc(), {
+                t.create(playerBackgroundsRef.doc(), {
                     player_id: userId,
                     background_id: activeBg,
                 });
             }
         });
 
-        const finalUserDoc = await db.collection('players').doc(userId).get();
+        const finalUserDoc = await playerRef.get();
         let finalUser = { ...finalUserDoc.data(), id: finalUserDoc.id };
 
         // Cargar fondo URL
@@ -71,12 +83,15 @@ exports.chooseRace = async (req, res) => {
             }
         }
 
-        let hydratedUser = hydratePlayer(finalUser, userId);
+        const hydratedUser = await hydratePlayer(finalUser, userId);
         hydratedUser.real_inventory = inventoryItems;
         hydratedUser.rented_bags = [];
 
         res.json({ success: true, user: hydratedUser });
     } catch (err) {
+        if (err.message === 'player_not_found') {
+            return res.status(404).json({ message: 'Jugador no encontrado.' });
+        }
         console.error('Error en chooseRace:', err);
         res.status(500).json({ message: 'Error al elegir raza' });
     }

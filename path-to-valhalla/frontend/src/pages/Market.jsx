@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom'; // <--- IMPORTACIÓN CLAVE
 import { 
     ShoppingBag, Coins, Sword, Shield, Gem, Scroll, FlaskConical, DollarSign, 
@@ -32,35 +32,16 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [feedbackKey, setFeedbackKey] = useState(0); 
     
     const [shopItems, setShopItems] = useState([]);
-    const [inventory, setInventory] = useState(user?.real_inventory || []);
     const [loadingShop, setLoadingShop] = useState(false);
     
     const [refreshCost, setRefreshCost] = useState(0);
-    const [refreshesUsed, setRefreshesUsed] = useState(0);
+    const [, setRefreshesUsed] = useState(0);
 
     const [tooltipData, setTooltipData] = useState(null);
     const [itemToSell, setItemToSell] = useState(null); 
+    const inventory = user?.real_inventory || [];
 
-    useEffect(() => { 
-        if (user) setInventory(user.real_inventory || []); 
-    }, [user?.real_inventory]);
-
-    useEffect(() => {
-        if (mode === 'buy' && user) { loadShopData(); }
-    }, [mode, user]);
-
-    // Helpers para cambiar modo y limpiar tooltip
-    const changeMode = (newMode) => {
-        setMode(newMode);
-        setTooltipData(null); 
-    };
-
-    const changeCategory = (catId) => {
-        setActiveCategory(catId);
-        setTooltipData(null);
-    };
-
-    const loadShopData = async () => {
+    const loadShopData = useCallback(async () => {
         setLoadingShop(true);
         try {
             const res = await fetch(apiUrl('/api/shop/items'), { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
@@ -71,6 +52,25 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 setRefreshCost(data.nextRefreshCost);
             }
         } catch (err) { console.error(err); } finally { setLoadingShop(false); }
+    }, []);
+
+    useEffect(() => {
+        if (mode !== 'buy' || !user) return;
+        const timer = setTimeout(() => {
+            void loadShopData();
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [loadShopData, mode, user]);
+
+    // Helpers para cambiar modo y limpiar tooltip
+    const changeMode = (newMode) => {
+        setMode(newMode);
+        setTooltipData(null); 
+    };
+
+    const changeCategory = (catId) => {
+        setActiveCategory(catId);
+        setTooltipData(null);
     };
 
     const handleRefresh = async () => {
@@ -88,7 +88,7 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 if (data.newOnix !== undefined) { onUpdateUser({ ...user, onix: data.newOnix }); }
                 showFeedback("¡Mercancía nueva!", "success");
             } else { showFeedback(data.message, "error"); }
-        } catch (error) { showFeedback("Error al refrescar.", "error"); } finally { setLoadingShop(false); }
+        } catch { showFeedback("Error al refrescar.", "error"); } finally { setLoadingShop(false); }
     };
 
     const handleBuy = async (item) => {
@@ -105,7 +105,7 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 }
                 showFeedback(`Comprado: ${item.name}`, "success");
             } else { showFeedback(data.message, "error"); }
-        } catch (error) { showFeedback("Error al comprar", "error"); }
+        } catch { showFeedback("Error al comprar", "error"); }
     };
 
     const initiateSell = (item) => {
@@ -127,7 +127,7 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 setItemToSell(null);
                 setTooltipData(null); 
             } else { showFeedback(data.message, "error"); }
-        } catch (error) { showFeedback("Error al vender", "error"); }
+        } catch { showFeedback("Error al vender", "error"); }
     };
 
     const showFeedback = (msg, type) => {
@@ -178,12 +178,11 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         }
     };
 
-    const GlobalTooltip = () => {
-        if (!tooltipData) return null;
+    const globalTooltip = tooltipData ? (() => {
         const { item, rect, side, viewType } = tooltipData;
         const styles = getItemStyles(item.rarity);
         
-        let style = { position: 'fixed', top: rect.top, zIndex: 100 };
+        const style = { position: 'fixed', top: rect.top, zIndex: 100 };
         if (side === 'left') { style.left = rect.left - 210; } 
         else { style.left = rect.right + 10; }
         if (rect.top + 300 > window.innerHeight) { style.top = window.innerHeight - 310; }
@@ -220,7 +219,7 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 </div>
             </div>
         );
-    };
+    })() : null;
 
     if (!user) return null;
 
@@ -234,9 +233,9 @@ const Market = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         return item.type === activeCategory;
     });
 
-    return (
+        return (
         <div className="h-full flex flex-col relative overflow-hidden bg-slate-950 font-sans select-none">
-            <GlobalTooltip />
+            {globalTooltip}
             <div className="absolute inset-0 z-0 transition-opacity duration-700">
                 <img src={currentConfig.bgImage} className="w-full h-full object-cover opacity-60 animate-in fade-in duration-700" onError={(e) => { e.target.style.display = 'none'; }} />
                 <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-900/20 to-slate-950/90" />

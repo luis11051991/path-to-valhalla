@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { 
     Hammer, Anvil, FlaskRound, Scroll, Lock, 
@@ -66,14 +66,7 @@ const Workshop = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     // Selector de Rareza
     const [selectedRarity, setSelectedRarity] = useState('common');
 
-    useEffect(() => { if(user) loadData(); }, [user]);
-
-    // Cuando cambia la receta, reseteamos la rareza a la base de la receta
-    useEffect(() => {
-        if (selectedRecipe) setSelectedRarity(selectedRecipe.rarity || 'common');
-    }, [selectedRecipe]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             const res = await fetch(apiUrl('/api/workshop'), { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
             const data = await res.json();
@@ -84,7 +77,15 @@ const Workshop = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 }
             }
         } catch (err) { console.error(err); } finally { setLoading(false); }
-    };
+    }, [onUpdateUser, user]);
+
+    useEffect(() => {
+        if (!user) return;
+        const timer = setTimeout(() => {
+            void loadData();
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [loadData, user]);
 
     const handleConfirmChoice = async () => {
         if (!confirmProfession) return;
@@ -129,7 +130,7 @@ const Workshop = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             } else {
                 setMessageModal({ type: 'error', title: 'Error', message: data.message });
             }
-        } catch (err) { 
+        } catch { 
             setMessageModal({ type: 'error', title: 'Error de Conexión', message: 'No se pudo contactar con el taller.' });
         }
     };
@@ -220,7 +221,12 @@ const Workshop = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     <h3 className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-4 flex items-center gap-2"><Scroll size={12} /> Recetas Disponibles</h3>
                     <div className="space-y-2">
                         {recipes.map(recipe => (
-                            <div key={recipe.id} onClick={() => !isCrafting && setSelectedRecipe(recipe)} className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all group relative overflow-hidden ${selectedRecipe?.id === recipe.id ? `bg-slate-800 ${theme.border} shadow-md` : 'bg-slate-900/50 border-slate-800 hover:border-slate-600 hover:bg-slate-800'} ${isCrafting ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div key={recipe.id} onClick={() => {
+                            if (!isCrafting) {
+                                setSelectedRecipe(recipe);
+                                setSelectedRarity(recipe.rarity || 'common');
+                            }
+                        }} className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all group relative overflow-hidden ${selectedRecipe?.id === recipe.id ? `bg-slate-800 ${theme.border} shadow-md` : 'bg-slate-900/50 border-slate-800 hover:border-slate-600 hover:bg-slate-800'} ${isCrafting ? 'opacity-50 pointer-events-none' : ''}`}>
                                 <div className={`w-10 h-10 rounded bg-black/60 border flex items-center justify-center shrink-0 ${selectedRecipe?.id === recipe.id ? theme.border : 'border-slate-700'}`}><img src={recipe.result_image} className="w-8 h-8 object-contain" /></div>
                                 <div><div className={`text-sm font-bold ${selectedRecipe?.id === recipe.id ? 'text-white' : 'text-slate-300'}`}>{recipe.result_name}</div><div className="text-[10px] text-slate-500 flex items-center gap-2"><span>Nvl {recipe.min_profession_level}</span>{recipe.xp_reward > 0 && <span className="text-green-500/80">+{recipe.xp_reward} XP</span>}</div></div>
                             </div>

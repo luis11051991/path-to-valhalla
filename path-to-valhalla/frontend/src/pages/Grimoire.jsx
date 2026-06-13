@@ -73,7 +73,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
             const data = await res.json();
             if (data.success) fetchSkills();
             else setErrorMsg(data.message);
-        } catch (error) {
+        } catch {
             setErrorMsg("Error de conexión.");
         }
     };
@@ -106,7 +106,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
             } else {
                 setErrorMsg(data.message);
             }
-        } catch (error) {
+        } catch {
             setErrorMsg("Error al mejorar habilidad.");
         }
     };

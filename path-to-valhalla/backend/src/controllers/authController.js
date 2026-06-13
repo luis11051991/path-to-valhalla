@@ -1,9 +1,9 @@
-const { db, decodeDoc } = require('../config/db');
+const { db } = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { hydratePlayer } = require('../shared/player_stats');
 
-const SECRET_KEY = 'valhalla_secret_key_odin';
+const SECRET_KEY = process.env.JWT_SECRET || 'valhalla_secret_key_odin';
 
 // --- REGISTRO (PASO 1: CREAR CUENTA VACIA) ---
 exports.register = async (req, res) => {
@@ -78,7 +78,7 @@ exports.register = async (req, res) => {
     const bgUrl = bgDoc.exists ? (bgDoc.data().image_url || '') : '';
 
     const playerDoc = await newPlayerRef.get();
-    let user = hydratePlayer(await playerDoc.data(), userId);
+    let user = await hydratePlayer(playerDoc.data(), userId);
 
     // 7. Responder
     const token = jwt.sign({ id: userId }, SECRET_KEY, { expiresIn: '7d' });
@@ -86,7 +86,8 @@ exports.register = async (req, res) => {
     res.status(201).json({ 
       message: 'Cuenta creada! Elige tu destino.', 
       token,
-      user: { ...user, active_background_url: bgUrl, real_inventory: [], rented_bags: [] } 
+      user: { ...user, active_background_url: bgUrl, real_inventory: [], rented_bags: [] },
+      isNewPlayer: true,
     });
   } catch (err) { 
     console.error('CRITICAL ERROR IN REGISTER:', err); 
@@ -116,7 +117,7 @@ exports.login = async (req, res) => {
     if (!isMatch) return res.status(400).json({ message: 'Credenciales incorrectas.' });
 
     // Hidratacion y Regeneracion
-    user = hydratePlayer(user, user.id);
+    user = await hydratePlayer(user, user.id);
 
     // Cargar inventario (subcoleccion items del jugador)
     const itemsSnap = await db.collection('players').doc(user.id).collection('items').orderBy('bag_slot', 'asc').get();
@@ -147,7 +148,8 @@ exports.login = async (req, res) => {
         real_inventory: inventoryItems,
         active_background_url: bgUrl,
         rented_bags: []
-      } 
+      },
+      isNewPlayer: false,
     });
   } catch (err) { 
     console.error(err); 
@@ -166,7 +168,7 @@ exports.getProfile = async (req, res) => {
     let user = { ...playerDoc.data(), id: playerDoc.id };
 
     // Hidratacion y Regeneracion
-    user = hydratePlayer(user, userId);
+    user = await hydratePlayer(user, userId);
 
     // Inventario
     const itemsSnap = await db.collection('players').doc(userId).collection('items').orderBy('bag_slot', 'asc').get();

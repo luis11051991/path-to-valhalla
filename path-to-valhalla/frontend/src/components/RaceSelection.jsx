@@ -3,6 +3,23 @@ import { ChevronLeft, ChevronRight, CheckCircle, Crown, User, Sword, Shield, Zap
 import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
 
+const EvolutionPath = ({ title, steps, imageSrc }) => (
+  <div className="mb-4">
+    <h4 className="text-amber-500/80 text-xs uppercase tracking-[0.2em] mb-3 border-b border-amber-900/30 pb-1 font-bold">{title}</h4>
+    <div className="flex justify-between gap-4">
+      {steps.map((evo) => (
+        <div key={evo.name} className="flex flex-col items-center group cursor-help relative">
+          <div className={`w-16 h-16 xl:w-20 xl:h-20 rounded-full border-2 bg-slate-900 overflow-hidden relative transition-all duration-500 ${evo.lv === 100 ? 'border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'border-slate-700 group-hover:border-slate-500'}`}>
+            <img src={imageSrc} className={`w-full h-full object-cover brightness-0 grayscale opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500 ${evo.lv === 100 ? 'drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]' : ''}`} />
+            <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-center text-slate-300 py-0.5">LV {evo.lv}</div>
+          </div>
+          <span className={`mt-2 text-[10px] text-center w-20 leading-tight font-bold ${evo.aura}`}>{evo.name}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const RaceSelection = ({ onRaceSelect }) => {
   // Estados de Selección
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -61,11 +78,14 @@ const RaceSelection = ({ onRaceSelect }) => {
     if (!storedUser) { alert("Error de sesión."); setIsSaving(false); return; }
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(apiUrl('/api/choose-race'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          userId: storedUser.id,
           race: currentRace.id,
           stats: currentRace.stats,
           gender: gender
@@ -78,7 +98,8 @@ const RaceSelection = ({ onRaceSelect }) => {
         setUpdatedUser(data.user); // Guardamos el usuario para mostrar su nombre
         setShowWelcome(true);
       } else {
-        alert("Error al confirmar linaje.");
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.message || "Error al confirmar linaje.");
         setIsSaving(false);
       }
     } catch (error) { console.error(error); setIsSaving(false); }
@@ -88,31 +109,12 @@ const RaceSelection = ({ onRaceSelect }) => {
   if (showWelcome && updatedUser) {
     return (
       <WelcomeScreenDisplay
-        raceName={currentRace.name}
         username={updatedUser.username} // Pasamos el nombre del usuario
         bgImage={currentRace.bgImage}
         onFinish={() => { if (onRaceSelect) onRaceSelect(updatedUser); }}
       />
     );
   }
-
-  // Componente interno para las evoluciones
-  const EvolutionPath = ({ title, steps }) => (
-    <div className="mb-4">
-      <h4 className="text-amber-500/80 text-xs uppercase tracking-[0.2em] mb-3 border-b border-amber-900/30 pb-1 font-bold">{title}</h4>
-      <div className="flex justify-between gap-4">
-        {steps.map((evo) => (
-          <div key={evo.name} className="flex flex-col items-center group cursor-help relative">
-            <div className={`w-16 h-16 xl:w-20 xl:h-20 rounded-full border-2 bg-slate-900 overflow-hidden relative transition-all duration-500 ${evo.lv === 100 ? 'border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'border-slate-700 group-hover:border-slate-500'}`}>
-              <img src={currentRace.images[gender]} className={`w-full h-full object-cover brightness-0 grayscale opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500 ${evo.lv === 100 ? 'drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]' : ''}`} />
-              <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-center text-slate-300 py-0.5">LV {evo.lv}</div>
-            </div>
-            <span className={`mt-2 text-[10px] text-center w-20 leading-tight font-bold ${evo.aura}`}>{evo.name}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 
   return (
     <div className="h-screen w-full relative flex flex-col items-center justify-center overflow-hidden bg-slate-950 font-sans">
@@ -188,9 +190,9 @@ const RaceSelection = ({ onRaceSelect }) => {
             </div>
 
             <div className="bg-slate-900/50 p-6 rounded border border-slate-700/80 backdrop-blur-sm">
-              <EvolutionPath title="Senda 1 (Fuerza)" steps={currentRace.evolutions.path1} />
+              <EvolutionPath title="Senda 1 (Fuerza)" steps={currentRace.evolutions.path1} imageSrc={currentRace.images[gender]} />
               <div className="h-px bg-white/5 my-4"></div>
-              <EvolutionPath title="Senda 2 (Estrategia)" steps={currentRace.evolutions.path2} />
+              <EvolutionPath title="Senda 2 (Estrategia)" steps={currentRace.evolutions.path2} imageSrc={currentRace.images[gender]} />
             </div>
 
             <button onClick={handleConfirm} disabled={isSaving} className="w-full bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-bold py-5 rounded border border-amber-400 shadow-[0_0_40px_rgba(180,83,9,0.3)] uppercase tracking-[0.3em] text-lg transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-wait">
@@ -209,7 +211,7 @@ const RaceSelection = ({ onRaceSelect }) => {
 };
 
 // PANTALLA DE BIENVENIDA ACTUALIZADA
-const WelcomeScreenDisplay = ({ raceName, username, bgImage, onFinish }) => {
+const WelcomeScreenDisplay = ({ username, bgImage, onFinish }) => {
   React.useEffect(() => { const timer = setTimeout(onFinish, 4000); return () => clearTimeout(timer); }, [onFinish]);
   return (
     <div className="min-h-screen relative flex items-center justify-center bg-black overflow-hidden animate-[fadeIn_1s_ease-out]">

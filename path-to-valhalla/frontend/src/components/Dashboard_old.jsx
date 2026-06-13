@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
     Maximize2, X, Lock, Gem,
     ScrollText, Image as ImageIcon, AlertTriangle, Ban, Clock, Plus,
@@ -75,10 +75,12 @@ const Dashboard = ({ user, onUpdateUser }) => {
                 if (data.quest) setEvolutionQuestData(data); 
             })
             .catch(err => console.error("Error cargando estado evolución:", err));
-        } else if (user.evolution_quest_status === 'completed') {
-            setEvolutionStatus('completed');
         } else {
-            setEvolutionStatus('locked');
+            const nextStatus = user.evolution_quest_status === 'completed' ? 'completed' : 'locked';
+            const timer = setTimeout(() => {
+                setEvolutionStatus(nextStatus);
+            }, 0);
+            return () => clearTimeout(timer);
         }
     }, [user.evolution_quest_status, user.level]);
 
@@ -273,7 +275,7 @@ const Dashboard = ({ user, onUpdateUser }) => {
             const data = await res.json();
             if (data.success) fetchSkills();
             else setErrorMsg(data.message);
-        } catch (error) {
+        } catch {
             setErrorMsg("Error de conexión.");
         }
     };
@@ -495,14 +497,15 @@ const Dashboard = ({ user, onUpdateUser }) => {
         return combined;
     }, [itemBonuses, petBonuses]);
 
-    const derivedStats = useMemo(() => {
+    const derivedStats = (() => {
+        const baseStats = user?.stats || {};
         const totalStats = {
-            strength: (user.stats.strength || 0) + (totalBonuses.strength || 0),
-            dexterity: (user.stats.dexterity || 0) + (totalBonuses.dexterity || 0),
-            constitution: (user.stats.constitution || 0) + (totalBonuses.constitution || 0),
-            intelligence: (user.stats.intelligence || 0) + (totalBonuses.intelligence || 0),
-            charisma: (user.stats.charisma || 0) + (totalBonuses.charisma || 0),
-            luck: (user.stats.luck || 0) + (totalBonuses.luck || 0),
+            strength: (baseStats.strength || 0) + (totalBonuses.strength || 0),
+            dexterity: (baseStats.dexterity || 0) + (totalBonuses.dexterity || 0),
+            constitution: (baseStats.constitution || 0) + (totalBonuses.constitution || 0),
+            intelligence: (baseStats.intelligence || 0) + (totalBonuses.intelligence || 0),
+            charisma: (baseStats.charisma || 0) + (totalBonuses.charisma || 0),
+            luck: (baseStats.luck || 0) + (totalBonuses.luck || 0),
         };
 
         const strBonus = totalStats.strength * 2;
@@ -516,7 +519,7 @@ const Dashboard = ({ user, onUpdateUser }) => {
         let skillPower = totalStats.intelligence * 0.25;
 
         return { totalDamageMin, totalDamageMax, defense, critChance, blockChance, healPower, skillPower };
-    }, [user.stats, totalBonuses]);
+    })();
 
     const displayMaxHp = user.calculatedMaxHp ?? user.calculated_max_hp ?? 0;
     // --- RENDERIZADO DE EQUIPAMIENTO (PNGs GRANDES) ---
@@ -562,8 +565,7 @@ const Dashboard = ({ user, onUpdateUser }) => {
     };
 
     // --- TOOLTIP GLOBAL (Con PNGs GRANDES) ---
-    const GlobalTooltip = () => {
-        if (!tooltipData) return null;
+    const globalTooltip = tooltipData ? (() => {
         const { item, rect, side } = tooltipData;
         const stats = item.base_stats || {};
         const durability = item.durability_current !== undefined ? item.durability_current : 100;
@@ -616,7 +618,7 @@ const Dashboard = ({ user, onUpdateUser }) => {
                 <div className="text-[10px] mt-2 text-right border-t border-white/10 pt-1 flex justify-between items-center"> <span className="text-slate-500">Valor de venta:</span> {formatCurrency(item.price_copper)} </div>
             </div>
         );
-    };
+    })() : null;
 
     const unlockedSlots = getMaxSlots();
     const equippedSkills = mySkills.filter(s => s.is_equipped);
@@ -624,7 +626,7 @@ const Dashboard = ({ user, onUpdateUser }) => {
 
     return (
         <div className="min-h-full relative font-sans p-4 flex flex-col gap-4">
-            <GlobalTooltip />
+            {globalTooltip}
             <div className="absolute inset-0 z-0 pointer-events-none"><img src={raceData.bgImage} className="w-full h-full object-cover opacity-60 fixed inset-0" /><div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/60 to-slate-900/30 fixed inset-0" /></div>
 
             {/* --- PESTAÑAS (Con Iconos PNG) --- */}
@@ -950,7 +952,7 @@ const Dashboard = ({ user, onUpdateUser }) => {
                 />
             )}
             
-            {showPetModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowPetModal(false)}><div className="relative w-full max-w-4xl h-[70vh] bg-slate-950 border-2 border-amber-600 rounded-xl flex overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]" onClick={e => e.stopPropagation()}><div className="w-1/3 border-r border-slate-800 bg-black/40 flex flex-col"><h3 className="p-4 text-amber-500 font-serif font-bold uppercase tracking-widest border-b border-slate-800 flex items-center gap-2"><PawPrint size={18} /> Establo</h3><div className="flex-1 overflow-y-auto p-2 space-y-2">{myPets.length === 0 ? (<div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aún.</div>) : (myPets.map(pet => (<div key={pet.player_pet_id} onClick={() => setActivePet(pet)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}><img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" /><div><div className="text-sm text-slate-200 font-bold">{pet.name}</div><div className="text-[10px] text-slate-500">Nivel {pet.tier}</div></div>{pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}</div>)))}</div></div><div className="w-2/3 relative flex flex-col bg-slate-950"><button onClick={() => setShowPetModal(false)} className="absolute top-4 right-4 text-white z-50 p-2 bg-black/50 rounded-full hover:bg-red-600"><X /></button>{activePet ? (<><div className="flex-1 relative w-full bg-black overflow-hidden flex items-center justify-center"><div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div><img src={activePet.image_url} className="h-full w-full object-contain p-0 animate-in zoom-in duration-500 z-10" /><div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 to-transparent z-20"></div><div className="absolute bottom-4 left-0 right-0 text-center z-30"><h2 className="text-4xl font-serif text-amber-400 drop-shadow-md mb-1">{activePet.name}</h2><p className="text-slate-300 text-sm max-w-lg mx-auto italic drop-shadow-md">"{activePet.description}"</p></div></div><div className="h-48 bg-slate-900 border-t-4 border-amber-900 p-4 flex gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-40"><div className="w-1/2 space-y-2"><h4 className="text-amber-500 text-xs uppercase tracking-widest font-bold border-b border-slate-700 pb-1 mb-2">Bonificaciones Activas</h4><div className="grid grid-cols-2 gap-2">{Object.entries(activePet.bonus_stats || {}).map(([key, val]) => (<div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between"><span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span></div>))}</div></div><div className="w-1/2 flex flex-col justify-between"><div><div className="flex justify-between text-xs text-slate-300 mb-1 font-bold"><span>Nivel de Saciedad</span><span className={activePet.current_hunger < 30 ? "text-red-500" : "text-green-500"}>{activePet.current_hunger}%</span></div><div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700"><div className={`h-full transition-all ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div></div></div><div className="flex gap-2 mt-2">{activePet.is_active ? (<div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div>) : (<button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>)}<button onClick={() => handleFeedPet(activePet.player_pet_id)} className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase rounded border border-slate-600 transition-colors flex flex-col items-center justify-center gap-1" title={getFeedCostText(activePet.tier)}><Heart size={14} className="text-red-500" /> Comer</button></div></div></div></>) : (<div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>)}</div></div></div>)}
+            {showPetModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowPetModal(false)}><div className="relative w-full max-w-4xl h-[70vh] bg-slate-950 border-2 border-amber-600 rounded-xl flex overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]" onClick={e => e.stopPropagation()}><div className="w-1/3 border-r border-slate-800 bg-black/40 flex flex-col"><h3 className="p-4 text-amber-500 font-serif font-bold uppercase tracking-widest border-b border-slate-800 flex items-center gap-2"><PawPrint size={18} /> Establo</h3><div className="flex-1 overflow-y-auto p-2 space-y-2">{myPets.length === 0 ? (<div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aún.</div>) : (myPets.map(pet => (<div key={pet.player_pet_id} onClick={() => setActivePet(pet)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}><img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" /><div><div className="text-sm text-slate-200 font-bold">{pet.name}</div><div className="text-[10px] text-slate-500">Nivel {pet.tier}</div></div>{pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}</div>)))}</div></div><div className="w-2/3 relative flex flex-col bg-slate-950"><button onClick={() => setShowPetModal(false)} className="absolute top-4 right-4 text-white z-50 p-2 bg-black/50 rounded-full hover:bg-red-600"><X /></button>{activePet ? (<><div className="flex-1 relative w-full bg-black overflow-hidden flex items-center justify-center"><div className="absolute inset-0 bg-[url('/patterns/hex.svg')] opacity-20"></div><img src={activePet.image_url} className="h-full w-full object-contain p-0 animate-in zoom-in duration-500 z-10" /><div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 to-transparent z-20"></div><div className="absolute bottom-4 left-0 right-0 text-center z-30"><h2 className="text-4xl font-serif text-amber-400 drop-shadow-md mb-1">{activePet.name}</h2><p className="text-slate-300 text-sm max-w-lg mx-auto italic drop-shadow-md">"{activePet.description}"</p></div></div><div className="h-48 bg-slate-900 border-t-4 border-amber-900 p-4 flex gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-40"><div className="w-1/2 space-y-2"><h4 className="text-amber-500 text-xs uppercase tracking-widest font-bold border-b border-slate-700 pb-1 mb-2">Bonificaciones Activas</h4><div className="grid grid-cols-2 gap-2">{Object.entries(activePet.bonus_stats || {}).map(([key, val]) => (<div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between"><span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span></div>))}</div></div><div className="w-1/2 flex flex-col justify-between"><div><div className="flex justify-between text-xs text-slate-300 mb-1 font-bold"><span>Nivel de Saciedad</span><span className={activePet.current_hunger < 30 ? "text-red-500" : "text-green-500"}>{activePet.current_hunger}%</span></div><div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700"><div className={`h-full transition-all ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div></div></div><div className="flex gap-2 mt-2">{activePet.is_active ? (<div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div>) : (<button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>)}<button onClick={() => handleFeedPet(activePet.player_pet_id)} className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase rounded border border-slate-600 transition-colors flex flex-col items-center justify-center gap-1" title={getFeedCostText(activePet.tier)}><Heart size={14} className="text-red-500" /> Comer</button></div></div></div></>) : (<div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>)}</div></div></div>)}
         </div>
     );
 };

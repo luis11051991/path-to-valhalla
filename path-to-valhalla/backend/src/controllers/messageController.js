@@ -1,6 +1,22 @@
 const { db } = require('../config/db');
 const { getIO } = require('../socket');
 
+const toIsoDate = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value.toDate === 'function') return value.toDate().toISOString();
+    if (value.seconds) return new Date(value.seconds * 1000).toISOString();
+    return new Date(value).toISOString();
+};
+
+const serializeMessage = (message, overrides = {}) => ({
+    ...message,
+    ...overrides,
+    created_at: toIsoDate(overrides.created_at ?? message.created_at),
+    read_at: toIsoDate(overrides.read_at ?? message.read_at),
+    is_read: Boolean(overrides.is_read ?? message.is_read),
+});
+
 exports.sendMessage = async (req, res) => {
     const { recipientUsername, content, isSystem } = req.body;
     const senderId = req.user ? req.user.id : null;
@@ -28,6 +44,7 @@ exports.sendMessage = async (req, res) => {
 
         const recipientId = recipientSnap.docs[0].id;
         const finalSenderId = isSystem ? null : senderId;
+        const createdAt = new Date();
 
         // Insertar Mensaje en la coleccion de mensajes del destinatario
         const msgRef = db.collection('messages').doc();
@@ -36,27 +53,45 @@ exports.sendMessage = async (req, res) => {
             recipient_id: recipientId,
             content,
             is_system: !!isSystem,
-            created_at: new Date(),
+            is_read: false,
+            created_at: createdAt,
         });
 
         // NOTIFICAR POR SOCKET
         try {
             const io = getIO();
-            const payloadMessage = {
-                ...msgRef.data ? await msgRef.get().then(d => d.data()) : {},
+            const payloadMessage = serializeMessage({
                 id: msgRef.id,
+                sender_id: finalSenderId,
+                recipient_id: recipientId,
+                content,
+                is_system: !!isSystem,
+                is_read: false,
                 sender_name: senderUsername,
                 recipient_name: recipientUsername,
-                created_at: new Date().toISOString(),
-                is_read: false,
-            };
+                created_at: createdAt,
+            });
 
             io.to(recipientId).emit('new_message', { message: payloadMessage });
         } catch (e) {
             console.error('Error socket emit:', e);
         }
 
-        res.status(201).json({ success: true, message: 'Mensaje enviado.', data: { id: msgRef.id, recipient_id: recipientId, content, is_read: false, created_at: new Date().toISOString() } });
+        res.status(201).json({
+            success: true,
+            message: 'Mensaje enviado.',
+            data: serializeMessage({
+                id: msgRef.id,
+                sender_id: finalSenderId,
+                recipient_id: recipientId,
+                content,
+                is_system: !!isSystem,
+                is_read: false,
+                sender_name: senderUsername,
+                recipient_name: recipientUsername,
+                created_at: createdAt,
+            }),
+        });
 
     } catch (err) {
         console.error('Error enviando mensaje:', err);
@@ -92,7 +127,7 @@ exports.getMyMessages = async (req, res) => {
                 const sDoc = await db.collection('players').doc(data.sender_id).get();
                 if (sDoc.exists) senderName = sDoc.data().username;
             }
-            messages.push({ ...data, id: doc.id, sender_name: senderName, recipient_name: 'me' });
+            messages.push(serializeMessage({ ...data, id: doc.id, sender_name: senderName, recipient_name: 'me' }));
         }
 
         for (const doc of senderSnap.docs) {
@@ -102,7 +137,7 @@ exports.getMyMessages = async (req, res) => {
                 const rDoc = await db.collection('players').doc(data.recipient_id).get();
                 if (rDoc.exists) recipientName = rDoc.data().username;
             }
-            messages.push({ ...data, id: doc.id, sender_name: 'me', recipient_name: recipientName });
+            messages.push(serializeMessage({ ...data, id: doc.id, sender_name: 'me', recipient_name: recipientName }));
         }
 
         // Ordenar por fecha descendente y limitar
@@ -128,12 +163,15 @@ exports.markAsRead = async (req, res) => {
             return res.status(404).json({ message: 'Mensaje no encontrado o no eres el destinatario.' });
         }
 
-        await msgRef.update({ is_read: true, read_at: new Date() });
+        const readAt = new Date();
+        await msgRef.update({ is_read: true, read_at: readAt });
         
         // NOTIFICAR al emisor
         try {
             const io = getIO();
-            io.to(msgDoc.data().sender_id).emit('message_read', { messageId });
+            if (msgDoc.data().sender_id) {
+                io.to(msgDoc.data().sender_id).emit('message_read', { messageId, read_at: readAt.toISOString() });
+            }
         } catch (e) {}
 
         res.json({ success: true, message: 'Marcado como leido.' });

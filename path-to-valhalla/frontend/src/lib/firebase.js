@@ -10,9 +10,11 @@ import {
   signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  updateProfile,
 } from "firebase/auth";
-import { getAnalytics, logEvent } from "firebase/analytics";
+import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
+import { apiUrl } from "../constants/api";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? "AIzaSyD8uB80EmzkMUAILXdVWLOtLL0hIAA7qJc",
@@ -37,12 +39,15 @@ googleProvider.addScope("email");
 
 // Helper para la API del backend
 const backendFetch = async (path, body) => {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error("Firebase login failed");
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || "Firebase login failed");
+  }
   return response.json();
 };
 
@@ -56,7 +61,7 @@ export const signInWithGoogle = async () => {
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
 
-    return { user: result.user, backendUser: data.user };
+    return { user: result.user, backendUser: data.user, isNewPlayer: data.isNewPlayer };
   } catch (error) {
     console.error("Google sign-in error:", error);
     throw error;
@@ -73,7 +78,7 @@ export const signInWithEmail = async (email, password) => {
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
 
-    return { user: result.user, backendUser: data.user };
+    return { user: result.user, backendUser: data.user, isNewPlayer: data.isNewPlayer };
   } catch (error) {
     console.error("Email sign-in error:", error);
     throw error;
@@ -87,7 +92,7 @@ export const registerWithEmail = async (email, password, username) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
 
     // Actualizar displayName (nombre de usuario visible)
-    await result.user.updateProfile({ displayName: username });
+    await updateProfile(result.user, { displayName: username });
 
     // Enviar token al backend para crear/validar la cuenta del juego
     const idToken = await result.user.getIdToken(true); // force refresh
@@ -96,7 +101,7 @@ export const registerWithEmail = async (email, password, username) => {
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
 
-    return { user: result.user, backendUser: data.user };
+    return { user: result.user, backendUser: data.user, isNewPlayer: data.isNewPlayer };
   } catch (error) {
     console.error("Email registration error:", error);
     throw error;

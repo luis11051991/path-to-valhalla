@@ -1,6 +1,5 @@
 const socketIo = require('socket.io');
-const jwt = require('jsonwebtoken');
-const { verifyFirebaseToken } = require('./config/firebaseAdmin');
+const { resolveAuthenticatedPlayer } = require('./utils/sessionAuth');
 
 let io;
 
@@ -14,20 +13,10 @@ exports.init = (server) => {
         if (!token) return next(new Error('Authentication error'));
 
         try {
-            // Primero intentar con Firebase token verification
-            const decoded = await verifyFirebaseToken(token);
-            socket.user = { id: decoded.uid };
+            socket.user = await resolveAuthenticatedPlayer(token);
             next();
         } catch (err) {
-            // Fallback a JWT secret para tokens legacy del backend
-            try {
-                const LEGACY_SECRET = 'valhalla_secret_key_odin';
-                const legacyDecoded = jwt.verify(token, LEGACY_SECRET);
-                socket.user = { id: legacyDecoded.id };
-                next();
-            } catch (err2) {
-                next(new Error('Authentication error'));
-            }
+            next(new Error('Authentication error'));
         }
     });
 

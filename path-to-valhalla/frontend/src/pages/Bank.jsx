@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Landmark, PiggyBank, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { apiUrl } from '../constants/api';
@@ -61,12 +61,7 @@ const Bank = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         setTimeout(() => setFeedback(null), 2500);
     };
 
-    useEffect(() => {
-        if (!user) return;
-        loadBankStatus();
-    }, [user?.id]);
-
-    const loadBankStatus = async () => {
+    const loadBankStatus = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch(apiUrl('/api/bank/status'), {
@@ -88,12 +83,20 @@ const Bank = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 bank_silver: data.bank.silver,
                 bank_copper: data.bank.copper
             });
-        } catch (error) {
+        } catch {
             showFeedback('error', 'Error de conexion con el banco.');
         } finally {
             setLoading(false);
         }
-    };
+    }, [onUpdateUser]);
+
+    useEffect(() => {
+        if (!user) return;
+        const timer = setTimeout(() => {
+            void loadBankStatus();
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [loadBankStatus, user]);
 
     const walletCopper = useMemo(
         () => toCopper(bankData.wallet.gold, bankData.wallet.silver, bankData.wallet.copper),
@@ -178,7 +181,7 @@ const Bank = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             setDepositInputs((prev) => ({ ...prev, [pendingTransaction.currency]: '' }));
             setPendingTransaction(null);
             showFeedback('success', data.message || 'Operacion realizada.');
-        } catch (error) {
+        } catch {
             showFeedback('error', 'Error de conexion en la operacion bancaria.');
         } finally {
             setSubmitting(false);

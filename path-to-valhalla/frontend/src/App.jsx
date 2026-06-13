@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 // 1. Importamos las herramientas del Router
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -18,7 +18,7 @@ import Grimoire from "./pages/Grimoire";
 import Bestiary from "./pages/Bestiary";
 import MessagingPage from "./pages/MessagingPage";
 import { apiUrl } from "./constants/api";
-import { signOutFirebase, auth } from "./lib/firebase";
+import { signOutFirebase } from "./lib/firebase";
 
 import { io } from "socket.io-client";
 import { messageService } from "./services/messageService";
@@ -30,76 +30,137 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // --- LÓGICA DE SESIÓN ---
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    const token = localStorage.getItem("token");
+  const clearLocalSession = useCallback(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUnreadCount(0);
+    setUser(null);
+    setView("auth");
+    setSocket((currentSocket) => {
+      currentSocket?.disconnect();
+      return null;
+    });
+  }, []);
 
-    if (storedUser && token) {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
-      setView("game");
-      // Iniciar socket y datos
-      initSocket(token);
-      updateUnreadCount();
+  const handleUserUpdate = useCallback((updatedData) => {
+    setUser((currentUser) => {
+      const newUserState = { ...(currentUser || {}), ...updatedData };
+      localStorage.setItem("user", JSON.stringify(newUserState));
+      return newUserState;
+    });
+  }, []);
 
-      fetch(apiUrl("/api/auth/profile"), {
-        method: "GET",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-      })
-        .then((res) => (res.ok ? res.json() : Promise.reject("Sesión expirada")))
-        .then((data) => data.user && handleUserUpdate(data.user))
-        .catch((err) => console.log("Error validando sesi\u00f3n:", err));
+  const updateUnreadCount = useCallback(async () => {
+    try {
+      const count = await messageService.getUnreadCount();
+      setUnreadCount(count);
+    } catch (error) {
+      console.log("Error cargando mensajes no leidos:", error);
+      setUnreadCount(0);
     }
   }, []);
 
-  const initSocket = (token) => {
-    // Conexión socket
+  const initSocket = useCallback((token) => {
+    if (!token) return null;
+
     const newSocket = io(apiUrl(""), {
       auth: { token },
     });
 
     newSocket.on("connect", () => console.log("Socket conectado"));
-
-    // Escuchar nuevos mensajes GLOBALMENTE para el contador
     newSocket.on("new_message", () => {
-      updateUnreadCount();
-      // Opcional: Sonido de notificación
+      void updateUnreadCount();
+    });
+    newSocket.on("message_read", () => {
+      void updateUnreadCount();
     });
 
-    setSocket(newSocket);
-  };
+    setSocket((currentSocket) => {
+      currentSocket?.disconnect();
+      return newSocket;
+    });
 
-  const updateUnreadCount = async () => {
-    const count = await messageService.getUnreadCount();
-    setUnreadCount(count);
-  };
+    return newSocket;
+  }, [updateUnreadCount]);
+
+  // --- LÓGICA DE SESIÓN ---
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    const token = localStorage.getItem("token");
+
+    if (!storedUser || !token) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let activeSocket = null;
+
+    const restoreSession = async () => {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        if (cancelled) return;
+
+        setUser(parsedUser);
+        setView(!parsedUser.race ? "race" : "game");
+
+        activeSocket = initSocket(token);
+        await updateUnreadCount();
+
+        const response = await fetch(apiUrl("/api/auth/profile"), {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Sesion expirada");
+        }
+
+        const data = await response.json();
+        if (!cancelled && data.user) {
+          handleUserUpdate(data.user);
+          setView(!data.user.race ? "race" : "game");
+        }
+      } catch (error) {
+        console.log("Error validando sesi\u00f3n:", error);
+        if (!cancelled) {
+          clearLocalSession();
+        }
+      }
+    };
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+      activeSocket?.disconnect();
+    };
+  }, [clearLocalSession, handleUserUpdate, initSocket, updateUnreadCount]);
 
   const handleAuthSuccess = (userData, isRegistration) => {
     setUser(userData);
     localStorage.setItem("user", JSON.stringify(userData));
     const token = localStorage.getItem("token");
 
-    // Iniciar socket al login
     if (token) {
       initSocket(token);
       updateUnreadCount();
     }
 
-    if (isRegistration) setView("race");
-    else setView("welcome_back");
+    // Si no tiene raza, forzar creacion de personaje
+    if (isRegistration || !userData.race) {
+      setView("race");
+    } else {
+      setView("welcome_back");
+    }
   };
 
   const handleRaceSelected = (updatedUserData) => {
     setUser(updatedUserData);
     localStorage.setItem("user", JSON.stringify(updatedUserData));
     setView("game");
-  };
-
-  const handleUserUpdate = (updatedData) => {
-    const newUserState = { ...user, ...updatedData };
-    setUser(newUserState);
-    localStorage.setItem("user", JSON.stringify(newUserState));
   };
 
   // --- Logout con Firebase Auth ---
@@ -109,8 +170,7 @@ function App() {
     } catch (e) {
       console.log("Error en logout:", e);
     }
-    setUser(null);
-    setView("auth");
+    clearLocalSession();
     setIsShopOpen(false);
   };
 

@@ -1,21 +1,73 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { messageService } from '../services/messageService';
-import { Send, User, Shield, Info } from 'lucide-react';
+import { Send, User, Shield } from 'lucide-react';
 
-// Componente para una burbuja de mensaje
+const buildConversations = (msgs, userId) => {
+    const convos = {};
+
+    msgs.forEach((msg) => {
+        const isMeSender = String(msg.sender_id) === String(userId);
+
+        let otherId;
+        let otherName;
+
+        if (msg.is_system) {
+            otherId = 'system';
+            otherName = 'Sistema';
+        } else {
+            otherId = isMeSender ? msg.recipient_id : msg.sender_id;
+            otherName = isMeSender ? msg.recipient_name : msg.sender_name;
+        }
+
+        if (!otherId) return;
+
+        if (!convos[otherId]) {
+            convos[otherId] = {
+                username: otherName || 'Desconocido',
+                messages: [],
+            };
+        }
+
+        if (otherName && convos[otherId].username === 'Desconocido') {
+            convos[otherId].username = otherName;
+        }
+
+        convos[otherId].messages.push(msg);
+    });
+
+    Object.keys(convos).forEach((key) => {
+        convos[key].messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    });
+
+    const orderedConvos = {};
+    Object.keys(convos)
+        .sort((a, b) => {
+            const lastA = convos[a].messages[convos[a].messages.length - 1];
+            const lastB = convos[b].messages[convos[b].messages.length - 1];
+            return new Date(lastB.created_at) - new Date(lastA.created_at);
+        })
+        .forEach((key) => {
+            orderedConvos[key] = convos[key];
+        });
+
+    return orderedConvos;
+};
+
 const MessageBubble = ({ message, isMe }) => {
     const time = new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     return (
         <div className={`flex w-full mb-4 ${isMe ? 'justify-end' : 'justify-start'}`}>
-            <div className={`
+            <div
+                className={`
                 max-w-[70%] rounded-lg p-3 relative
                 ${message.is_system
                     ? 'bg-amber-900/40 border border-amber-500/50 text-amber-100'
                     : isMe
                         ? 'bg-slate-700 text-slate-100 rounded-br-none'
                         : 'bg-slate-800 text-slate-300 rounded-bl-none'}
-            `}>
+            `}
+            >
                 {message.is_system && (
                     <div className="flex items-center gap-2 mb-1 text-xs text-amber-400 font-bold uppercase tracking-wider">
                         <Shield size={12} />
@@ -30,177 +82,148 @@ const MessageBubble = ({ message, isMe }) => {
 };
 
 const MessagingPage = ({ user, socket, onMessageRead }) => {
-    const [messages, setMessages] = useState([]);
-    const [conversations, setConversations] = useState({}); // Key: UserID, Value: { username, messages: [] }
-    const [selectedId, setSelectedId] = useState(null); // ID del usuario del chat abierto
+    const [conversations, setConversations] = useState({});
+    const [selectedId, setSelectedId] = useState(null);
     const [newMessage, setNewMessage] = useState('');
-    const [newRecipientName, setNewRecipientName] = useState(''); // Nombre para iniciar nuevo chat
-    const [filteredUsers, setFilteredUsers] = useState([]); // Resultados búsqueda
+    const [newRecipientName, setNewRecipientName] = useState('');
+    const [filteredUsers, setFilteredUsers] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
-
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
-    const scrollRef = useRef(null);
 
-    // Cargar mensajes
-    const loadMessages = async () => {
+    const scrollRef = useRef(null);
+    const messagesRef = useRef([]);
+
+    const applyMessages = useCallback((nextMessages) => {
+        const sanitizedMessages = [...nextMessages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        messagesRef.current = sanitizedMessages;
+        setConversations(buildConversations(sanitizedMessages, user.id));
+    }, [user.id]);
+
+    const loadMessages = useCallback(async () => {
         try {
             setLoading(true);
             const data = await messageService.getMyMessages();
             if (data.success) {
-                processMessages(data.messages);
+                applyMessages(data.messages || []);
             }
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [applyMessages]);
 
-    // Procesar mensajes en conversaciones (AGRUPADO POR ID)
-    const processMessages = (msgs) => {
-        const convos = {};
-
-        msgs.forEach(msg => {
-            const isMeSender = String(msg.sender_id) === String(user.id);
-
-            // Determinar ID y Nombre del "Otro"
-            let otherId, otherName;
-
-            if (msg.is_system) {
-                otherId = 'system';
-                otherName = 'Sistema';
-            } else {
-                otherId = isMeSender ? msg.recipient_id : msg.sender_id;
-                otherName = isMeSender ? msg.recipient_name : msg.sender_name;
-            }
-
-            if (!otherId) return; // Skip invalid
-
-            if (!convos[otherId]) {
-                convos[otherId] = {
-                    username: otherName || 'Desconocido',
-                    messages: []
-                };
-            }
-
-            // Actualizar nombre si encontramos uno mejor (no Desconocido)
-            if (otherName && convos[otherId].username === 'Desconocido') {
-                convos[otherId].username = otherName;
-            }
-
-            convos[otherId].messages.push(msg);
-        });
-
-        // Ordenar mensajes
-        Object.keys(convos).forEach(key => {
-            convos[key].messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        });
-
-        // Ordenar conversaciones por fecha del último mensaje
-        const orderedConvos = {};
-        Object.keys(convos)
-            .sort((a, b) => {
-                const lastA = convos[a].messages[convos[a].messages.length - 1];
-                const lastB = convos[b].messages[convos[b].messages.length - 1];
-                return new Date(lastB.created_at) - new Date(lastA.created_at);
-            })
-            .forEach(key => {
-                orderedConvos[key] = convos[key];
-            });
-
-        setConversations(orderedConvos);
-        setMessages(msgs);
-    };
-
-    // Efecto Socket
     useEffect(() => {
-        if (!socket) return;
-        const handleNewMessage = (data) => {
-            const newMsg = data.message;
+        const timer = setTimeout(() => {
+            void loadMessages();
+        }, 0);
 
-            // Patch nombres si faltan (aunque el backend ya los envía)
-            if (newMsg.sender_id !== user.id && !newMsg.sender_name) {
-                newMsg.sender_name = data.senderUsername || 'Desconocido';
-            }
+        return () => clearTimeout(timer);
+    }, [loadMessages]);
 
-            setMessages(prev => {
-                const updated = [...prev, newMsg];
-                processMessages(updated);
-                return updated;
-            });
+    useEffect(() => {
+        if (!socket) return undefined;
+
+        const handleNewMessage = ({ message }) => {
+            if (!message?.id) return;
+
+            const alreadyExists = messagesRef.current.some((currentMessage) => currentMessage.id === message.id);
+            if (alreadyExists) return;
+
+            applyMessages([...messagesRef.current, message]);
+        };
+
+        const handleMessageRead = ({ messageId }) => {
+            if (!messageId) return;
+
+            applyMessages(
+                messagesRef.current.map((message) => (
+                    message.id === messageId
+                        ? { ...message, is_read: true }
+                        : message
+                ))
+            );
         };
 
         socket.on('new_message', handleNewMessage);
-        return () => socket.off('new_message', handleNewMessage);
-    }, [socket, user.id]);
+        socket.on('message_read', handleMessageRead);
 
-    useEffect(() => {
-        loadMessages();
-    }, []);
+        return () => {
+            socket.off('new_message', handleNewMessage);
+            socket.off('message_read', handleMessageRead);
+        };
+    }, [applyMessages, socket]);
 
-    // Auto-scroll
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [selectedId, conversations]);
 
-    // Marcar como leídos
     useEffect(() => {
-        if (selectedId && conversations[selectedId]) {
-            const msgs = conversations[selectedId].messages;
-            const unreadIds = msgs
-                .filter(m => !m.is_read && String(m.recipient_id) === String(user.id))
-                .map(m => m.id);
+        if (!selectedId || !conversations[selectedId]) return undefined;
 
-            if (unreadIds.length > 0) {
-                unreadIds.forEach(id => {
-                    messageService.markAsRead(id).then(() => {
-                        if (onMessageRead) onMessageRead();
-                    });
-                });
+        const unreadIds = conversations[selectedId].messages
+            .filter((message) => !message.is_read && String(message.recipient_id) === String(user.id))
+            .map((message) => message.id);
 
-                // Optimistic update
-                setConversations(prev => {
-                    const newConvos = { ...prev };
-                    if (newConvos[selectedId]) {
-                        newConvos[selectedId].messages = newConvos[selectedId].messages.map(m => ({ ...m, is_read: true }));
-                    }
-                    return newConvos;
-                });
+        if (unreadIds.length === 0) return undefined;
+
+        let cancelled = false;
+
+        const markConversationAsRead = async () => {
+            try {
+                await Promise.all(unreadIds.map((messageId) => messageService.markAsRead(messageId)));
+
+                if (cancelled) return;
+
+                applyMessages(
+                    messagesRef.current.map((message) => (
+                        unreadIds.includes(message.id)
+                            ? { ...message, is_read: true }
+                            : message
+                    ))
+                );
+
+                if (onMessageRead) {
+                    onMessageRead();
+                }
+            } catch (error) {
+                console.error(error);
             }
-        }
-    }, [selectedId, messages, user.id, conversations, onMessageRead]);
+        };
+
+        void markConversationAsRead();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [applyMessages, conversations, onMessageRead, selectedId, user.id]);
 
     const handleSend = async (e) => {
         e.preventDefault();
-        if (!newMessage.trim()) return;
 
-        // Determinar destinatario (username)
-        let recipientUsername = null;
-        if (selectedId && conversations[selectedId]) {
-            recipientUsername = conversations[selectedId].username;
-        } else {
-            recipientUsername = newRecipientName;
-        }
+        const content = newMessage.trim();
+        if (!content) return;
+
+        const recipientUsername = selectedId && conversations[selectedId]
+            ? conversations[selectedId].username
+            : newRecipientName.trim();
 
         if (!recipientUsername) return;
 
         setSending(true);
         try {
-            await messageService.sendMessage(recipientUsername, newMessage);
+            const result = await messageService.sendMessage(recipientUsername, content);
             setNewMessage('');
 
-            if (!selectedId) {
-                // Si era nuevo chat, limpiamos input y recargamos para que aparezca la conversa
+            if (!selectedId && result?.data?.recipient_id) {
+                setSelectedId(result.data.recipient_id);
                 setNewRecipientName('');
-                await loadMessages();
-                // Nota: Podríamos intentar predecir el ID pero mejor recargar o esperar el socket
-                // Si el socket llega rápido, processMessages lo pondrá.
-            } else {
-                await loadMessages();
             }
+
+            await loadMessages();
         } catch (err) {
             alert(err.message);
         } finally {
@@ -212,7 +235,6 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
 
     return (
         <div className="h-full flex flex-col md:flex-row gap-4 p-4 md:p-6 overflow-hidden max-h-screen">
-            {/* Lista */}
             <div className="w-full md:w-1/3 bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
                 <div className="p-4 border-b border-slate-800 bg-black/20">
                     <h2 className="text-lg font-serif font-bold text-amber-500 flex items-center gap-2">
@@ -229,12 +251,12 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
                         <span className="text-sm font-bold text-amber-200">+ Nueva Conversación</span>
                     </button>
 
-                    {conversationIds.map(id => {
+                    {conversationIds.map((id) => {
                         const convo = conversations[id];
                         const lastMsg = convo.messages[convo.messages.length - 1];
                         const isActive = selectedId === id;
                         const isSystem = convo.username === 'Sistema';
-                        const hasUnread = convo.messages.some(m => !m.is_read && String(m.recipient_id) === String(user.id));
+                        const hasUnread = convo.messages.some((message) => !message.is_read && String(message.recipient_id) === String(user.id));
 
                         return (
                             <button
@@ -258,7 +280,6 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
                 </div>
             </div>
 
-            {/* Chat */}
             <div className="flex-1 bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden flex flex-col relative">
                 <div className="p-4 border-b border-slate-800 bg-black/20 flex justify-between items-center">
                     <h3 className="font-bold text-slate-100 text-lg">
@@ -277,8 +298,8 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
                             <p>Selecciona un chat o inicia uno nuevo</p>
                         </div>
                     ) : (
-                        conversations[selectedId].messages.map(msg => (
-                            <MessageBubble key={msg.id} message={msg} isMe={String(msg.sender_id) === String(user.id)} />
+                        conversations[selectedId].messages.map((message) => (
+                            <MessageBubble key={message.id} message={message} isMe={String(message.sender_id) === String(user.id)} />
                         ))
                     )}
                 </div>
@@ -292,15 +313,20 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
                                     placeholder="Nombre de usuario del destinatario..."
                                     className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-amber-500 outline-none"
                                     value={newRecipientName}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        setNewRecipientName(val);
-                                        if (val.length >= 4) {
-                                            messageService.searchUsers(val).then(users => {
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setNewRecipientName(value);
+
+                                        if (value.trim().length >= 3) {
+                                            messageService.searchUsers(value).then((users) => {
                                                 setFilteredUsers(users);
                                                 setShowSuggestions(true);
+                                            }).catch(() => {
+                                                setFilteredUsers([]);
+                                                setShowSuggestions(false);
                                             });
                                         } else {
+                                            setFilteredUsers([]);
                                             setShowSuggestions(false);
                                         }
                                     }}
@@ -308,17 +334,17 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
                                 />
                                 {showSuggestions && filteredUsers.length > 0 && (
                                     <div className="absolute bottom-full left-0 w-full mb-1 bg-slate-800 border border-slate-700 rounded shadow-xl z-50 max-h-40 overflow-y-auto">
-                                        {filteredUsers.map(u => (
+                                        {filteredUsers.map((foundUser) => (
                                             <button
-                                                key={u.id}
+                                                key={foundUser.id}
                                                 type="button"
                                                 className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-amber-900/40 hover:text-amber-100"
                                                 onClick={() => {
-                                                    setNewRecipientName(u.username);
+                                                    setNewRecipientName(foundUser.username);
                                                     setShowSuggestions(false);
                                                 }}
                                             >
-                                                {u.username}
+                                                {foundUser.username}
                                             </button>
                                         ))}
                                     </div>
@@ -329,10 +355,10 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
                         <div className="flex gap-2">
                             <input
                                 type="text"
-                                placeholder={`Escribir mensaje...`}
+                                placeholder="Escribir mensaje..."
                                 className="flex-1 bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-amber-500 outline-none"
                                 value={newMessage}
-                                onChange={e => setNewMessage(e.target.value)}
+                                onChange={(e) => setNewMessage(e.target.value)}
                                 disabled={selectedId && conversations[selectedId]?.username === 'Sistema'}
                             />
                             <button

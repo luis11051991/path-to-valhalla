@@ -1,45 +1,59 @@
+rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuthenticated() { return request.auth != null; }
-    function isOwner(docField) { return isAuthenticated() && (resource.data[player_id] == request.auth.uid || resource.data[id] == request.auth.uid); }
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-    // Players - solo el dueño puede leer/escribir su propio documento
+    function playerExists(playerId) {
+      return exists(/databases/$(database)/documents/players/$(playerId));
+    }
+
+    function isPlayerOwner(playerId) {
+      return isSignedIn()
+        && playerExists(playerId)
+        && get(/databases/$(database)/documents/players/$(playerId)).data.firebase_uid == request.auth.uid;
+    }
+
+    function isMessageParticipant() {
+      return isSignedIn() && (
+        (resource.data.sender_id != null && isPlayerOwner(resource.data.sender_id)) ||
+        (resource.data.recipient_id != null && isPlayerOwner(resource.data.recipient_id))
+      );
+    }
+
+    // Player principal: solo su dueño puede leerlo directo desde cliente.
+    // Todas las escrituras deben pasar por el backend (firebase-admin).
     match /players/{playerId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.uid == playerId;
+      allow get: if isSignedIn() && resource.data.firebase_uid == request.auth.uid;
+      allow list: if false;
+      allow create, update, delete: if false;
 
-      // Subcolecciones de jugadores (items, pets, quests, etc.)
+      // Subcolecciones privadas del jugador.
       match /{subcollection}/{docId} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated() && request.resource.data.player_id == request.auth.uid || true;
-        allow update: if isAuthenticated();
-        allow delete: if isAuthenticated();
-      }
-
-      // Subcolecciones de mensajes
-      match /messages/{msgId} {
-        allow read, write: if isAuthenticated();
+        allow get, list: if isPlayerOwner(playerId);
+        allow create, update, delete: if false;
       }
     }
 
-    // Messages (mensajes globales)
+    // Mensajes globales: lectura solo si el usuario participa.
+    // Escrituras bloqueadas desde cliente; se hacen por backend.
     match /messages/{messageId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.recipient_id != null;
-      allow update: if isAuthenticated() && (resource.data.recipient_id == request.auth.uid || resource.data.sender_id == request.auth.uid);
+      allow get, list: if isMessageParticipant();
+      allow create, update, delete: if false;
     }
 
-    // Player Backgrounds
+    // Relacion jugador-fondos: lectura solo para el dueño.
     match /player_backgrounds/{bgId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (resource.data.player_id == request.auth.uid || request.resource.data.player_id == request.auth.uid);
+      allow get, list: if isSignedIn()
+        && resource.data.player_id != null
+        && isPlayerOwner(resource.data.player_id);
+      allow create, update, delete: if false;
     }
 
-    // ==========================================
-    // Datos estáticos (solo lectura pública)
-    // ==========================================
+    // Catalogos estaticos: lectura publica, sin escrituras desde cliente.
     match /classes/{classId} {
       allow read: if true;
       allow write: if false;
@@ -93,6 +107,11 @@ service cloud.firestore {
     match /recipes/{recipeId} {
       allow read: if true;
       allow write: if false;
+    }
+
+    // Denegar cualquier ruta no contemplada.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

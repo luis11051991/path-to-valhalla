@@ -9,7 +9,6 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
     const [options, setOptions] = useState([]);
     const [selectedOption, setSelectedOption] = useState(null);
     const [questPreview, setQuestPreview] = useState(null);
-    const [error, setError] = useState(null);
     const [customAlert, setCustomAlert] = useState(null); // Alerta bonita
 
     // Cargar opciones SOLO si estamos en modo selección
@@ -25,10 +24,10 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                     setQuestPreview(data.questData); // <--- GUARDAR LA QUEST AQUÍ
                     setStep(1); 
                 } else {
-                    setError(data.message);
+                    setCustomAlert({ type: 'error', msg: data.message });
                 }
             })
-            .catch(() => setError("Los dioses guardan silencio."));
+            .catch(() => setCustomAlert({ type: 'error', msg: "Los dioses guardan silencio." }));
         }
     }, [status]);
 
@@ -60,7 +59,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
             } else {
                 setCustomAlert({ type: 'error', msg: data.message });
             }
-        } catch (err) { setCustomAlert({ type: 'error', msg: "Error de conexión." }); }
+        } catch { setCustomAlert({ type: 'error', msg: "Error de conexión." }); }
     };
 
     const handleFinishEvolution = async () => {
@@ -81,7 +80,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
             } else {
                 setCustomAlert({ type: 'error', msg: data.message });
             }
-        } catch (e) { setCustomAlert({ type: 'error', msg: "Error al evolucionar." }); }
+        } catch { setCustomAlert({ type: 'error', msg: "Error al evolucionar." }); }
     };
 
     // --- RENDERIZADO VISUAL ---
@@ -147,7 +146,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                                 
                                 {/* Imagen del Personaje - AJUSTADA */}
                                 <div className="h-[350px] w-full relative bg-gradient-to-b from-slate-800 to-slate-950 overflow-hidden">
-                                    <div className="absolute inset-0 opacity-20 bg-[url('/patterns/hex.png')]"></div>
+                                    <div className="absolute inset-0 opacity-20 bg-[url('/patterns/hex.svg')]"></div>
                                     {/* AJUSTE IMAGEN: object-center y padding reducido */}
                                     <img 
                                         src={getClassImage(opt.image_url)} 
@@ -198,7 +197,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                         
                         {/* Lado Izquierdo: Clase Elegida */}
                         <div className="relative h-64 md:h-auto bg-slate-900 flex items-center justify-center overflow-hidden">
-                            <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-10"></div>
+                            <div className="absolute inset-0 bg-[url('/patterns/hex.svg')] opacity-10"></div>
                             <img 
                                 src={getClassImage(selectedOption.image_url)} 
                                 className="w-full h-full object-contain object-center scale-100 p-4" 
@@ -273,7 +272,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                     
                     {/* Panel Izquierdo: Tu Futuro */}
                     <div className="w-full md:w-5/12 relative bg-slate-950 overflow-hidden">
-                         <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-10"></div>
+                         <div className="absolute inset-0 bg-[url('/patterns/hex.svg')] opacity-10"></div>
                          {/* AJUSTE IMAGEN PROGRESO: object-center */}
                         <img 
                             src={getClassImage(targetClass?.image_url)} 
@@ -337,7 +336,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md p-4">
-            <div className="absolute inset-0 bg-[url('/backgrounds/valhalla_stars.png')] opacity-20 pointer-events-none"></div>
+            <div className="absolute inset-0 bg-[url('/backgrounds/valhalla_stars.svg')] opacity-20 pointer-events-none"></div>
             
             <div className="bg-slate-950 border border-amber-900/50 rounded-lg max-w-6xl w-full h-[90vh] flex flex-col shadow-[0_0_100px_rgba(245,158,11,0.1)] relative overflow-hidden">
                 <button onClick={onClose} className="absolute top-4 right-4 z-50 text-slate-500 hover:text-white p-2 bg-black/50 rounded-full hover:bg-red-900/50 transition-colors"><X size={24} /></button>

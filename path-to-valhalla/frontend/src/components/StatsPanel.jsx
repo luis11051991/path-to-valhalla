@@ -36,14 +36,19 @@ const STAT_CONFIG = {
 };
 
 const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0 }) => {
+    void maxHp;
     // Estado temporal (lo que estás modificando antes de confirmar)
     const [pendingStats, setPendingStats] = useState(stats);
     const [spentPoints, setSpentPoints] = useState(0);
 
     // Reiniciar si el usuario sube de nivel externamente
     useEffect(() => {
-        setPendingStats(stats);
-        setSpentPoints(0);
+        const timer = setTimeout(() => {
+            setPendingStats(stats);
+            setSpentPoints(0);
+        }, 0);
+
+        return () => clearTimeout(timer);
     }, [stats]);
 
     // --- CÁLCULO DE LA "PREDICCIÓN" (Cuadro Fantasma) ---

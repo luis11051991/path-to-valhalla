@@ -37,7 +37,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const user = propUser || (contextData ? contextData[0] : null);
     const onUpdateUser = propOnUpdateUser || (contextData ? contextData[1] : null);
 
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(true);
     const [hallData, setHallData] = useState(null);
     const [globalCooldown, setGlobalCooldown] = useState(0);
     const [selectedQuest, setSelectedQuest] = useState(null); 
@@ -56,8 +56,12 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         } catch (err) { console.error(err); } finally { setLoading(false); }
     };
 
-    useEffect(() => { 
-        if (user) loadData(); 
+    useEffect(() => {
+        if (!user) return;
+        const timer = setTimeout(() => {
+            void loadData();
+        }, 0);
+        return () => clearTimeout(timer);
     }, [user]);
 
     useEffect(() => {
@@ -123,7 +127,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     if (!user) return null;
 
     return (
-        <div className="h-full flex flex-col p-6 bg-[url('/backgrounds/hall_bg.png')] bg-cover bg-center relative font-sans text-slate-100">
+        <div className="h-full flex flex-col p-6 bg-[url('/backgrounds/hall_bg.svg')] bg-cover bg-center relative font-sans text-slate-100">
             <div className="absolute inset-0 bg-slate-950/95" />
             
             <div className="relative z-10 flex flex-col h-full max-w-6xl mx-auto w-full gap-6 overflow-y-auto custom-scrollbar pr-2">

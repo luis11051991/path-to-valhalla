@@ -56,7 +56,7 @@ app.post('/api/register', authController.register);
 app.post('/api/login', authController.login);
 
 // --- RUTAS DE JUGADOR ---
-app.post('/api/choose-race', playerController.chooseRace);
+app.post('/api/choose-race', authMiddleware, playerController.chooseRace);
 app.post('/api/train-stats', playerController.trainStats);
 app.post('/api/rent-bag', playerController.rentBag);
 
@@ -82,10 +82,10 @@ app.post('/api/inventory/organize', inventoryController.organizeInventory);
 // --- RUTAS DE ADMIN / DEBUG ---
 app.post('/api/admin/give-item', inventoryController.adminGiveItem);
 // --- BUSQUEDA ---
-app.get('/api/search-users', playerController.searchUsers);
+app.get('/api/search-users', authMiddleware, playerController.searchUsers);
 
 // --- ARRANQUE ---
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 socket.init(server);
 
