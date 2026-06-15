@@ -18,6 +18,14 @@ const validateEnv = () => {
     return false;
   }
 
+  // Validar que no haya fallbacks hardcodeados en producción
+  if (process.env.NODE_ENV === 'production') {
+    if (process.env.JWT_SECRET === 'valhalla_secret_key_odin_valhalla_secret_key_odin') {
+      console.error('ERROR: Using default JWT_SECRET in production - this is insecure');
+      return false;
+    }
+  }
+
   return true;
 };
 

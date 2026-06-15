@@ -1,6 +1,6 @@
 // Socket.IO inicialización y configuración
 const socketIo = require('socket.io');
-const { resolveAuthenticatedPlayer } = require('./utils/sessionAuth');
+const { resolveAuthenticatedPlayer } = require('../utils/sessionAuth');
 
 let io;
 

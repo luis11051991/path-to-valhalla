@@ -2,14 +2,21 @@
 require('dotenv').config();
 
 const http = require('http');
-const socket = require('./src/socket');
+const socket = require('./src/realtime/socket');
 const { ensureInitialGameData } = require('./src/seeds/bootstrap');
 const app = require('./src/app');
 const { validateEnv } = require('./src/config/env');
+const { isInitialized } = require('./src/config/db');
 
 // Validar variables de entorno antes de arrancar
 if (!validateEnv()) {
   console.error('Environment validation failed. Exiting.');
+  process.exit(1);
+}
+
+// Validar que Firebase se haya inicializado correctamente
+if (!isInitialized()) {
+  console.error('Firebase initialization failed. Exiting.');
   process.exit(1);
 }
 

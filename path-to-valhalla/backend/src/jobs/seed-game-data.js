@@ -1,23 +1,26 @@
-// Script para ejecución de datos iniciales (seed)
+#!/usr/bin/env node
+
+// Script para ejecutar seed de datos iniciales
+require('dotenv').config();
 const { ensureInitialGameData } = require('../seeds/bootstrap');
+const { isInitialized } = require('../config/db');
 
 async function runSeed() {
+  // Validar que Firebase se haya inicializado correctamente
+  if (!isInitialized()) {
+    console.error('Firebase initialization failed. Exiting.');
+    process.exit(1);
+  }
+
   try {
-    console.log('Starting seed data initialization...');
-    
+    console.log('Starting initial game data seeding...');
     await ensureInitialGameData();
-    
-    console.log('Seed data initialized successfully');
+    console.log('Initial game data loaded successfully');
     process.exit(0);
   } catch (error) {
-    console.error('Error initializing seed data:', error.message);
+    console.error('[seed] Error loading initial data:', error.message);
     process.exit(1);
   }
 }
 
-// Solo ejecutar si el script se llama directamente
-if (require.main === module) {
-  runSeed();
-}
-
-module.exports = { runSeed };
+runSeed();

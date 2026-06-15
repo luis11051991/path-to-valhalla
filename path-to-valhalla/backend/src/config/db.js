@@ -1,39 +1,9 @@
-const { initializeApp, getApp, getApps, cert } = require('firebase-admin/app');
-const { getAuth } = require('firebase-admin/auth');
-const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+// Exportar funciones utilitarias
+const { isInitialized, db, auth, Timestamp } = require('./firebase');
 
-let db, auth;
-
-try {
-  // Primero intentamos cargar desde variables de entorno
-  if (process.env.FIREBASE_ADMIN_CREDENTIALS) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_CREDENTIALS);
-    if (getApps().length === 0) {
-      initializeApp({ credential: cert(serviceAccount) });
-    } else {
-      getApp();
-    }
-    db = getFirestore(getApp());
-    auth = getAuth(getApp());
-  } else {
-    // Si no hay credenciales en variables de entorno, intentamos cargar desde archivo
-    const serviceAccount = require('../serviceAccountKey.json');
-    if (getApps().length === 0) {
-      initializeApp({ credential: cert(serviceAccount) });
-    } else {
-      getApp();
-    }
-    db = getFirestore(getApp());
-    auth = getAuth(getApp());
-  }
-} catch (error) {
-  console.error('Firestore initialization error:', error.message);
-  db = null;
-  auth = null;
-}
-
+// Reexportar las funciones que no están en el nuevo archivo firebase.js
 // Convert plain JS objects to Firestore-compatible timestamps
-function withTimestamps(obj, dateFields) {
+function withTimestampsUtil(obj, dateFields) {
   if (!obj) return obj;
   const result = { ...obj };
   for (const field of (Array.isArray(dateFields) ? dateFields : [dateFields])) {
@@ -47,7 +17,7 @@ function withTimestamps(obj, dateFields) {
 }
 
 // Convert Firestore doc to plain object with decoded timestamps
-function decodeDoc(doc, timestampFields) {
+function decodeDocUtil(doc, timestampFields) {
   if (!doc || !doc.data) return null;
   const data = doc.data();
   const obj = {};
@@ -66,10 +36,16 @@ function decodeDoc(doc, timestampFields) {
   return obj;
 }
 
-function decodeDocs(querySnap, timestampFields) {
-  return querySnap.docs.map(doc => decodeDoc(doc, timestampFields));
+function decodeDocsUtil(querySnap, timestampFields) {
+  return querySnap.docs.map(doc => decodeDocUtil(doc, timestampFields));
 }
 
 module.exports = {
-  db, auth, withTimestamps, decodeDoc, decodeDocs, Timestamp,
+  db,
+  auth,
+  withTimestamps: withTimestampsUtil,
+  decodeDoc: decodeDocUtil,
+  decodeDocs: decodeDocsUtil,
+  Timestamp,
+  isInitialized
 };

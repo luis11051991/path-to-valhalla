@@ -38,6 +38,23 @@ app.use(limiter); // Limitador de tasa
 app.use(express.json({ limit: '10mb' })); // Límite de tamaño del body
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Endpoints de salud
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    service: 'backend'
+  });
+});
+
+app.get('/ready', (req, res) => {
+  res.json({
+    status: 'READY',
+    timestamp: new Date().toISOString(),
+    service: 'backend'
+  });
+});
+
 // Importar rutas
 const routes = require('./routes/index.js');
 
