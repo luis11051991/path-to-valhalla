@@ -1,5 +1,6 @@
 const { db } = require('../config/db');
 const { hydratePlayer } = require('../shared/player_stats');
+const { grantStarterKitForRace } = require('../seeds/bootstrap');
 
 // Configuracion de Fondos por Raza
 const RACE_BACKGROUNDS = {
@@ -60,6 +61,8 @@ exports.chooseRace = async (req, res) => {
                 });
             }
         });
+
+        await grantStarterKitForRace({ userId, race: raceKey });
 
         const finalUserDoc = await playerRef.get();
         let finalUser = { ...finalUserDoc.data(), id: finalUserDoc.id };

@@ -1,0 +1,12 @@
+{
+  "name": "@valhalla/shared",
+  "version": "1.0.0",
+  "description": "Shared code for Path to Valhalla project",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Test shared package\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

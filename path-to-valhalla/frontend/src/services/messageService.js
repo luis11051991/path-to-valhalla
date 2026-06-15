@@ -60,7 +60,7 @@ const searchUsers = async (queryStr) => {
     return [];
   }
 
-  const response = await fetch(apiUrl(`/api/search-users?q=${encodeURIComponent(trimmed)}`), {
+  const response = await fetch(apiUrl(`/api/player/search?q=${encodeURIComponent(trimmed)}`), {
     headers: getAuthHeaders({ "Content-Type": undefined }),
   });
 

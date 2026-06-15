@@ -5,14 +5,27 @@ const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 let db, auth;
 
 try {
-  const serviceAccount = require('../serviceAccountKey.json');
-  if (getApps().length === 0) {
-    initializeApp({ credential: cert(serviceAccount) });
+  // Primero intentamos cargar desde variables de entorno
+  if (process.env.FIREBASE_ADMIN_CREDENTIALS) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_CREDENTIALS);
+    if (getApps().length === 0) {
+      initializeApp({ credential: cert(serviceAccount) });
+    } else {
+      getApp();
+    }
+    db = getFirestore(getApp());
+    auth = getAuth(getApp());
   } else {
-    getApp();
+    // Si no hay credenciales en variables de entorno, intentamos cargar desde archivo
+    const serviceAccount = require('../serviceAccountKey.json');
+    if (getApps().length === 0) {
+      initializeApp({ credential: cert(serviceAccount) });
+    } else {
+      getApp();
+    }
+    db = getFirestore(getApp());
+    auth = getAuth(getApp());
   }
-  db = getFirestore(getApp());
-  auth = getAuth(getApp());
 } catch (error) {
   console.error('Firestore initialization error:', error.message);
   db = null;

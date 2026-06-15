@@ -56,7 +56,7 @@ export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const idToken = await result.user.getIdToken(true); // force refresh
-    const data = await backendFetch("/api/auth/firebase-login", { idToken });
+    const data = await backendFetch("/api/v1/firebase-auth/firebase-login", { idToken });
 
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
@@ -73,7 +73,7 @@ export const signInWithEmail = async (email, password) => {
   try {
     const result = await signInWithEmailAndPassword(auth, email, password);
     const idToken = await result.user.getIdToken(true); // force refresh
-    const data = await backendFetch("/api/auth/firebase-login", { idToken });
+    const data = await backendFetch("/api/v1/firebase-auth/firebase-login", { idToken });
 
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
@@ -96,7 +96,7 @@ export const registerWithEmail = async (email, password, username) => {
 
     // Enviar token al backend para crear/validar la cuenta del juego
     const idToken = await result.user.getIdToken(true); // force refresh
-    const data = await backendFetch("/api/auth/firebase-login", { idToken });
+    const data = await backendFetch("/api/v1/firebase-auth/firebase-login", { idToken });
 
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));

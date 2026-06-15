@@ -7,6 +7,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 // Rutas
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/firebase-login', authController.firebaseLogin);
 
 // Esta línea es la que fallaba porque authController.getProfile era "undefined"
 router.get('/profile', authMiddleware, authController.getProfile);

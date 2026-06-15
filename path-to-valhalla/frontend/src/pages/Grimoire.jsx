@@ -12,7 +12,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
 
     // --- CARGAR HABILIDADES ---
     const fetchSkills = () => {
-        fetch(apiUrl('/api/my-skills'), { 
+        fetch(apiUrl('/api/skills'), { 
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } 
         })
         .then(res => res.json())
@@ -65,7 +65,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
     // --- ACCIONES ---
     const handleToggleEquip = async (skillId) => {
         try {
-            const res = await fetch(apiUrl('/api/equip-skill'), {
+            const res = await fetch(apiUrl('/api/skills/equip'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
                 body: JSON.stringify({ skillId })

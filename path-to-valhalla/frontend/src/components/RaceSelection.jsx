@@ -79,7 +79,7 @@ const RaceSelection = ({ onRaceSelect }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(apiUrl('/api/choose-race'), {
+      const response = await fetch(apiUrl('/api/player/choose-race'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

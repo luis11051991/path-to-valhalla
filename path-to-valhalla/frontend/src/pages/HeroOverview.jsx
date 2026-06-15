@@ -64,7 +64,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const raceData = RACES.find((race) => race.id === user?.race) || RACES[0];
 
     const fetchPets = useCallback(() => {
-        fetch(apiUrl('/api/my-pets'), { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+        fetch(apiUrl('/api/pets'), { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -161,7 +161,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
     // --- ACCIONES (Mascotas, Fondo, Stats) ---
     const handleEquipPet = async (playerPetId) => {
-        const res = await fetch(apiUrl('/api/equip-pet'), {
+        const res = await fetch(apiUrl('/api/pets/equip'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
             body: JSON.stringify({ playerPetId })
@@ -176,7 +176,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     const handleFeedPet = async (playerPetId) => {
-        const res = await fetch(apiUrl('/api/feed-pet'), {
+        const res = await fetch(apiUrl('/api/pets/feed'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
             body: JSON.stringify({ playerPetId })
@@ -191,10 +191,10 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     const handleEquipBg = async (bgId) => {
-        const res = await fetch(apiUrl('/api/equip-background'), {
+        const res = await fetch(apiUrl('/api/backgrounds/equip'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id, backgroundId: bgId })
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify({ backgroundId: bgId })
         });
         const data = await res.json();
         if (data.success) {
@@ -218,16 +218,16 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         let url = '', body = {};
 
         if (pendingPurchase.type === 'bg') {
-            url = apiUrl('/api/buy-background');
-            body = { userId: user.id, backgroundId: pendingPurchase.id };
+            url = apiUrl('/api/backgrounds/buy');
+            body = { backgroundId: pendingPurchase.id };
         } else if (pendingPurchase.type === 'bag') {
-            url = apiUrl('/api/rent-bag');
-            body = { userId: user.id, bagNumber: pendingPurchase.id };
+            url = apiUrl('/api/player/rent-bag');
+            body = { bagNumber: pendingPurchase.id };
         }
 
         const res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
             body: JSON.stringify(body)
         });
         const data = await res.json();
@@ -247,10 +247,10 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
     const handleSaveStats = async (newStats, pointsSpent) => {
         try {
-            const response = await fetch(apiUrl('/api/train-stats'), {
+            const response = await fetch(apiUrl('/api/player/train-stats'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id, newStats, pointsSpent })
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ newStats, pointsSpent })
             });
             const data = await response.json();
             if (data.success) onUpdateUser(data.user);
