@@ -24,6 +24,66 @@ Nota sobre modelos: este archivo no selecciona ni fuerza un modelo especifico. C
 - Si agregas dependencias, justifica por que hacen falta y actualiza el `package-lock.json` correspondiente.
 - Antes de tocar seguridad, autenticacion, base de datos o contratos API, identifica consumidores backend/frontend para evitar romper compatibilidad.
 
+## Flujo `.agent/` para Copilot CLI
+
+Cuando el usuario pida ejecutar tareas, continuar el plan, avanzar por fases o trabajar desde `.agent/`, Copilot CLI debe actuar como ejecutor de tareas y seguir este flujo.
+
+Archivos que debe leer antes de ejecutar:
+
+- `.agent/memory.json`
+- `.agent/state.json`
+- todos los archivos relevantes en `.agent/context/`
+- la tarea JSON seleccionada en `.agent/tasks/`
+
+Seleccion de tarea:
+
+- Ejecuta solo una tarea por vez.
+- Elige la primera tarea con `"status": "pending"` cuyas dependencias ya esten completadas.
+- Una dependencia esta completada solo si la tarea correspondiente tiene `"status": "success"`.
+- No ejecutes tareas con dependencias pendientes, fallidas o inexistentes.
+- No ejecutes `_template.json`.
+- Si `.agent/state.json` indica `"status": "running"` y hay una `current_task`, no empieces otra tarea; revisa y reporta el estado.
+
+Ejecucion de una tarea:
+
+1. Resume brevemente la tarea, archivos probables a tocar y verificaciones esperadas.
+2. Actualiza `.agent/state.json` con `current_task`, `status: running` y `last_update` en ISO 8601.
+3. Cambia la tarea seleccionada a `"status": "running"`.
+4. Ejecuta solo las instrucciones de esa tarea.
+5. Respeta `allowed_actions` y `forbidden_actions` del JSON.
+6. Ejecuta verificaciones razonables segun el area tocada.
+7. Registra acciones importantes en `.agent/logs/execution.log`.
+8. Guarda el resultado en `.agent/results/<task_id>_result.json`.
+
+Formato recomendado para resultados:
+
+```json
+{
+  "task_id": "001",
+  "status": "success",
+  "summary": "Resumen breve del trabajo realizado.",
+  "files_changed": [],
+  "commands_run": [],
+  "verification": [],
+  "warnings": [],
+  "next_recommended_task": null
+}
+```
+
+Cierre de tarea:
+
+- Si la tarea cumple sus criterios de exito, cambia su `"status"` a `"success"`, deja `current_task` en `null`, actualiza `last_completed_task` y devuelve `.agent/state.json` a `"status": "idle"`.
+- Si la tarea falla o queda bloqueada, cambia su `"status"` a `"failed"`, deja `.agent/state.json` en `"status": "failed"` y documenta el bloqueo en el result JSON.
+- No marques una tarea como `"success"` si no cumplio sus `success_criteria`.
+
+Reglas especificas del flujo:
+
+- No avances automaticamente a la siguiente tarea en la misma ejecucion salvo que el usuario lo pida explicitamente.
+- No edites `PLAN_REESTRUCTURACION.md` para marcar fases completas si la tarea no lo solicita o si los criterios no se cumplieron.
+- No crees nuevas tareas salvo que el usuario pida planificar, dividir trabajo o actualizar la cola `.agent/`.
+- Si una tarea requiere una accion prohibida, detente y registra el bloqueo.
+- Si necesitas una decision de arquitectura no cubierta por `.agent/` ni por la tarea, pregunta antes de continuar.
+
 ## Estructura del repositorio
 
 El repositorio Git tiene una carpeta de proyecto anidada:
@@ -39,6 +99,7 @@ Rutas principales:
 - Backend: `path-to-valhalla/backend`
 - Frontend: `path-to-valhalla/frontend`
 - Plan tecnico de reestructuracion: `PLAN_REESTRUCTURACION.md`
+- Coordinacion de tareas del agente: `.agent/`
 
 Antes de hacer refactors grandes, lee `PLAN_REESTRUCTURACION.md` y respeta su direccion: migracion incremental, compatibilidad temporal y contratos claros.
 
