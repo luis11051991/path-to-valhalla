@@ -1,7 +1,7 @@
 {
   "task_id": "002",
   "title": "Separar configuracion y bootstrap backend",
-  "status": "pending",
+  "status": "success",
   "priority": "high",
   "objective": "Separar server.js, app.js y configuracion de entorno.",
   "instructions": [

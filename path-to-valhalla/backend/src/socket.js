@@ -1,5 +1,6 @@
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
+const env = require('./config/env');
 
 let io;
 
@@ -16,7 +17,7 @@ exports.init = (server) => {
         if (!token) return next(new Error("Authentication error"));
 
         try {
-            const decoded = jwt.verify(token, 'valhalla_secret_key_odin');
+            const decoded = jwt.verify(token, env.JWT_SECRET);
             socket.user = decoded;
             next();
         } catch (err) {

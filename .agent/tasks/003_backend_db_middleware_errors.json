@@ -1,7 +1,7 @@
 {
   "task_id": "003",
   "title": "Centralizar DB, middlewares y errores backend",
-  "status": "pending",
+  "status": "success",
   "priority": "high",
   "objective": "Consolidar pool PostgreSQL, transacciones, seguridad HTTP y errores globales.",
   "instructions": [
@@ -20,6 +20,13 @@
     "Errores pasan por middleware central.",
     "CORS y helmet se aplican desde app.js."
   ],
+  "notes_completed": {
+    "pool.js": "Creado en tarea 002, usa DATABASE_URL o variables PG*",
+    "transaccion": "src/db/transaction.js creado como patron BEGIN/COMMIT/ROLLBACK",
+    "middlewares": "apiError, asyncHandler, errorHandler, notFound creadas en tarea 002",
+    "helmet_cors": "Aplicados en app.js desde tarea 002"
+  },
+
   "allowed_actions": [
     "read_files",
     "create_files",

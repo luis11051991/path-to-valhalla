@@ -1,7 +1,7 @@
 {
   "task_id": "004",
   "title": "Crear API versionada y compatibilidad legacy",
-  "status": "pending",
+  "status": "success",
   "priority": "high",
   "objective": "Introducir /api/v1 sin romper /api actual.",
   "instructions": [
@@ -19,8 +19,16 @@
     "Frontend actual sigue funcionando con /api.",
     "Existe router /api/v1.",
     "Compatibilidad legacy queda documentada.",
-    "Refresh de quests queda considerado."
+    "Refresh de quests queda considerado en layer legacy y v1."
   ],
+  "corrections_applied": {
+    "legacy_refresh_in_routes": "questRoutes.js actualizado para exponer POST /refresh con authMiddleware. Antes solo tenia GET /status, POST /accept, POST /complete.",
+    "jwt_aligned_to_config": "authController y authMiddleware ahora leen SECRET_KEY desde config/env.js (misma fuente que socket.js).",
+    "json_fixed_003": ".agent/tasks/003 JSON corregido: coma faltante despues de notes_completed.",
+    "router_file_created": "router.js creado como fuente de verdad. index.js lo reexporta.",
+    "docs_verified": "API_COMPATIBILITY.md actualizada con mapa real del quest refresh y layout router.js."
+  },
+  "notes_reached": "Revisión técnica confirmada. Todas las correcciones aplicadas. next_task debe ser null hasta nueva aprobación.",
   "allowed_actions": [
     "read_files",
     "create_files",

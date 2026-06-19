@@ -1,9 +1,11 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { hydratePlayer } = require('../shared/player_stats'); // <--- IMPORTANTE: Importamos la utilidad
+const env = require('../config/env');
+const { hydratePlayer } = require('../shared/player_stats');
 
-const SECRET_KEY = 'valhalla_secret_key_odin';
+// JWT_SECRET centralizado desde config/env â€” misma fuente que authMiddleware y socket.js
+const SECRET_KEY = env.JWT_SECRET;
 
 // --- REGISTRO (PASO 1: CREAR CUENTA VACÃA) ---
 exports.register = async (req, res) => {
@@ -99,7 +101,7 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(400).json({ message: 'Credenciales incorrectas.' });
 
-    // --- HIDRATACIÓN Y REGEN ---
+    // --- HIDRATACIï¿½N Y REGEN ---
     // Calculamos regen y clamping con equipo/mascota
     user = await hydratePlayer(user);
     // ----------------------------------------------------
@@ -154,8 +156,8 @@ exports.getProfile = async (req, res) => {
     
     let user = result.rows[0];
 
-    // --- HIDRATACIÓN Y REGEN ---
-    // Calculamos regeneración cada vez que el perfil se refresca
+    // --- HIDRATACIï¿½N Y REGEN ---
+    // Calculamos regeneraciï¿½n cada vez que el perfil se refresca
     user = await hydratePlayer(user);
     // -----------------------------
 

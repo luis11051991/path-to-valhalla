@@ -6,5 +6,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 router.get('/status', authMiddleware, questController.getQuestStatus);
 router.post('/accept', authMiddleware, questController.acceptQuest);
 router.post('/complete', authMiddleware, questController.completeQuest);
+router.post('/refresh', authMiddleware, questController.refreshBoard);
 
 module.exports = router;
