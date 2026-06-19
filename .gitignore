@@ -53,3 +53,5 @@ temp/
 !.agent/logs/README.md
 .agent/results/*
 !.agent/results/README.md
+/path-to-valhalla/backend/node_modules
+path-to-valhalla/backend/package-lock.json
