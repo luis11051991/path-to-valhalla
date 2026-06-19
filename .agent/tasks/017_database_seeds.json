@@ -1,0 +1,45 @@
+{
+  "task_id": "017",
+  "title": "Preparar seeds y scripts de datos base",
+  "status": "pending",
+  "priority": "normal",
+  "objective": "Definir datos iniciales reproducibles para desarrollo.",
+  "instructions": [
+    "Identificar datos base del juego.",
+    "Crear seeds para clases, skills, backgrounds, items, quests y zonas si aplica.",
+    "Agregar db:seed si se define herramienta.",
+    "No incluir secretos ni datos personales.",
+    "Documentar reconstruccion local."
+  ],
+  "dependencies": [
+    "016"
+  ],
+  "success_criteria": [
+    "Datos base tienen estrategia de seed.",
+    "Scripts DB estan documentados o implementados.",
+    "Una DB local puede reconstruirse.",
+    "Seeds no contienen informacion sensible."
+  ],
+  "allowed_actions": [
+    "read_files",
+    "create_files",
+    "edit_files",
+    "run_tests",
+    "run_lint",
+    "run_build"
+  ],
+  "forbidden_actions": [
+    "delete_project",
+    "modify_real_env_files",
+    "push_to_remote",
+    "commit_changes",
+    "install_global_packages",
+    "run_destructive_commands",
+    "delete_directories"
+  ],
+  "source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md",
+    "section": "Fase 4: Base de datos y migraciones"
+  }
+}

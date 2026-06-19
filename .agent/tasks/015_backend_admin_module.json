@@ -1,0 +1,46 @@
+{
+  "task_id": "015",
+  "title": "Migrar modulo backend admin",
+  "status": "pending",
+  "priority": "normal",
+  "objective": "Proteger acciones administrativas bajo modulo admin.",
+  "instructions": [
+    "Crear modulo admin.",
+    "Mover give-item a /api/v1/admin/inventory/items.",
+    "Crear o reutilizar requireAdmin.",
+    "Registrar auditoria minima si existe soporte.",
+    "No exponer admin a UI normal."
+  ],
+  "dependencies": [
+    "005",
+    "007"
+  ],
+  "success_criteria": [
+    "Endpoint admin requiere auth.",
+    "Endpoint admin requiere permisos admin.",
+    "Accion no esta disponible para usuarios normales.",
+    "No queda endpoint admin sin proteccion."
+  ],
+  "allowed_actions": [
+    "read_files",
+    "create_files",
+    "edit_files",
+    "run_tests",
+    "run_lint",
+    "run_build"
+  ],
+  "forbidden_actions": [
+    "delete_project",
+    "modify_real_env_files",
+    "push_to_remote",
+    "commit_changes",
+    "install_global_packages",
+    "run_destructive_commands",
+    "delete_directories"
+  ],
+  "source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md",
+    "section": "Fase 3: Modularizacion backend por dominio"
+  }
+}

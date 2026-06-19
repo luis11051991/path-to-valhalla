@@ -1,0 +1,67 @@
+{
+  "project_name": "path-to-valhalla",
+  "language": "javascript",
+  "framework": {
+    "backend": "Express 4 con CommonJS",
+    "frontend": "React 19 con Vite"
+  },
+  "database": "PostgreSQL",
+  "orm": null,
+  "test_framework": {
+    "backend": "vitest o jest con supertest recomendado; sin suite formal actual documentada",
+    "frontend": "vitest y @testing-library/react recomendado; lint/build con npm"
+  },
+  "package_manager": "npm",
+  "models": {
+    "planner": "GPT-5.5",
+    "local_executor": "Qwen 3.6 local"
+  },
+  "coding_style": [
+    "Usar nombres claros y coherentes con el codigo existente",
+    "Evitar codigo innecesario",
+    "Mantener funciones pequenas y enfocadas",
+    "Agregar tests cuando se modifique logica importante y el proyecto tenga soporte",
+    "Mantener cambios acotados al pedido"
+  ],
+  "architecture_rules": [
+    "No mezclar logica de negocio extensa con rutas HTTP",
+    "Separar rutas, controladores, servicios y acceso a datos cuando se refactorice",
+    "No modificar archivos sensibles sin instruccion explicita",
+    "No cambiar contratos API sin revisar consumidores frontend/backend",
+    "Conservar compatibilidad con endpoints legacy durante migraciones",
+    "Crear endpoints nuevos bajo /api/v1",
+    "Centralizar consumo HTTP frontend en apiClient y features/*/api",
+    "Usar stores/hooks dedicados para sesion y Socket.IO",
+    "Extraer reglas puras compartidas a packages/shared cuando aplique"
+  ],
+  "business_rules": [
+    "No aceptar userId desde el cliente en endpoints nuevos autenticados; usar req.user.id desde JWT",
+    "Tratar autenticacion, JWT, monedas, inventario, banco y admin como areas sensibles",
+    "Usar transacciones en operaciones monetarias, inventario, paquetes, banco y compras que modifiquen varias tablas",
+    "Marcar mensajes como leidos solo si el usuario autenticado es destinatario",
+    "Proteger endpoints admin con autenticacion y permisos admin"
+  ],
+  "technical_decisions": [
+    "Backend objetivo modular por dominio con routes, controller, service, repository y validators",
+    "server.js debe quedar limitado a bootstrap y src/app.js debe configurar Express",
+    "API nueva versionada bajo /api/v1 con compatibilidad temporal en /api",
+    "Formato nuevo de respuesta recomendado: ok/data/meta y ok/error",
+    "JWT_SECRET y configuracion PostgreSQL deben venir de variables de entorno",
+    "Socket.IO debe centralizarse y usar la misma autenticacion JWT",
+    "Frontend objetivo organizado por app, api, stores, shared, layout y features",
+    "VITE_API_BASE_URL debe apuntar a /api/v1",
+    "Paquete shared no debe depender de Express, React, PostgreSQL ni APIs del navegador"
+  ],
+  "security_rules": [
+    "No guardar secretos, tokens, JWTs, contrasenas ni credenciales en el repositorio",
+    "No modificar archivos .env reales",
+    "No hacer git push",
+    "No hacer git commit sin confirmacion humana explicita",
+    "No instalar paquetes globales",
+    "No ejecutar comandos destructivos"
+  ],
+  "migration_source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "task_id": "022",
+  "title": "Migrar features frontend hero, inventory, packages, shop y bank",
+  "status": "pending",
+  "priority": "normal",
+  "objective": "Reorganizar features principales de gestion del heroe y economia.",
+  "instructions": [
+    "Mover HeroOverview a feature hero.",
+    "Extraer inventario compartido a feature inventory.",
+    "Mover Packages, Market y Bank a sus features.",
+    "Conectar heroApi, inventoryApi, packagesApi, shopApi y bankApi.",
+    "Eliminar headers manuales y lecturas directas de token."
+  ],
+  "dependencies": [
+    "021",
+    "007",
+    "008",
+    "009",
+    "010"
+  ],
+  "success_criteria": [
+    "Hero usa API/hook propio.",
+    "Inventario se comparte sin duplicacion innecesaria.",
+    "Packages, Market y Bank usan servicios.",
+    "No hay fetch directo en esas features."
+  ],
+  "allowed_actions": [
+    "read_files",
+    "create_files",
+    "edit_files",
+    "run_tests",
+    "run_lint",
+    "run_build"
+  ],
+  "forbidden_actions": [
+    "delete_project",
+    "modify_real_env_files",
+    "push_to_remote",
+    "commit_changes",
+    "install_global_packages",
+    "run_destructive_commands",
+    "delete_directories"
+  ],
+  "source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md",
+    "section": "Fase 7: Features frontend"
+  }
+}

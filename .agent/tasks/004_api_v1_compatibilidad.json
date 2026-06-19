@@ -1,0 +1,46 @@
+{
+  "task_id": "004",
+  "title": "Crear API versionada y compatibilidad legacy",
+  "status": "pending",
+  "priority": "high",
+  "objective": "Introducir /api/v1 sin romper /api actual.",
+  "instructions": [
+    "Crear src/api/v1/router.js.",
+    "Montar /api/v1 desde app.js.",
+    "Mantener /api legacy temporalmente.",
+    "Crear adaptadores legacy si hace falta.",
+    "Exponer refresh de quests en la API nueva."
+  ],
+  "dependencies": [
+    "002",
+    "003"
+  ],
+  "success_criteria": [
+    "Frontend actual sigue funcionando con /api.",
+    "Existe router /api/v1.",
+    "Compatibilidad legacy queda documentada.",
+    "Refresh de quests queda considerado."
+  ],
+  "allowed_actions": [
+    "read_files",
+    "create_files",
+    "edit_files",
+    "run_tests",
+    "run_lint",
+    "run_build"
+  ],
+  "forbidden_actions": [
+    "delete_project",
+    "modify_real_env_files",
+    "push_to_remote",
+    "commit_changes",
+    "install_global_packages",
+    "run_destructive_commands",
+    "delete_directories"
+  ],
+  "source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md",
+    "section": "Fase 2: API versionada y compatibilidad"
+  }
+}

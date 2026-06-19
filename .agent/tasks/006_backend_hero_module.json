@@ -1,0 +1,45 @@
+{
+  "task_id": "006",
+  "title": "Migrar modulo backend hero",
+  "status": "pending",
+  "priority": "high",
+  "objective": "Mover perfil, raza, entrenamiento y bolsas a modulo hero seguro.",
+  "instructions": [
+    "Crear archivos del modulo hero.",
+    "Migrar chooseRace, trainStats y perfil.",
+    "Decidir y documentar rentBag en hero o inventory.",
+    "Usar req.user.id, no userId del cliente.",
+    "Mantener endpoints legacy temporalmente."
+  ],
+  "dependencies": [
+    "005"
+  ],
+  "success_criteria": [
+    "Endpoints hero nuevos usan JWT.",
+    "No aceptan userId desde cliente.",
+    "Perfil del heroe esta versionado.",
+    "Consumidores legacy siguen cubiertos."
+  ],
+  "allowed_actions": [
+    "read_files",
+    "create_files",
+    "edit_files",
+    "run_tests",
+    "run_lint",
+    "run_build"
+  ],
+  "forbidden_actions": [
+    "delete_project",
+    "modify_real_env_files",
+    "push_to_remote",
+    "commit_changes",
+    "install_global_packages",
+    "run_destructive_commands",
+    "delete_directories"
+  ],
+  "source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md",
+    "section": "Fase 3: Modularizacion backend por dominio"
+  }
+}

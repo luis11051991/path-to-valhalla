@@ -1,0 +1,22 @@
+# Project Rules
+
+- Responder al usuario en espanol, salvo que pida otro idioma.
+- GPT actua como analista, arquitecto y revisor.
+- Qwen local actua como ejecutor de tareas concretas.
+- GPT debe crear tareas en JSON dentro de `.agent/tasks/`.
+- Qwen debe ejecutar solo tareas con `"status": "pending"`.
+- Qwen debe leer `.agent/memory.json`, `.agent/state.json` y `.agent/context/` antes de ejecutar.
+- Qwen debe ejecutar solo una tarea a la vez.
+- Qwen debe guardar el resultado en `.agent/results/<task_id>_result.json`.
+- Qwen debe registrar acciones en `.agent/logs/execution.log`.
+- Qwen no debe tomar decisiones grandes de arquitectura sin una tarea definida por GPT.
+- Mantener cambios acotados al pedido y al area afectada.
+- Leer archivos relevantes antes de editar codigo.
+- No revertir cambios existentes que no sean propios.
+- No ejecutar `git commit` ni `git push` sin confirmacion humana explicita.
+- No modificar archivos `.env`.
+- No instalar paquetes globales.
+- No usar comandos destructivos como `git reset --hard`, `git checkout --`, borrados recursivos o limpiezas masivas sin permiso explicito.
+- Todo cambio debe incluir resultado de tests o una explicacion de por que no se pudieron correr.
+- No guardar secretos, tokens, contrasenas ni datos sensibles en `.agent/`.
+- Si una tarea requiere una accion prohibida, Qwen debe detenerse y generar un resultado con estado `failed`.

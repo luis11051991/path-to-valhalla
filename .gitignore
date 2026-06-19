@@ -47,3 +47,9 @@ temp/
 # Firebase
 .firestore/
 .firebase/
+
+# Agent workspace
+.agent/logs/*
+!.agent/logs/README.md
+.agent/results/*
+!.agent/results/README.md

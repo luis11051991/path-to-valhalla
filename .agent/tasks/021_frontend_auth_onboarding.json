@@ -1,0 +1,47 @@
+{
+  "task_id": "021",
+  "title": "Migrar features frontend auth y onboarding",
+  "status": "pending",
+  "priority": "high",
+  "objective": "Mover login/registro y seleccion de raza a features.",
+  "instructions": [
+    "Mover Auth a feature auth o crear AuthPage/AuthForm.",
+    "Mover RaceSelection a feature onboarding.",
+    "Conectar authApi y onboardingApi.",
+    "Eliminar fetch directo.",
+    "No enviar userId en chooseRace si endpoint nuevo usa JWT."
+  ],
+  "dependencies": [
+    "020",
+    "005",
+    "006"
+  ],
+  "success_criteria": [
+    "Auth usa servicio/hook de auth.",
+    "Onboarding usa servicio propio.",
+    "No hay fetch directo en estas vistas.",
+    "Seleccion de raza sigue funcionando."
+  ],
+  "allowed_actions": [
+    "read_files",
+    "create_files",
+    "edit_files",
+    "run_tests",
+    "run_lint",
+    "run_build"
+  ],
+  "forbidden_actions": [
+    "delete_project",
+    "modify_real_env_files",
+    "push_to_remote",
+    "commit_changes",
+    "install_global_packages",
+    "run_destructive_commands",
+    "delete_directories"
+  ],
+  "source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md",
+    "section": "Fase 7: Features frontend"
+  }
+}

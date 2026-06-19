@@ -1,0 +1,46 @@
+{
+  "task_id": "010",
+  "title": "Migrar modulo backend bank",
+  "status": "pending",
+  "priority": "normal",
+  "objective": "Mover estado bancario, depositos y retiros a modulo bank.",
+  "instructions": [
+    "Crear archivos del modulo bank.",
+    "Migrar status a GET /api/v1/bank.",
+    "Migrar depositos y retiros.",
+    "Validar moneda y monto fuera del controlador.",
+    "Eliminar schema runtime de requests normales."
+  ],
+  "dependencies": [
+    "003",
+    "004"
+  ],
+  "success_criteria": [
+    "GET bank funciona.",
+    "Depositos y retiros usan req.user.id.",
+    "Operaciones son transaccionales.",
+    "No hay ALTER TABLE en requests normales."
+  ],
+  "allowed_actions": [
+    "read_files",
+    "create_files",
+    "edit_files",
+    "run_tests",
+    "run_lint",
+    "run_build"
+  ],
+  "forbidden_actions": [
+    "delete_project",
+    "modify_real_env_files",
+    "push_to_remote",
+    "commit_changes",
+    "install_global_packages",
+    "run_destructive_commands",
+    "delete_directories"
+  ],
+  "source": {
+    "type": "markdown_plan",
+    "file": "PLAN_REESTRUCTURACION.md",
+    "section": "Fase 3: Modularizacion backend por dominio"
+  }
+}
