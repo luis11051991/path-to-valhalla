@@ -1,7 +1,7 @@
 {
   "task_id": "005",
   "title": "Migrar modulo backend auth",
-  "status": "pending",
+  "status": "success",
   "priority": "high",
   "objective": "Crear auth modular con registro, login y usuario actual.",
   "instructions": [

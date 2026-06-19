@@ -1,21 +1,14 @@
 {
-  "status": "idle",
-  "last_completed_task": "004",
+  "status": "waiting_review",
+  "last_completed_task": "005",
   "current_task": null,
-  "last_update": "2026-06-19T11:36:46.000-05",
+  "last_update": "2026-06-19T18:48:32.216Z",
   "migration": {
     "status": "completed",
     "source_file": "PLAN_REESTRUCTURACION.md"
   },
   "pending_review": {
-    "task_004": true,
-    "corrections_applied": [
-      "legacy_refresh_in_routes",
-      "jwt_aligned_to_config",
-      "json_fixed_003",
-      "router_file_created",
-      "docs_verified"
-    ],
-    "next_action": "Espera aprobación de revisión técnica antes de avanzar a tarea 005"
+    "task_005": true,
+    "notes": "Autorizacion tecnica requerida antes de avanzar a 006. Correcciones corregidas: login devuelve objeto no array, register no doble-hashea."
   }
 }
