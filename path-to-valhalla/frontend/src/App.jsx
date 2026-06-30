@@ -17,6 +17,7 @@ import OnixShopModal from './components/OnixShopModal';
 import Grimoire from './pages/Grimoire';
 import Bestiary from './pages/Bestiary';
 import MessagingPage from './pages/MessagingPage';
+import AchievementsPage from './pages/Achievements';
 import { apiUrl } from './constants/api';
 
 import { io } from 'socket.io-client';
@@ -157,6 +158,12 @@ function App() {
               <Route
                 path="/bestiary"
                 element={<Bestiary user={user} onUpdateUser={handleUserUpdate} />}
+              />
+
+              {/* Logros */}
+              <Route
+                path="/achievements"
+                element={<AchievementsPage user={user} onUpdateUser={handleUserUpdate} />}
               />
 
               {/* Mensajería */}
