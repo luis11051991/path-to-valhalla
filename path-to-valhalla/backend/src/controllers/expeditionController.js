@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { hydratePlayer, computeMaxHp } = require('../shared/player_stats');
+const achievementService = require('../services/achievementService');
 
 // XP rules live in the shared module
 const { getRequiredXp } = require('../shared/level_xp');
@@ -278,7 +279,14 @@ exports.startBattle = async (req, res) => {
 
         // --- LOGICA DE PREMIOS (Mismo código de antes) ---
         let questLogs = [];
+        let isNewBestiaryEntry = false;
         if (isWin) {
+            const bestiaryBeforeRes = await client.query(
+                'SELECT kills FROM player_bestiary WHERE player_id = $1 AND enemy_id = $2',
+                [userId, baseEnemy.id]
+            );
+            isNewBestiaryEntry = bestiaryBeforeRes.rows.length === 0;
+
             await client.query(`INSERT INTO player_bestiary (player_id, enemy_id, kills, first_kill_at) VALUES ($1, $2, 1, NOW()) ON CONFLICT (player_id, enemy_id) DO UPDATE SET kills = player_bestiary.kills + 1`, [userId, baseEnemy.id]);
             const activeQuestsRes = await client.query(`SELECT pq.id, pq.progress, q.title, q.requirements FROM player_quests pq JOIN quests q ON pq.quest_id = q.id WHERE pq.player_id = $1 AND pq.status = 'active'`, [userId]);
             for (const quest of activeQuestsRes.rows) {
@@ -351,6 +359,44 @@ exports.startBattle = async (req, res) => {
                     await client.query(`INSERT INTO player_packages (player_id, item_template_id, quantity, data) VALUES ($1, $2, $3, $4)`, [userId, drop.item_template_id, qty, dropStats]);
                     rewards.items.push({ name: template.name, qty });
                 }
+            }
+
+            const achievementMetadata = {
+                source: 'expedition',
+                enemyId: Number(baseEnemy.id),
+                enemyName: baseEnemy.name,
+                zoneId: Number(baseEnemy.zone_id || zoneId),
+                isBoss: Boolean(baseEnemy.is_boss),
+                isHidden: Boolean(baseEnemy.is_hidden),
+                difficultyTier: Number(baseEnemy.difficulty_tier || 1)
+            };
+
+            await achievementService.incrementProgress(userId, 'combat.kill', 1, achievementMetadata, client);
+
+            await achievementService.incrementProgress(userId, 'expedition.complete', 1, {
+                source: 'expedition',
+                zoneId: Number(baseEnemy.zone_id || zoneId)
+            }, client);
+
+            await achievementService.incrementProgress(userId, 'combat.kill.difficulty', 1, achievementMetadata, client);
+
+            if (baseEnemy.is_boss) {
+                await achievementService.incrementProgress(userId, 'combat.kill.boss', 1, achievementMetadata, client);
+            }
+
+            if (baseEnemy.is_hidden) {
+                await achievementService.incrementProgress(userId, 'combat.kill.hidden', 1, achievementMetadata, client);
+            }
+
+            if (isNewBestiaryEntry) {
+                await achievementService.incrementProgress(userId, 'bestiary.discover', 1, achievementMetadata, client);
+            }
+
+            if (rewards.copper > 0) {
+                await achievementService.incrementProgress(userId, 'economy.copper_earned', rewards.copper, {
+                    source: 'expedition',
+                    zoneId: Number(baseEnemy.zone_id || zoneId)
+                }, client);
             }
         }
 

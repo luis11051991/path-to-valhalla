@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     ArrowUpRight,
@@ -21,15 +21,13 @@ import {
     Swords,
     Trophy
 } from 'lucide-react';
-
-const TOTAL_ACHIEVEMENTS = 120;
-const COMPLETED_TOTAL = 18;
-const ACHIEVEMENT_POINTS = 1250;
+import { achievementService } from '../services/achievementService';
 
 const CURRENCY_ICONS = {
     copper: '/icons/currency/copper.png',
     silver: '/icons/currency/silver.png',
     gold: '/icons/currency/gold.png',
+    onix: '/icons/currency/onix.png',
     onyx: '/icons/currency/onix.png'
 };
 
@@ -64,17 +62,21 @@ const STATUS_STYLES = {
 };
 
 const RARITY_STYLES = {
-    Común: 'border-slate-600/70 bg-slate-800/70 text-slate-200',
+    'ComÃºn': 'border-slate-600/70 bg-slate-800/70 text-slate-200',
+    'Común': 'border-slate-600/70 bg-slate-800/70 text-slate-200',
     Raro: 'border-blue-500/50 bg-blue-900/30 text-blue-300',
-    Épico: 'border-purple-500/60 bg-purple-900/35 text-purple-200',
+    'Ã‰pico': 'border-purple-500/60 bg-purple-900/35 text-purple-200',
+    'Épico': 'border-purple-500/60 bg-purple-900/35 text-purple-200',
     Legendario: 'border-amber-500/70 bg-amber-900/35 text-amber-200',
     Oculta: 'border-slate-700 bg-slate-900 text-slate-500'
 };
 
 const RARITY_ORDER = {
-    Común: 1,
+    'ComÃºn': 1,
+    'Común': 1,
     Raro: 2,
-    Épico: 3,
+    'Ã‰pico': 3,
+    'Épico': 3,
     Legendario: 4
 };
 
@@ -85,238 +87,6 @@ const ROUTES_BY_LABEL = {
     'Ir a Mascotas': '/hero',
     'Ir al Mercado': '/market'
 };
-
-const initialAchievements = [
-    {
-        id: 'ach-combat-001',
-        name: 'Cazador Novato',
-        category: 'Combate',
-        rarity: 'Común',
-        description: 'Derrota 10 criaturas.',
-        fullDescription: 'Derrota 10 criaturas en cualquier zona de Valhallus.',
-        progress: 7,
-        target: 10,
-        status: 'En progreso',
-        reward: { gold: 150 },
-        advice: 'Puedes avanzar este logro derrotando criaturas en expediciones.',
-        routeLabels: ['Ver Expediciones'],
-        createdAt: 20260612
-    },
-    {
-        id: 'ach-bestiary-001',
-        name: 'Cazador de Hielo',
-        category: 'Bestiario',
-        rarity: 'Raro',
-        description: 'Derrota 15 criaturas heladas.',
-        fullDescription: 'Derrota 15 criaturas de las Montañas Heladas.',
-        progress: 8,
-        target: 15,
-        status: 'En progreso',
-        reward: { gold: 300, title: 'Rastreador del Hielo' },
-        advice: 'Puedes encontrar estas criaturas en Expediciones de nivel 1-10 y zonas heladas.',
-        routeLabels: ['Ir a Bestiario', 'Ver Expediciones'],
-        createdAt: 20260618
-    },
-    {
-        id: 'ach-grimorio-001',
-        name: 'Aprendiz del Grimorio',
-        category: 'Grimorio',
-        rarity: 'Común',
-        description: 'Equipa 3 poderes diferentes.',
-        fullDescription: 'Equipa 3 poderes distintos en tu barra de batalla.',
-        progress: 3,
-        target: 3,
-        status: 'Reclamable',
-        reward: { gold: 100 },
-        advice: 'Puedes equipar poderes desde la pantalla Grimorio.',
-        routeLabels: ['Ir a Grimorio'],
-        createdAt: 20260620
-    },
-    {
-        id: 'ach-pets-001',
-        name: 'Compañero Fiel',
-        category: 'Mascotas',
-        rarity: 'Común',
-        description: 'Alimenta a una mascota 5 veces.',
-        fullDescription: 'Alimenta a cualquier mascota un total de 5 veces.',
-        progress: 2,
-        target: 5,
-        status: 'En progreso',
-        reward: { item: '3 carnes selectas' },
-        advice: 'Puedes alimentar mascotas desde el establo.',
-        routeLabels: ['Ir a Mascotas'],
-        createdAt: 20260608
-    },
-    {
-        id: 'ach-expedition-001',
-        name: 'Explorador Persistente',
-        category: 'Expediciones',
-        rarity: 'Raro',
-        description: 'Completa 20 expediciones.',
-        fullDescription: 'Completa 20 expediciones en cualquier zona.',
-        progress: 6,
-        target: 20,
-        status: 'En progreso',
-        reward: { gold: 300 },
-        advice: 'Las expediciones se encuentran en el menú de aventura.',
-        routeLabels: ['Ver Expediciones'],
-        createdAt: 20260614
-    },
-    {
-        id: 'ach-economy-001',
-        name: 'Fortuna del Vigía',
-        category: 'Economía',
-        rarity: 'Épico',
-        description: 'Acumula 10,000 de oro en total.',
-        fullDescription: 'Acumula 10,000 monedas de oro durante tu aventura.',
-        progress: 2450,
-        target: 10000,
-        status: 'En progreso',
-        reward: { onyx: 10 },
-        advice: 'Gana oro en expediciones, ventas y recompensas.',
-        routeLabels: ['Ir al Mercado'],
-        createdAt: 20260610
-    },
-    {
-        id: 'ach-treasure-001',
-        name: 'Cofre de Cambio',
-        category: 'Economía',
-        rarity: 'Raro',
-        description: 'Reclama una recompensa mixta de monedas.',
-        fullDescription: 'Reclama una recompensa con cobre, plata, oro y Ónix.',
-        progress: 1,
-        target: 1,
-        status: 'Reclamable',
-        reward: { copper: 145, silver: 99, gold: 3, onyx: 5 },
-        advice: 'Al reclamar, el cobre y la plata se normalizan automáticamente.',
-        routeLabels: ['Ir al Mercado'],
-        createdAt: 20260624
-    },
-    {
-        id: 'ach-expedition-claim-001',
-        name: 'Rastro del Norte',
-        category: 'Expediciones',
-        rarity: 'Épico',
-        description: 'Completa una ruta de expedición especial.',
-        fullDescription: 'Completa una ruta especial sin abandonar la expedición.',
-        progress: 1,
-        target: 1,
-        status: 'Reclamable',
-        reward: { onyx: 5, title: 'Rastro del Norte' },
-        advice: 'Las rutas especiales aparecen al explorar zonas de tu nivel.',
-        routeLabels: ['Ver Expediciones'],
-        createdAt: 20260626
-    },
-    {
-        id: 'ach-grimorio-002',
-        name: 'Maestro del Grimorio',
-        category: 'Grimorio',
-        rarity: 'Raro',
-        description: 'Mejora 10 poderes del grimorio.',
-        fullDescription: 'Mejora 10 poderes diferentes para dominar tu barra de batalla.',
-        progress: 8,
-        target: 10,
-        status: 'En progreso',
-        reward: { gold: 250, title: 'Tejedor de Runas' },
-        advice: 'Revisa qué poderes tienen menor coste de mejora para avanzar más rápido.',
-        routeLabels: ['Ir a Grimorio'],
-        createdAt: 20260619
-    },
-    {
-        id: 'ach-pets-002',
-        name: 'Coleccionista de Mascotas',
-        category: 'Mascotas',
-        rarity: 'Épico',
-        description: 'Consigue 10 mascotas distintas.',
-        fullDescription: 'Consigue 10 mascotas distintas durante tu aventura.',
-        progress: 9,
-        target: 10,
-        status: 'En progreso',
-        reward: { onyx: 5, cosmetic: 'Marco de establo violeta' },
-        advice: 'Algunas mascotas aparecen como recompensas raras en expediciones.',
-        routeLabels: ['Ir a Mascotas', 'Ver Expediciones'],
-        createdAt: 20260622
-    },
-    {
-        id: 'ach-expedition-002',
-        name: 'Viajero Incansable',
-        category: 'Expediciones',
-        rarity: 'Raro',
-        description: 'Completa 50 expediciones.',
-        fullDescription: 'Completa 50 expediciones en cualquier zona desbloqueada.',
-        progress: 45,
-        target: 50,
-        status: 'En progreso',
-        reward: { gold: 500 },
-        advice: 'Mantén tu energía alta y aprovecha las rutas de bajo coste.',
-        routeLabels: ['Ver Expediciones'],
-        createdAt: 20260623
-    },
-    {
-        id: 'ach-combat-claimed-001',
-        name: 'Marca de Acero',
-        category: 'Combate',
-        rarity: 'Común',
-        description: 'Gana tu primer duelo importante.',
-        fullDescription: 'Gana un combate marcado como desafío importante.',
-        progress: 1,
-        target: 1,
-        status: 'Reclamado',
-        reward: { silver: 50 },
-        advice: 'Ya reclamaste esta recompensa.',
-        routeLabels: ['Ver Expediciones'],
-        createdAt: 20260601
-    },
-    {
-        id: 'ach-secret-locked-001',
-        name: 'Llave Sellada',
-        category: 'Secretos',
-        rarity: 'Legendario',
-        description: 'Encuentra una condición especial aún bloqueada.',
-        fullDescription: 'Este logro está bloqueado hasta que avances en zonas de mayor peligro.',
-        progress: 0,
-        target: 1,
-        status: 'Bloqueado',
-        reward: { title: 'Portador de la Llave Sellada' },
-        advice: 'Sigue progresando en el personaje principal para desbloquear pistas.',
-        routeLabels: [],
-        createdAt: 20260530
-    },
-    {
-        id: 'ach-secret-001',
-        name: '???',
-        category: 'Secretos',
-        rarity: 'Legendario',
-        description: 'Sigue explorando para descubrir este logro.',
-        fullDescription: 'Este logro permanece oculto hasta que cumplas una condición especial.',
-        progress: 0,
-        target: 1,
-        status: 'Oculto',
-        reward: {},
-        advice: 'Explora zonas raras y derrota enemigos especiales.',
-        routeLabels: [],
-        createdAt: 20260528
-    }
-];
-
-function normalizeCurrency(currency = {}) {
-    const rawCopper = Math.max(0, Math.trunc(Number(currency.copper || 0)));
-    const rawSilver = Math.max(0, Math.trunc(Number(currency.silver || 0)));
-    const rawGold = Math.max(0, Math.trunc(Number(currency.gold || 0)));
-    const rawOnyx = Math.max(0, Math.trunc(Number(currency.onyx || currency.onix || 0)));
-
-    const silverFromCopper = Math.floor(rawCopper / 100);
-    const copper = rawCopper % 100;
-    const totalSilver = rawSilver + silverFromCopper;
-    const goldFromSilver = Math.floor(totalSilver / 100);
-
-    return {
-        copper,
-        silver: totalSilver % 100,
-        gold: rawGold + goldFromSilver,
-        onyx: rawOnyx
-    };
-}
 
 const getProgressPercent = (achievement) => {
     if (!achievement.target) return 0;
@@ -339,39 +109,38 @@ const getRewardValue = (reward = {}) => (
     (reward.gold || 0) * 10000
     + (reward.silver || 0) * 100
     + (reward.copper || 0)
-    + (reward.onyx || 0) * 50000
+    + (reward.onix || reward.onyx || 0) * 50000
     + (reward.title ? 4000 : 0)
     + (reward.item ? 2500 : 0)
     + (reward.material ? 1500 : 0)
     + (reward.cosmetic ? 7000 : 0)
 );
 
+const getCreatedTime = (achievement) => {
+    const timestamp = new Date(achievement.createdAt).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
 const formatNumber = (value) => new Intl.NumberFormat('es-ES').format(value);
+const DEFAULT_SUMMARY = {
+    total: 0,
+    completed: 0,
+    points: 0,
+    pendingRewards: 0
+};
 
 function AchievementsPage({ user, onUpdateUser }) {
     const navigate = useNavigate();
-    const [achievements, setAchievements] = useState(initialAchievements);
+    const [achievements, setAchievements] = useState([]);
+    const [summary, setSummary] = useState(DEFAULT_SUMMARY);
     const [activeFilter, setActiveFilter] = useState('Todos');
     const [searchTerm, setSearchTerm] = useState('');
     const [sortMode, setSortMode] = useState('Más cercanos');
-    const [selectedAchievementId, setSelectedAchievementId] = useState(initialAchievements[0].id);
+    const [selectedAchievementId, setSelectedAchievementId] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [claiming, setClaiming] = useState(false);
     const [feedback, setFeedback] = useState(null);
-    const claimedIdsRef = useRef(new Set(initialAchievements.filter((achievement) => achievement.status === 'Reclamado').map((achievement) => achievement.id)));
-    const currencyRef = useRef({
-        copper: Number(user?.copper || 0),
-        silver: Number(user?.silver || 0),
-        gold: Number(user?.gold || 0),
-        onyx: Number(user?.onix || user?.onyx || 0)
-    });
-
-    useEffect(() => {
-        currencyRef.current = {
-            copper: Number(user?.copper || 0),
-            silver: Number(user?.silver || 0),
-            gold: Number(user?.gold || 0),
-            onyx: Number(user?.onix || user?.onyx || 0)
-        };
-    }, [user?.copper, user?.silver, user?.gold, user?.onix, user?.onyx]);
 
     useEffect(() => {
         if (!feedback) return undefined;
@@ -379,10 +148,37 @@ function AchievementsPage({ user, onUpdateUser }) {
         return () => clearTimeout(timeoutId);
     }, [feedback]);
 
-    const pendingCount = useMemo(
-        () => achievements.filter((achievement) => achievement.status === 'Reclamable').length,
-        [achievements]
-    );
+    useEffect(() => {
+        let isMounted = true;
+
+        achievementService.getAchievements()
+            .then((data) => {
+                if (!isMounted) return;
+                setAchievements(data.achievements || []);
+                setSummary(data.summary || DEFAULT_SUMMARY);
+                setError(null);
+            })
+            .catch((requestError) => {
+                if (!isMounted) return;
+                setError(requestError.message || 'No se pudieron cargar los logros.');
+            })
+            .finally(() => {
+                if (isMounted) setLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const refreshAchievements = async () => {
+        const data = await achievementService.getAchievements();
+        setAchievements(data.achievements || []);
+        setSummary(data.summary || DEFAULT_SUMMARY);
+        setError(null);
+    };
+
+    const pendingCount = summary.pendingRewards || 0;
 
     const filteredAchievements = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLocaleLowerCase('es');
@@ -411,7 +207,7 @@ function AchievementsPage({ user, onUpdateUser }) {
                     return getRewardValue(right.reward) - getRewardValue(left.reward);
                 }
                 if (sortMode === 'Recientes') {
-                    return right.createdAt - left.createdAt;
+                    return getCreatedTime(right) - getCreatedTime(left);
                 }
                 if (sortMode === 'Categoría') {
                     return left.category.localeCompare(right.category, 'es');
@@ -445,60 +241,50 @@ function AchievementsPage({ user, onUpdateUser }) {
             .slice(0, 3);
     }, [achievements]);
 
-    const applyRewardsToUser = (rewards) => {
-        const totals = rewards.reduce((acc, reward) => ({
-            copper: acc.copper + Number(reward?.copper || 0),
-            silver: acc.silver + Number(reward?.silver || 0),
-            gold: acc.gold + Number(reward?.gold || 0),
-            onyx: acc.onyx + Number(reward?.onyx || 0)
-        }), { copper: 0, silver: 0, gold: 0, onyx: 0 });
+    const updateUserCurrency = (userCurrency) => {
+        if (!userCurrency) return;
 
-        if (!totals.copper && !totals.silver && !totals.gold && !totals.onyx) return;
-
-        const nextCurrency = normalizeCurrency({
-            copper: currencyRef.current.copper + totals.copper,
-            silver: currencyRef.current.silver + totals.silver,
-            gold: currencyRef.current.gold + totals.gold,
-            onyx: currencyRef.current.onyx + totals.onyx
-        });
-
-        currencyRef.current = nextCurrency;
         onUpdateUser?.({
-            copper: nextCurrency.copper,
-            silver: nextCurrency.silver,
-            gold: nextCurrency.gold,
-            onix: nextCurrency.onyx
+            copper: userCurrency.copper,
+            silver: userCurrency.silver,
+            gold: userCurrency.gold,
+            onix: userCurrency.onix
         });
     };
 
-    const handleClaimAchievement = (achievementId) => {
-        const achievement = achievements.find((item) => item.id === achievementId);
-        if (!achievement || achievement.status !== 'Reclamable' || claimedIdsRef.current.has(achievementId)) return;
+    const handleClaimAchievement = async (achievementId) => {
+        if (claiming) return;
 
-        // TODO: replace this local mock claim with the achievements API when it exists.
-        claimedIdsRef.current.add(achievementId);
-        applyRewardsToUser([achievement.reward]);
-        setAchievements((currentAchievements) => currentAchievements.map((item) => (
-            item.id === achievementId ? { ...item, status: 'Reclamado' } : item
-        )));
-        setFeedback(`Recompensa reclamada: ${achievement.name}`);
+        const achievement = achievements.find((item) => item.id === achievementId);
+        if (!achievement || achievement.status !== 'Reclamable') return;
+
+        setClaiming(true);
+        try {
+            const result = await achievementService.claimAchievement(achievementId);
+            updateUserCurrency(result.userCurrency);
+            await refreshAchievements();
+            setFeedback(result.message || `Recompensa reclamada: ${achievement.name}`);
+        } catch (claimError) {
+            setFeedback(claimError.message || 'No se pudo reclamar la recompensa.');
+        } finally {
+            setClaiming(false);
+        }
     };
 
-    const handleClaimAll = () => {
-        const claimableAchievements = achievements.filter((achievement) => (
-            achievement.status === 'Reclamable' && !claimedIdsRef.current.has(achievement.id)
-        ));
+    const handleClaimAll = async () => {
+        if (claiming || pendingCount === 0) return;
 
-        if (claimableAchievements.length === 0) return;
-
-        claimableAchievements.forEach((achievement) => claimedIdsRef.current.add(achievement.id));
-        applyRewardsToUser(claimableAchievements.map((achievement) => achievement.reward));
-        setAchievements((currentAchievements) => currentAchievements.map((achievement) => (
-            claimableAchievements.some((claimable) => claimable.id === achievement.id)
-                ? { ...achievement, status: 'Reclamado' }
-                : achievement
-        )));
-        setFeedback(`${claimableAchievements.length} recompensas reclamadas`);
+        setClaiming(true);
+        try {
+            const result = await achievementService.claimAllAchievements();
+            updateUserCurrency(result.userCurrency);
+            await refreshAchievements();
+            setFeedback(`${result.claimedCount || 0} recompensas reclamadas`);
+        } catch (claimError) {
+            setFeedback(claimError.message || 'No se pudieron reclamar las recompensas.');
+        } finally {
+            setClaiming(false);
+        }
     };
 
     const handleNavigate = (label) => {
@@ -529,19 +315,19 @@ function AchievementsPage({ user, onUpdateUser }) {
                     </div>
 
                     <div className="flex flex-col gap-3">
-                        <AchievementSummaryCards pendingCount={pendingCount} />
+                        <AchievementSummaryCards summary={summary} />
                         <button
                             type="button"
                             onClick={handleClaimAll}
-                            disabled={pendingCount === 0}
+                            disabled={pendingCount === 0 || claiming || loading}
                             className={`inline-flex items-center justify-center gap-2 rounded-lg border px-5 py-3 text-xs font-black uppercase tracking-widest transition-all ${
-                                pendingCount > 0
+                                pendingCount > 0 && !claiming && !loading
                                     ? 'border-amber-400/70 bg-gradient-to-r from-purple-800 via-purple-700 to-amber-700 text-white shadow-[0_0_25px_rgba(168,85,247,0.28)] hover:scale-[1.02] hover:border-amber-300'
                                     : 'border-slate-700 bg-slate-900/70 text-slate-600 cursor-not-allowed'
                             }`}
                         >
                             <PackageCheck size={16} />
-                            Reclamar todo
+                            {claiming ? 'Reclamando...' : 'Reclamar todo'}
                         </button>
                     </div>
                 </section>
@@ -555,21 +341,33 @@ function AchievementsPage({ user, onUpdateUser }) {
                     onSortChange={setSortMode}
                 />
 
-                <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-5 items-start">
-                    <AchievementList
-                        achievements={filteredAchievements}
-                        selectedAchievementId={selectedAchievement?.id}
-                        onSelect={setSelectedAchievementId}
-                        onClaim={handleClaimAchievement}
-                    />
+                {error && (
+                    <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-200">
+                        {error}
+                    </div>
+                )}
 
-                    <AchievementDetailPanel
-                        achievement={selectedAchievement}
-                        almostCompleted={almostCompleted}
-                        onClaim={handleClaimAchievement}
-                        onNavigate={handleNavigate}
-                    />
-                </section>
+                {loading ? (
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-10 text-center text-slate-500 animate-pulse">
+                        Cargando logros...
+                    </div>
+                ) : (
+                    <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-5 items-start">
+                        <AchievementList
+                            achievements={filteredAchievements}
+                            selectedAchievementId={selectedAchievement?.id}
+                            onSelect={setSelectedAchievementId}
+                            onClaim={handleClaimAchievement}
+                        />
+
+                        <AchievementDetailPanel
+                            achievement={selectedAchievement}
+                            almostCompleted={almostCompleted}
+                            onClaim={handleClaimAchievement}
+                            onNavigate={handleNavigate}
+                        />
+                    </section>
+                )}
             </div>
 
             {feedback && (
@@ -581,17 +379,18 @@ function AchievementsPage({ user, onUpdateUser }) {
     );
 }
 
-function AchievementSummaryCards({ pendingCount }) {
+function AchievementSummaryCards({ summary }) {
+    const pendingCount = summary.pendingRewards || 0;
     const cards = [
         {
             label: 'Progreso total',
-            value: `${COMPLETED_TOTAL} / ${TOTAL_ACHIEVEMENTS}`,
+            value: `${formatNumber(summary.completed || 0)} / ${formatNumber(summary.total || 0)}`,
             icon: Trophy,
             tone: 'text-amber-300'
         },
         {
             label: 'Puntos de logro',
-            value: formatNumber(ACHIEVEMENT_POINTS),
+            value: formatNumber(summary.points || 0),
             icon: Award,
             tone: 'text-slate-100'
         },
@@ -726,6 +525,7 @@ function CategoryGlyph({ category, hidden, size }) {
         case 'Expediciones':
             return <Compass size={size} />;
         case 'Economía':
+        case 'EconomÃ­a':
             return <Coins size={size} />;
         case 'Secretos':
             return <EyeOff size={size} />;
@@ -1030,7 +830,7 @@ function AchievementRewardDisplay({ reward = {}, hidden = false, compact = false
         ['gold', reward.gold, 'Oro'],
         ['silver', reward.silver, 'Plata'],
         ['copper', reward.copper, 'Cobre'],
-        ['onyx', reward.onyx, 'Ónix']
+        ['onix', reward.onix || reward.onyx, 'Ónix']
     ].filter(([, value]) => value);
 
     const textRewards = [
@@ -1054,7 +854,7 @@ function AchievementRewardDisplay({ reward = {}, hidden = false, compact = false
                 <span
                     key={key}
                     className={`inline-flex items-center gap-1 rounded border px-2 py-1 font-bold ${
-                        key === 'onyx'
+                        key === 'onix'
                             ? 'border-purple-500/50 bg-purple-950/30 text-purple-200'
                             : 'border-amber-900/50 bg-black/35 text-amber-100'
                     }`}

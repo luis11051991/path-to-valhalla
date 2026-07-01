@@ -24,6 +24,7 @@ const workshopRoutes = require('./src/routes/workshopRoutes');
 const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const questRoutes = require('./src/routes/questRoutes');
 const bankRoutes = require('./src/routes/bankRoutes');
+const achievementRoutes = require('./src/routes/achievementRoutes');
 
 // CORRECCIÓN AQUÍ: Agregamos el /src/ que faltaba
 const bestiaryRoutes = require('./src/routes/bestiaryRoutes');
@@ -45,6 +46,7 @@ app.use('/api/workshop', workshopRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/quests', questRoutes);
 app.use('/api/bank', bankRoutes);
+app.use('/api/achievements', achievementRoutes);
 app.use('/api/bestiary', bestiaryRoutes);
 app.use('/api/messages', messageRoutes);
 

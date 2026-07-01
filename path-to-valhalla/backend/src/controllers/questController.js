@@ -1,6 +1,7 @@
 ﻿const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { getRequiredXp } = require('../shared/level_xp');
+const achievementService = require('../services/achievementService');
 
 // --- HELPER: Generar Stats Fijos (Resuelve bug de rangos) ---
 const generateQuestItemStats = (templateStats) => {
@@ -195,7 +196,7 @@ exports.completeQuest = async (req, res) => {
         await client.query('BEGIN');
 
         const pqRes = await client.query(`
-            SELECT pq.*, q.requirements, q.reward_xp, q.reward_gold, q.reward_silver, q.reward_copper, q.reward_items, q.type
+            SELECT pq.*, q.requirements, q.reward_xp, q.reward_gold, q.reward_silver, q.reward_copper, q.reward_onix, q.reward_items, q.type
             FROM player_quests pq
             JOIN quests q ON pq.quest_id = q.id
             WHERE pq.id = $1 AND pq.player_id = $2 AND pq.status = 'active'
@@ -215,10 +216,11 @@ exports.completeQuest = async (req, res) => {
         if (!isComplete) throw new Error("Objetivos incompletos.");
 
         // Datos jugador
-        const playerData = (await client.query("SELECT level, experience, stat_points, gold, silver, copper FROM players WHERE id = $1", [userId])).rows[0];
+        const playerData = (await client.query("SELECT level, experience, stat_points, gold, silver, copper, onix FROM players WHERE id = $1", [userId])).rows[0];
         let currentLevel = parseInt(playerData.level || 1);
         let currentXp = parseInt(playerData.experience || 0);
         let currentStatPoints = parseInt(playerData.stat_points || 0);
+        const finalOnix = parseInt(playerData.onix || 0) + parseInt(userQuest.reward_onix || 0);
 
         // Economía
         const rewardTotal = ((userQuest.reward_gold || 0) * 10000) + ((userQuest.reward_silver || 0) * 100) + (userQuest.reward_copper || 0);
@@ -238,9 +240,9 @@ exports.completeQuest = async (req, res) => {
         // Guardar cambios en Jugador
         await client.query(
             `UPDATE players 
-             SET experience = $1, level = $2, stat_points = $3, gold = $4, silver = $5, copper = $6 
-             WHERE id = $7`,
-            [currentXp, currentLevel, currentStatPoints, normalized.newGold, normalized.newSilver, normalized.newCopper, userId]
+             SET experience = $1, level = $2, stat_points = $3, gold = $4, silver = $5, copper = $6, onix = $7
+             WHERE id = $8`,
+            [currentXp, currentLevel, currentStatPoints, normalized.newGold, normalized.newSilver, normalized.newCopper, finalOnix, userId]
         );
         
         // --- GUARDAR ITEMS (CORREGIDO CON GENERACIÓN DE STATS) ---
@@ -272,6 +274,37 @@ exports.completeQuest = async (req, res) => {
 
         // Cerrar Misión
         await client.query("UPDATE player_quests SET status = 'completed', completed_at = NOW() WHERE id = $1", [playerQuestId]);
+
+        await achievementService.incrementProgress(userId, 'quest.complete', 1, {
+            source: 'valhalla_hall',
+            questId: Number(userQuest.quest_id),
+            playerQuestId: Number(playerQuestId),
+            questType: userQuest.type || null
+        }, client);
+
+        if (Number(userQuest.reward_copper || 0) > 0) {
+            await achievementService.incrementProgress(userId, 'economy.copper_earned', Number(userQuest.reward_copper), {
+                source: 'quest',
+                questId: Number(userQuest.quest_id),
+                questType: userQuest.type || null
+            }, client);
+        }
+
+        if (Number(userQuest.reward_gold || 0) > 0) {
+            await achievementService.incrementProgress(userId, 'economy.gold_earned', Number(userQuest.reward_gold), {
+                source: 'quest',
+                questId: Number(userQuest.quest_id),
+                questType: userQuest.type || null
+            }, client);
+        }
+
+        if (Number(userQuest.reward_onix || 0) > 0) {
+            await achievementService.incrementProgress(userId, 'economy.onix_earned', Number(userQuest.reward_onix), {
+                source: 'quest',
+                questId: Number(userQuest.quest_id),
+                questType: userQuest.type || null
+            }, client);
+        }
 
         // Lógica Evolución
         let extraMsg = "";
