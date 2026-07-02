@@ -1,19 +1,26 @@
 import { createElement, useEffect, useMemo, useState } from 'react';
 import {
-    Activity,
+    Award,
     Backpack,
     Banknote,
+    BookOpen,
     CheckCircle2,
     Clock3,
     Coins,
     Crown,
     EyeOff,
+    Flame,
+    Gem,
+    HandCoins,
+    Landmark,
+    LockKeyhole,
     PackageCheck,
     ScrollText,
     Shield,
     Skull,
     Sparkles,
     Swords,
+    Target,
     Trophy
 } from 'lucide-react';
 import { statisticsService } from '../services/statisticsService';
@@ -73,6 +80,9 @@ const formatCopper = (value) => {
     return parts.join(' ');
 };
 
+const currencyToCopper = (values = {}) =>
+    (Number(values.gold || 0) * 10000) + (Number(values.silver || 0) * 100) + Number(values.copper || 0);
+
 function StatisticsPage({ user }) {
     const [statistics, setStatistics] = useState(EMPTY_STATS);
     const [loading, setLoading] = useState(true);
@@ -98,7 +108,7 @@ function StatisticsPage({ user }) {
             })
             .catch((requestError) => {
                 if (!isMounted) return;
-                setError(requestError.message || 'No se pudieron cargar las estadisticas.');
+                setError(requestError.message || 'No se pudieron cargar las estadísticas.');
             })
             .finally(() => {
                 if (isMounted) setLoading(false);
@@ -116,37 +126,43 @@ function StatisticsPage({ user }) {
                 label: 'Batallas ganadas',
                 value: formatNumber(summary.battlesWon),
                 icon: Trophy,
-                tone: 'text-emerald-300'
+                tone: 'text-emerald-200',
+                accent: 'from-emerald-500/25'
             },
             {
                 label: 'Batallas perdidas',
                 value: formatNumber(summary.battlesLost),
                 icon: Skull,
-                tone: 'text-red-300'
+                tone: 'text-red-200',
+                accent: 'from-red-500/20'
             },
             {
                 label: 'Win rate',
                 value: formatPercent(summary.winRate),
-                icon: Activity,
-                tone: 'text-cyan-300'
+                icon: Crown,
+                tone: 'text-cyan-100',
+                accent: 'from-cyan-500/20'
             },
             {
                 label: 'Riqueza total',
                 value: summary.accountValue?.formatted || formatCopper(0),
                 icon: Coins,
-                tone: 'text-amber-200'
+                tone: 'text-amber-100',
+                accent: 'from-amber-500/25'
             },
             {
                 label: 'Valor inventario',
                 value: summary.inventoryValue?.formatted || formatCopper(0),
                 icon: Backpack,
-                tone: 'text-slate-100'
+                tone: 'text-slate-100',
+                accent: 'from-slate-300/15'
             },
             {
                 label: 'Logros / fases',
                 value: `${formatNumber(summary.achievementsCompleted)} / ${formatNumber(summary.achievementPhasesCompleted)}`,
-                icon: Crown,
-                tone: 'text-purple-200'
+                icon: Award,
+                tone: 'text-purple-100',
+                accent: 'from-purple-500/20'
             }
         ];
     }, [statistics]);
@@ -154,34 +170,53 @@ function StatisticsPage({ user }) {
     if (!user) return null;
 
     return (
-        <div className="min-h-full text-slate-100 font-sans relative overflow-hidden">
-            <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(15,23,42,0.74),rgba(2,6,23,0.96))]" />
+        <div className="min-h-full text-slate-100 font-sans relative overflow-hidden bg-[#07090d]">
+            <img
+                src="/backgrounds/throne_room.png"
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover opacity-[0.16] saturate-[0.75]"
+                onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                }}
+            />
+            <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(5,7,11,0.62),rgba(7,9,13,0.92)_42%,rgba(2,6,10,0.98))]" />
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/70 to-transparent" />
 
             <div className="relative z-10 p-4 md:p-6 lg:p-8 space-y-5">
-                <section className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="w-12 h-12 rounded-lg border border-amber-600/60 bg-black/50 flex items-center justify-center shadow-[0_0_25px_rgba(245,158,11,0.12)]">
-                                <img src="/icons/sidebar/hero_stats.png" alt="" className="w-8 h-8 object-contain" />
+                <section className="rounded-lg border border-amber-900/45 bg-black/45 shadow-[0_18px_55px_rgba(0,0,0,0.42)] overflow-hidden">
+                    <div className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+                        <div className="flex min-w-0 items-center gap-4">
+                            <div className="h-16 w-16 shrink-0 rounded-lg border border-amber-500/45 bg-[linear-gradient(145deg,rgba(120,53,15,0.34),rgba(2,6,23,0.9))] flex items-center justify-center shadow-[0_0_28px_rgba(245,158,11,0.16)]">
+                                <img src="/icons/sidebar/hero_stats.png" alt="" className="h-10 w-10 object-contain drop-shadow-[0_0_12px_rgba(245,158,11,0.65)]" />
                             </div>
-                            <h2 className="text-4xl md:text-5xl font-serif font-bold text-amber-500 drop-shadow-md">
-                                Estadísticas
-                            </h2>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-amber-500/75">
+                                    Crónica de Valhallus
+                                </p>
+                                <h2 className="mt-1 text-4xl md:text-5xl font-serif font-bold text-amber-200 drop-shadow-[0_2px_18px_rgba(245,158,11,0.18)]">
+                                    Estadísticas
+                                </h2>
+                                <p className="mt-1 text-sm text-slate-400">
+                                    Registro de carrera y progreso acumulado
+                                </p>
+                            </div>
                         </div>
-                        <p className="text-slate-400 text-sm md:text-base">
-                            Registro de carrera y progreso acumulado
-                        </p>
+
+                        <div className="inline-flex w-fit items-center gap-2 rounded border border-amber-700/35 bg-amber-950/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-amber-100/80">
+                            <Sparkles size={14} className="text-amber-400" />
+                            Archivo del héroe
+                        </div>
                     </div>
                 </section>
 
                 {error && (
-                    <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-200">
+                    <div className="rounded-lg border border-red-900/60 bg-red-950/35 p-4 text-sm text-red-200">
                         {error}
                     </div>
                 )}
 
                 {loading ? (
-                    <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-10 text-center text-slate-500 animate-pulse">
+                    <div className="rounded-lg border border-amber-900/35 bg-black/55 p-10 text-center text-slate-400 animate-pulse shadow-[0_18px_55px_rgba(0,0,0,0.36)]">
                         Cargando estadísticas...
                     </div>
                 ) : (
@@ -207,54 +242,78 @@ function StatisticsPage({ user }) {
     );
 }
 
-function SummaryCard({ label, value, icon, tone }) {
+function SummaryCard({ label, value, icon, tone, accent }) {
     return (
-        <article className="rounded-lg border border-amber-900/40 bg-slate-950/85 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
-            <div className="flex items-start justify-between gap-3">
+        <article className="group relative min-h-[148px] overflow-hidden rounded-lg border border-amber-800/35 bg-[linear-gradient(145deg,rgba(15,23,42,0.9),rgba(3,7,18,0.96))] p-4 shadow-[0_16px_38px_rgba(0,0,0,0.34)] transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-500/45 hover:shadow-[0_20px_45px_rgba(0,0,0,0.42)]">
+            <div className={`absolute inset-0 bg-gradient-to-br ${accent} via-transparent to-transparent opacity-75`} />
+            <div className="absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
+            <div className="relative flex h-full flex-col justify-between gap-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="rounded-lg border border-amber-700/35 bg-black/35 p-2 shadow-[inset_0_0_18px_rgba(245,158,11,0.08)]">
+                        {createElement(icon, { size: 30, className: 'text-amber-300 drop-shadow-[0_0_10px_rgba(245,158,11,0.35)]' })}
+                    </div>
+                    <div className="h-8 w-8 rounded-full border border-amber-900/35 bg-black/25 opacity-60" aria-hidden />
+                </div>
                 <div className="min-w-0">
-                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+                    <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
                         {label}
                     </div>
-                    <div className={`mt-1 text-xl font-black leading-tight ${tone}`}>
+                    <div className={`mt-2 break-words text-2xl font-black leading-tight ${tone}`}>
                         {value}
                     </div>
                 </div>
-                {createElement(icon, { size: 22, className: 'text-amber-500/70 shrink-0' })}
             </div>
         </article>
     );
 }
 
-function SectionPanel({ title, icon, children, aside }) {
+function SectionPanel({ title, icon, children, aside, subtitle, locked = false }) {
     return (
-        <section className="rounded-lg border border-slate-800 bg-slate-950/82 shadow-[0_15px_45px_rgba(0,0,0,0.28)] overflow-hidden">
-            <header className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
-                <div className="flex items-center gap-2">
-                    {createElement(icon, { size: 18, className: 'text-amber-400' })}
-                    <h3 className="font-serif text-xl font-bold text-amber-200">{title}</h3>
+        <section className={`relative overflow-hidden rounded-lg border bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(2,6,23,0.94))] shadow-[0_18px_50px_rgba(0,0,0,0.34)] ${locked ? 'border-purple-800/40' : 'border-amber-900/40'}`}>
+            <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent ${locked ? 'via-purple-500/70' : 'via-amber-500/75'} to-transparent`} />
+            <header className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 md:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className={`h-11 w-11 shrink-0 rounded-lg border flex items-center justify-center bg-black/35 shadow-[inset_0_0_18px_rgba(245,158,11,0.07)] ${locked ? 'border-purple-500/35' : 'border-amber-600/40'}`}>
+                        {createElement(icon, { size: 24, className: locked ? 'text-purple-300' : 'text-amber-300' })}
+                    </div>
+                    <div className="min-w-0">
+                        <h3 className="font-serif text-xl font-bold text-amber-100">{title}</h3>
+                        {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+                    </div>
                 </div>
                 {aside}
             </header>
-            <div className="p-5">
+            <div className="p-4 md:p-5">
                 {children}
             </div>
         </section>
     );
 }
 
-function StatGrid({ items }) {
+function MetricGrid({ items, className = '' }) {
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${className}`}>
             {items.map((item) => (
-                <div key={item.label} className="rounded-md border border-slate-800 bg-black/30 px-3 py-2">
+                <MetricTile key={item.label} {...item} />
+            ))}
+        </div>
+    );
+}
+
+function MetricTile({ label, value, icon, tone = 'text-slate-100' }) {
+    return (
+        <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-amber-700/35 hover:bg-black/40">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                        {item.label}
+                        {label}
                     </div>
-                    <div className={`mt-1 text-lg font-black ${item.tone || 'text-slate-100'}`}>
-                        {item.value}
+                    <div className={`mt-1 break-words text-lg font-black leading-tight ${tone}`}>
+                        {value}
                     </div>
                 </div>
-            ))}
+                {icon && createElement(icon, { size: 17, className: 'text-amber-400/75 shrink-0' })}
+            </div>
         </div>
     );
 }
@@ -262,28 +321,28 @@ function StatGrid({ items }) {
 function CombatPanel({ combat }) {
     const difficulty = combat.difficultyKills || {};
     return (
-        <SectionPanel title="Combate" icon={Swords}>
-            <StatGrid
+        <SectionPanel title="Combate" subtitle="Historial de batalla" icon={Swords}>
+            <MetricGrid
                 items={[
-                    { label: 'Batallas totales', value: formatNumber(combat.battlesTotal) },
-                    { label: 'Victorias', value: formatNumber(combat.battlesWon), tone: 'text-emerald-300' },
-                    { label: 'Derrotas', value: formatNumber(combat.battlesLost), tone: 'text-red-300' },
-                    { label: 'Win rate', value: formatPercent(combat.winRate), tone: 'text-cyan-300' },
-                    { label: 'Racha actual', value: formatNumber(combat.currentWinStreak), tone: 'text-amber-200' },
-                    { label: 'Mejor racha', value: formatNumber(combat.bestWinStreak), tone: 'text-amber-200' },
-                    { label: 'Mobs eliminados', value: formatNumber(combat.mobsKilled) },
-                    { label: 'Jefes eliminados', value: formatNumber(combat.bossesKilled), tone: 'text-purple-200' },
-                    { label: 'Ocultos eliminados', value: formatNumber(combat.hiddenMobsKilled), tone: 'text-slate-300' },
-                    { label: 'Tier 1', value: formatNumber(difficulty.common) },
-                    { label: 'Tier 2', value: formatNumber(difficulty.rare), tone: 'text-blue-300' },
-                    { label: 'Tier 3', value: formatNumber(difficulty.legendary), tone: 'text-amber-300' }
+                    { label: 'Batallas totales', value: formatNumber(combat.battlesTotal), icon: Swords },
+                    { label: 'Victorias', value: formatNumber(combat.battlesWon), icon: Trophy, tone: 'text-emerald-300' },
+                    { label: 'Derrotas', value: formatNumber(combat.battlesLost), icon: Skull, tone: 'text-red-300' },
+                    { label: 'Win rate', value: formatPercent(combat.winRate), icon: Crown, tone: 'text-cyan-300' },
+                    { label: 'Racha actual', value: formatNumber(combat.currentWinStreak), icon: Flame, tone: 'text-amber-200' },
+                    { label: 'Mejor racha', value: formatNumber(combat.bestWinStreak), icon: Award, tone: 'text-amber-200' },
+                    { label: 'Mobs eliminados', value: formatNumber(combat.mobsKilled), icon: Target },
+                    { label: 'Jefes eliminados', value: formatNumber(combat.bossesKilled), icon: Crown, tone: 'text-purple-200' },
+                    { label: 'Ocultos eliminados', value: formatNumber(combat.hiddenMobsKilled), icon: EyeOff, tone: 'text-slate-300' },
+                    { label: 'Tier 1', value: formatNumber(difficulty.common), icon: Shield },
+                    { label: 'Tier 2', value: formatNumber(difficulty.rare), icon: Shield, tone: 'text-blue-300' },
+                    { label: 'Tier 3', value: formatNumber(difficulty.legendary), icon: Shield, tone: 'text-amber-300' }
                 ]}
             />
         </SectionPanel>
     );
 }
 
-function CurrencyRow({ title, values = {}, includeOnix = false }) {
+function CurrencyRow({ title, values = {}, includeOnix = false, icon }) {
     const entries = [
         ['gold', values.gold, 'Oro'],
         ['silver', values.silver, 'Plata'],
@@ -293,22 +352,25 @@ function CurrencyRow({ title, values = {}, includeOnix = false }) {
     if (includeOnix) entries.push(['onix', values.onix, 'Ónix']);
 
     return (
-        <div className="rounded-md border border-slate-800 bg-black/30 p-3">
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                {title}
+        <div className="rounded-lg border border-white/10 bg-black/30 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    {createElement(icon, { size: 14, className: 'text-amber-400/85' })}
+                    {title}
+                </div>
             </div>
             <div className="flex flex-wrap gap-2">
                 {entries.map(([key, value, label]) => (
                     <span
                         key={key}
-                        className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-bold ${
+                        className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${
                             key === 'onix'
-                                ? 'border-purple-500/50 bg-purple-950/30 text-purple-200'
-                                : 'border-amber-900/50 bg-slate-950 text-amber-100'
+                                ? 'border-purple-500/45 bg-purple-950/30 text-purple-100'
+                                : 'border-amber-800/45 bg-slate-950/80 text-amber-100'
                         }`}
                         title={label}
                     >
-                        <img src={CURRENCY_ICONS[key]} alt="" className="w-4 h-4 object-contain" />
+                        <img src={CURRENCY_ICONS[key]} alt="" className="h-4 w-4 object-contain" />
                         {formatNumber(value)}
                     </span>
                 ))}
@@ -319,91 +381,136 @@ function CurrencyRow({ title, values = {}, includeOnix = false }) {
 
 function EconomyPanel({ economy }) {
     return (
-        <SectionPanel title="Economía" icon={Coins}>
+        <SectionPanel title="Economía" subtitle="Tesorería del personaje" icon={Coins}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <CurrencyRow title="Monedas actuales" values={economy.current} includeOnix />
-                <CurrencyRow title="Banco" values={economy.bank} />
-                <CurrencyRow title="Ganado total" values={economy.earned} includeOnix />
-                <CurrencyRow title="Gastado total" values={economy.spent} includeOnix />
-                <CurrencyRow title="Robado" values={economy.stolen} />
-                <CurrencyRow title="Perdido" values={economy.lost} />
+                <CurrencyRow title="Monedas actuales" values={economy.current} includeOnix icon={Coins} />
+                <CurrencyRow title="Banco" values={economy.bank} icon={Landmark} />
+                <CurrencyRow title="Ganado total" values={economy.earned} includeOnix icon={HandCoins} />
+                <CurrencyRow title="Gastado total" values={economy.spent} includeOnix icon={Banknote} />
+                <CurrencyRow title="Robado" values={economy.stolen} icon={Target} />
+                <CurrencyRow title="Perdido" values={economy.lost} icon={Shield} />
             </div>
 
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <ValueBlock label="Mayor robo" value={formatCopper(economy.biggestRobberyCopperValue)} icon={Banknote} />
-                <ValueBlock label="Mayor pérdida" value={formatCopper(economy.biggestLossCopperValue)} icon={Shield} />
+                <MetricTile label="Mayor robo" value={formatCopper(economy.biggestRobberyCopperValue)} icon={Banknote} tone="text-amber-100" />
+                <MetricTile label="Mayor pérdida" value={formatCopper(economy.biggestLossCopperValue)} icon={Shield} tone="text-red-200" />
             </div>
         </SectionPanel>
-    );
-}
-
-function ValueBlock({ label, value, icon }) {
-    return (
-        <div className="rounded-md border border-slate-800 bg-black/30 px-3 py-2">
-            <div className="flex items-center justify-between gap-3">
-                <div>
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</div>
-                    <div className="mt-1 text-sm font-black text-slate-100">{value}</div>
-                </div>
-                {createElement(icon, { size: 16, className: 'text-amber-500/70 shrink-0' })}
-            </div>
-        </div>
     );
 }
 
 function InventoryPanel({ inventory }) {
     return (
-        <SectionPanel title="Inventario" icon={Backpack}>
-            <StatGrid
+        <SectionPanel title="Inventario" subtitle="Valor de objetos y equipo" icon={Backpack}>
+            <MetricGrid
                 items={[
-                    { label: 'Valor inventario', value: formatCopper(inventory.inventoryValueCopper), tone: 'text-amber-200' },
-                    { label: 'Valor equipado', value: formatCopper(inventory.equippedValueCopper), tone: 'text-slate-100' },
-                    { label: 'Objetos en bolsa', value: formatNumber(inventory.itemsCount) },
-                    { label: 'Objetos equipados', value: formatNumber(inventory.equippedItemsCount) }
+                    { label: 'Valor inventario', value: formatCopper(inventory.inventoryValueCopper), icon: Coins, tone: 'text-amber-200' },
+                    { label: 'Valor equipado', value: formatCopper(inventory.equippedValueCopper), icon: Shield, tone: 'text-slate-100' },
+                    { label: 'Objetos en bolsa', value: formatNumber(inventory.itemsCount), icon: Backpack },
+                    { label: 'Objetos equipados', value: formatNumber(inventory.equippedItemsCount), icon: PackageCheck }
                 ]}
             />
 
-            <div className="mt-3 rounded-md border border-slate-800 bg-black/30 p-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Objeto más valioso
-                </div>
-                {inventory.mostValuableItem ? (
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                            <div className="truncate text-sm font-bold text-slate-100">
-                                {inventory.mostValuableItem.name}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                                {inventory.mostValuableItem.formatted || formatCopper(inventory.mostValuableItem.copperValue)}
-                            </div>
+            <div className="mt-3 rounded-lg border border-amber-700/35 bg-[linear-gradient(135deg,rgba(120,53,15,0.18),rgba(0,0,0,0.34))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-amber-300/80">
+                            Objeto más valioso
                         </div>
-                        <PackageCheck size={18} className="text-amber-400 shrink-0" />
+                        {inventory.mostValuableItem ? (
+                            <div className="mt-3">
+                                <div className="truncate text-base font-black text-slate-100">
+                                    {inventory.mostValuableItem.name}
+                                </div>
+                                <div className="mt-1 text-sm font-bold text-amber-200">
+                                    {inventory.mostValuableItem.formatted || formatCopper(inventory.mostValuableItem.copperValue)}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mt-3 text-sm text-slate-500">Sin objeto registrado</div>
+                        )}
                     </div>
-                ) : (
-                    <div className="mt-2 text-sm text-slate-500">Sin objeto registrado</div>
-                )}
+                    <div className="rounded-lg border border-amber-600/35 bg-black/35 p-3">
+                        <Gem size={24} className="text-amber-300" />
+                    </div>
+                </div>
             </div>
         </SectionPanel>
     );
 }
 
+function ProgressCluster({ title, icon, items }) {
+    return (
+        <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+            <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-amber-300/85">
+                {createElement(icon, { size: 14 })}
+                {title}
+            </div>
+            <div className="space-y-2">
+                {items.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between gap-3 border-t border-white/5 pt-2 first:border-t-0 first:pt-0">
+                        <span className="text-xs text-slate-400">{item.label}</span>
+                        <span className={`text-sm font-black ${item.tone || 'text-slate-100'}`}>{item.value}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function ProgressPanel({ progress }) {
     return (
-        <SectionPanel title="Progreso" icon={ScrollText}>
-            <StatGrid
-                items={[
-                    { label: 'Logros completados', value: formatNumber(progress.achievementsCompleted), tone: 'text-emerald-300' },
-                    { label: 'Fases completadas', value: formatNumber(progress.achievementPhasesCompleted), tone: 'text-purple-200' },
-                    { label: 'Puntos de logro', value: formatNumber(progress.achievementPointsTotal), tone: 'text-amber-200' },
-                    { label: 'Recompensas reclamadas', value: formatNumber(progress.achievementRewardsClaimed) },
-                    { label: 'Secretos descubiertos', value: formatNumber(progress.secretAchievementsDiscovered), tone: 'text-slate-300' },
-                    { label: 'Bestiario descubierto', value: formatNumber(progress.bestiaryDiscovered) },
-                    { label: 'Contratos completados', value: formatNumber(progress.questsCompleted) },
-                    { label: 'Diarios / semanales', value: `${formatNumber(progress.dailyQuestsCompleted)} / ${formatNumber(progress.weeklyQuestsCompleted)}` },
-                    { label: 'Mascotas desbloqueadas', value: formatNumber(progress.petsUnlocked) },
-                    { label: 'Recetas aprendidas', value: formatNumber(progress.recipesLearnedTotal) }
-                ]}
-            />
+        <SectionPanel title="Progreso" subtitle="Avance del jugador" icon={ScrollText}>
+            <div className="mb-3 rounded-lg border border-amber-700/35 bg-black/30 p-4">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            Puntos de logro
+                        </p>
+                        <p className="mt-1 text-3xl font-black text-amber-200">
+                            {formatNumber(progress.achievementPointsTotal)}
+                        </p>
+                    </div>
+                    <Award size={34} className="text-amber-300 drop-shadow-[0_0_12px_rgba(245,158,11,0.35)]" />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <ProgressCluster
+                    title="Logros"
+                    icon={Trophy}
+                    items={[
+                        { label: 'Completados', value: formatNumber(progress.achievementsCompleted), tone: 'text-emerald-300' },
+                        { label: 'Fases completadas', value: formatNumber(progress.achievementPhasesCompleted), tone: 'text-purple-200' },
+                        { label: 'Recompensas', value: formatNumber(progress.achievementRewardsClaimed) },
+                        { label: 'Secretos', value: formatNumber(progress.secretAchievementsDiscovered), tone: 'text-slate-300' }
+                    ]}
+                />
+                <ProgressCluster
+                    title="Bestiario"
+                    icon={BookOpen}
+                    items={[
+                        { label: 'Descubierto', value: formatNumber(progress.bestiaryDiscovered), tone: 'text-cyan-200' },
+                        { label: 'Contratos', value: formatNumber(progress.questsCompleted), tone: 'text-amber-100' }
+                    ]}
+                />
+                <ProgressCluster
+                    title="Misiones"
+                    icon={ScrollText}
+                    items={[
+                        { label: 'Diarias', value: formatNumber(progress.dailyQuestsCompleted) },
+                        { label: 'Semanales', value: formatNumber(progress.weeklyQuestsCompleted) }
+                    ]}
+                />
+                <ProgressCluster
+                    title="Colección"
+                    icon={Sparkles}
+                    items={[
+                        { label: 'Mascotas desbloqueadas', value: formatNumber(progress.petsUnlocked), tone: 'text-emerald-200' },
+                        { label: 'Recetas aprendidas', value: formatNumber(progress.recipesLearnedTotal), tone: 'text-amber-100' }
+                    ]}
+                />
+            </div>
         </SectionPanel>
     );
 }
@@ -412,53 +519,83 @@ function PvpPanel({ pvp }) {
     return (
         <SectionPanel
             title="PvP futuro"
+            subtitle="Arena bloqueada"
             icon={Shield}
+            locked
             aside={(
-                <span className="rounded border border-purple-500/50 bg-purple-950/30 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-purple-200">
+                <span className="inline-flex items-center gap-1.5 rounded border border-purple-500/45 bg-purple-950/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-purple-100">
+                    <LockKeyhole size={12} />
                     Próximamente
                 </span>
             )}
         >
-            <StatGrid
-                items={[
-                    { label: 'Ataques', value: formatNumber(pvp.attacksDone) },
-                    { label: 'Defensas', value: formatNumber(pvp.attacksReceived) },
-                    { label: 'Victorias atacando', value: formatNumber(pvp.winsAttacking), tone: 'text-emerald-300' },
-                    { label: 'Victorias defendiendo', value: formatNumber(pvp.winsDefending), tone: 'text-emerald-300' },
-                    { label: 'Venganzas ganadas', value: formatNumber(pvp.revengeWins), tone: 'text-purple-200' },
-                    { label: 'Venganzas perdidas', value: formatNumber(pvp.revengeLosses), tone: 'text-red-300' },
-                    { label: 'Dinero robado', value: formatCopper((pvp.stolen?.gold || 0) * 10000 + (pvp.stolen?.silver || 0) * 100 + (pvp.stolen?.copper || 0)) },
-                    { label: 'Dinero perdido', value: formatCopper((pvp.lost?.gold || 0) * 10000 + (pvp.lost?.silver || 0) * 100 + (pvp.lost?.copper || 0)) }
-                ]}
-            />
+            <div className="mb-4 rounded-lg border border-purple-500/25 bg-purple-950/15 p-4">
+                <div className="flex items-center gap-3">
+                    <div className="rounded-lg border border-purple-500/30 bg-black/35 p-3">
+                        <LockKeyhole size={22} className="text-purple-200" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-300">
+                        La arena PvP abrirá sus puertas próximamente.
+                    </p>
+                </div>
+            </div>
+
+            <div className="opacity-80">
+                <MetricGrid
+                    items={[
+                        { label: 'Ataques', value: formatNumber(pvp.attacksDone), icon: Swords },
+                        { label: 'Defensas', value: formatNumber(pvp.attacksReceived), icon: Shield },
+                        { label: 'Victorias atacando', value: formatNumber(pvp.winsAttacking), icon: Trophy, tone: 'text-emerald-300' },
+                        { label: 'Victorias defendiendo', value: formatNumber(pvp.winsDefending), icon: Shield, tone: 'text-emerald-300' },
+                        { label: 'Venganzas ganadas', value: formatNumber(pvp.revengeWins), icon: Crown, tone: 'text-purple-200' },
+                        { label: 'Venganzas perdidas', value: formatNumber(pvp.revengeLosses), icon: Skull, tone: 'text-red-300' },
+                        { label: 'Dinero robado', value: formatCopper(currencyToCopper(pvp.stolen)), icon: Coins },
+                        { label: 'Dinero perdido', value: formatCopper(currencyToCopper(pvp.lost)), icon: Banknote }
+                    ]}
+                />
+            </div>
         </SectionPanel>
     );
 }
 
 function RecentPanel({ recent }) {
+    const rows = [
+        { icon: Swords, label: 'Última batalla', value: recent.lastBattleAt },
+        { icon: CheckCircle2, label: 'Última victoria', value: recent.lastWinAt },
+        { icon: Skull, label: 'Última derrota', value: recent.lastLossAt },
+        { icon: Crown, label: 'Último jefe', value: recent.lastBossKillAt },
+        { icon: EyeOff, label: 'Último oculto', value: recent.lastHiddenKillAt },
+        { icon: ScrollText, label: 'Última misión', value: recent.lastQuestCompletedAt },
+        { icon: Sparkles, label: 'Último logro reclamado', value: recent.lastAchievementClaimedAt }
+    ];
+
     return (
-        <SectionPanel title="Actividad reciente" icon={Clock3}>
-            <div className="space-y-2">
-                <RecentRow icon={Swords} label="Última batalla" value={formatDate(recent.lastBattleAt)} />
-                <RecentRow icon={CheckCircle2} label="Última victoria" value={formatDate(recent.lastWinAt)} />
-                <RecentRow icon={Skull} label="Última derrota" value={formatDate(recent.lastLossAt)} />
-                <RecentRow icon={Crown} label="Último jefe" value={formatDate(recent.lastBossKillAt)} />
-                <RecentRow icon={EyeOff} label="Último oculto" value={formatDate(recent.lastHiddenKillAt)} />
-                <RecentRow icon={ScrollText} label="Última misión" value={formatDate(recent.lastQuestCompletedAt)} />
-                <RecentRow icon={Sparkles} label="Último logro reclamado" value={formatDate(recent.lastAchievementClaimedAt)} />
+        <SectionPanel title="Actividad reciente" subtitle="Línea de eventos" icon={Clock3}>
+            <div className="relative space-y-2">
+                <div className="absolute bottom-4 left-[18px] top-4 w-px bg-gradient-to-b from-amber-500/35 via-slate-700/50 to-transparent" />
+                {rows.map((row) => (
+                    <RecentRow key={row.label} {...row} />
+                ))}
             </div>
         </SectionPanel>
     );
 }
 
 function RecentRow({ icon, label, value }) {
+    const formatted = formatDate(value);
+    const isEmpty = formatted === 'Sin registro';
+
     return (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-slate-800 bg-black/30 px-3 py-2">
-            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
-                {createElement(icon, { size: 14, className: 'text-amber-500/80' })}
+        <div className="relative flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/30 px-3 py-3 pl-12">
+            <div className="absolute left-2.5 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-amber-700/35 bg-slate-950">
+                {createElement(icon, { size: 15, className: isEmpty ? 'text-slate-600' : 'text-amber-300' })}
+            </div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                 {label}
             </div>
-            <div className="text-right text-sm font-bold text-slate-200">{value}</div>
+            <div className={`text-right text-sm font-bold ${isEmpty ? 'text-slate-600' : 'text-slate-100'}`}>
+                {formatted}
+            </div>
         </div>
     );
 }

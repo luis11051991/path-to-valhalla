@@ -10,6 +10,9 @@ import Packages from './pages/Packages';
 import Market from './pages/Market';
 import Workshop from './pages/Workshop';
 import Bank from './pages/Bank';
+import BlackMarket from './pages/BlackMarket';
+import BountyBoard from './pages/BountyBoard';
+import Auction from './pages/Auction';
 import ValhallaHall from './pages/ValhallaHall';
 import WelcomeBack from './components/WelcomeBack';
 import GameLayout from './components/layout/GameLayout';
@@ -202,6 +205,18 @@ function App() {
               <Route
                 path="/bank"
                 element={<Bank user={user} onUpdateUser={handleUserUpdate} />}
+              />
+              <Route
+                path="/black-market"
+                element={<BlackMarket user={user} />}
+              />
+              <Route
+                path="/bounty-board"
+                element={<BountyBoard user={user} />}
+              />
+              <Route
+                path="/auction"
+                element={<Auction user={user} />}
               />
 
               {/* Ruta comodín: Si la URL no existe, vuelve a /hero */}

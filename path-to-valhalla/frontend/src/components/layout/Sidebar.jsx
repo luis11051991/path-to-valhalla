@@ -38,6 +38,9 @@ const links = [
         items: [
             { to: '/workshop', label: 'Taller', icon: '/icons/sidebar/city_workshop.png', levelLock: 5 },
             { to: '/bank', label: 'Banco', icon: '/icons/sidebar/city_bank.png' },
+            { to: '/black-market', label: 'Mercado Negro', icon: '/icons/sidebar/city_market.png' },
+            { to: '/bounty-board', label: 'Trae su Cabeza', icon: '/icons/sidebar/combat_coliseum.png' },
+            { to: '/auction', label: 'Subasta', icon: '/icons/sidebar/city_bank.png' },
             { to: '/market', label: 'Mercado', icon: '/icons/sidebar/city_market.png' },
         ]
     },
