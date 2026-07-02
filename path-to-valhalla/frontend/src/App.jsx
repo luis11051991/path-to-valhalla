@@ -18,6 +18,7 @@ import Grimoire from './pages/Grimoire';
 import Bestiary from './pages/Bestiary';
 import MessagingPage from './pages/MessagingPage';
 import AchievementsPage from './pages/Achievements';
+import StatisticsPage from './pages/Statistics';
 import { apiUrl } from './constants/api';
 
 import { io } from 'socket.io-client';
@@ -164,6 +165,12 @@ function App() {
               <Route
                 path="/achievements"
                 element={<AchievementsPage user={user} onUpdateUser={handleUserUpdate} />}
+              />
+
+              {/* Estadísticas */}
+              <Route
+                path="/statistics"
+                element={<StatisticsPage user={user} />}
               />
 
               {/* Mensajería */}

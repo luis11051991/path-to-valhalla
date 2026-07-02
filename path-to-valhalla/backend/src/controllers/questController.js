@@ -2,6 +2,7 @@
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { getRequiredXp } = require('../shared/level_xp');
 const achievementService = require('../services/achievementService');
+const statisticsService = require('../services/statisticsService');
 
 // --- HELPER: Generar Stats Fijos (Resuelve bug de rangos) ---
 const generateQuestItemStats = (templateStats) => {
@@ -274,6 +275,16 @@ exports.completeQuest = async (req, res) => {
 
         // Cerrar Misión
         await client.query("UPDATE player_quests SET status = 'completed', completed_at = NOW() WHERE id = $1", [playerQuestId]);
+
+        await statisticsService.recordQuestCompleted(userId, {
+            type: userQuest.type || null,
+            rewards: {
+                copper: Number(userQuest.reward_copper || 0),
+                silver: Number(userQuest.reward_silver || 0),
+                gold: Number(userQuest.reward_gold || 0),
+                onix: Number(userQuest.reward_onix || 0)
+            }
+        }, client);
 
         await achievementService.incrementProgress(userId, 'quest.complete', 1, {
             source: 'valhalla_hall',

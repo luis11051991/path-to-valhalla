@@ -94,6 +94,15 @@ const getProgressPercent = (achievement) => {
 };
 
 const isHiddenAchievement = (achievement) => achievement.status === 'Oculto';
+const getPhaseLabel = (achievement) => (
+    achievement.phaseLabel
+    || `Fase ${achievement.currentPhase || 1} / ${achievement.maxPhase || 1}`
+);
+
+const shouldShowPhase = (achievement) => (
+    !isHiddenAchievement(achievement)
+    && (achievement.isChain || Number(achievement.maxPhase || 1) > 1)
+);
 
 const getDisplayName = (achievement) => (
     isHiddenAchievement(achievement) ? '???' : achievement.name
@@ -187,7 +196,7 @@ function AchievementsPage({ user, onUpdateUser }) {
             .filter((achievement) => {
                 if (activeFilter === 'Reclamables') return achievement.status === 'Reclamable';
                 if (activeFilter === 'Completados') {
-                    return ['Completado', 'Reclamable', 'Reclamado'].includes(achievement.status);
+                    return achievement.isCompleted || ['Completado', 'Reclamado'].includes(achievement.status);
                 }
                 if (activeFilter !== 'Todos') return achievement.category === activeFilter;
                 return true;
@@ -584,6 +593,11 @@ function AchievementCard({ achievement, isSelected, onSelect, onClaim }) {
                         <span className={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${RARITY_STYLES[hidden ? 'Oculta' : achievement.rarity]}`}>
                             {hidden ? 'Oculta' : achievement.rarity}
                         </span>
+                        {shouldShowPhase(achievement) && (
+                            <span className="rounded border border-purple-500/50 bg-purple-950/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-200">
+                                {getPhaseLabel(achievement)}
+                            </span>
+                        )}
                     </div>
 
                     <div className="text-[11px] uppercase tracking-widest text-amber-500/80 font-bold mb-2">
@@ -600,7 +614,7 @@ function AchievementCard({ achievement, isSelected, onSelect, onClaim }) {
 
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
                         <span className="text-slate-400 font-mono">
-                            Progreso:{' '}
+                            Progreso de fase:{' '}
                             <strong className="text-slate-100">
                                 {hidden ? '? / ?' : `${formatNumber(achievement.progress)} / ${formatNumber(achievement.target)}`}
                             </strong>
@@ -696,6 +710,11 @@ function AchievementDetailPanel({ achievement, almostCompleted, onClaim, onNavig
                             <span className={`rounded border px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${RARITY_STYLES[hidden ? 'Oculta' : achievement.rarity]}`}>
                                 {hidden ? 'Rareza oculta' : achievement.rarity}
                             </span>
+                            {shouldShowPhase(achievement) && (
+                                <span className="rounded border border-purple-500/50 bg-purple-950/30 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-purple-200">
+                                    {getPhaseLabel(achievement)}
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -708,7 +727,7 @@ function AchievementDetailPanel({ achievement, almostCompleted, onClaim, onNavig
             <div className="p-5 space-y-5">
                 <div>
                     <div className="mb-2 flex justify-between text-xs font-bold uppercase tracking-widest text-slate-500">
-                        <span>Progreso</span>
+                        <span>{shouldShowPhase(achievement) ? 'Progreso de fase' : 'Progreso'}</span>
                         <span className="text-slate-200">
                             {hidden ? '? / ?' : `${formatNumber(achievement.progress)} / ${formatNumber(achievement.target)}`}
                         </span>
@@ -777,6 +796,7 @@ function AchievementDetailPanel({ achievement, almostCompleted, onClaim, onNavig
                                 <div className="min-w-0">
                                     <div className="truncate text-sm font-bold text-slate-200">{item.name}</div>
                                     <div className="mt-0.5 text-[11px] text-slate-500">
+                                        {shouldShowPhase(item) ? `${getPhaseLabel(item)} · ` : ''}
                                         {formatNumber(item.progress)} / {formatNumber(item.target)}
                                     </div>
                                 </div>

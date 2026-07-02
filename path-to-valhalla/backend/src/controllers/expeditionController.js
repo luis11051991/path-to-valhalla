@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
 const { hydratePlayer, computeMaxHp } = require('../shared/player_stats');
 const achievementService = require('../services/achievementService');
+const statisticsService = require('../services/statisticsService');
 
 // XP rules live in the shared module
 const { getRequiredXp } = require('../shared/level_xp');
@@ -399,6 +400,13 @@ exports.startBattle = async (req, res) => {
                 }, client);
             }
         }
+
+        await statisticsService.recordExpeditionBattle(userId, {
+            isWin,
+            enemy: baseEnemy,
+            rewards,
+            isNewBestiaryEntry
+        }, client);
 
         const durabilityLoss = isWin ? 1 : 2;
         await client.query(`UPDATE player_items SET durability_current = GREATEST(0, durability_current - $1) WHERE player_id = $2 AND is_equipped = true`, [durabilityLoss, userId]);
