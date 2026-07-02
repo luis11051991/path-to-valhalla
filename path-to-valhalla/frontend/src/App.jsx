@@ -22,6 +22,9 @@ import Bestiary from './pages/Bestiary';
 import MessagingPage from './pages/MessagingPage';
 import AchievementsPage from './pages/Achievements';
 import StatisticsPage from './pages/Statistics';
+import AlliancePage from './pages/Alliance';
+import AllianceCreate from './pages/AllianceCreate';
+import AlliancePublicProfile from './pages/AlliancePublicProfile';
 import { apiUrl } from './constants/api';
 
 import { io } from 'socket.io-client';
@@ -180,6 +183,18 @@ function App() {
               <Route
                 path="/messages"
                 element={<MessagingPage user={user} socket={socket} onMessageRead={updateUnreadCount} />}
+              />
+              <Route
+                path="/alliance"
+                element={<AlliancePage user={user} onUpdateUser={handleUserUpdate} />}
+              />
+              <Route
+                path="/alliance/create"
+                element={<AllianceCreate user={user} onUpdateUser={handleUserUpdate} />}
+              />
+              <Route
+                path="/alliance/:allianceId"
+                element={<AlliancePublicProfile user={user} />}
               />
 
               {/* Aventura */}
