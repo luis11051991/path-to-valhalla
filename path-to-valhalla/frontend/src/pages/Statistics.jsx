@@ -1,10 +1,11 @@
-import { createElement, useEffect, useMemo, useState } from 'react';
+import { createElement, useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Award,
     Backpack,
     Banknote,
     BookOpen,
     CheckCircle2,
+    ChevronDown,
     Clock3,
     Coins,
     Crown,
@@ -80,13 +81,22 @@ const formatCopper = (value) => {
     return parts.join(' ');
 };
 
-const currencyToCopper = (values = {}) =>
-    (Number(values.gold || 0) * 10000) + (Number(values.silver || 0) * 100) + Number(values.copper || 0);
-
 function StatisticsPage({ user }) {
     const [statistics, setStatistics] = useState(EMPTY_STATS);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [sections, setSections] = useState({
+        pvp: true,
+        pve: true,
+        economy: true,
+        inventory: false,
+        progress: false,
+        recent: false
+    });
+
+    const toggleSection = useCallback((id) => {
+        setSections((prev) => ({ ...prev, [id]: !prev[id] }));
+    }, []);
 
     useEffect(() => {
         let isMounted = true;
@@ -119,26 +129,39 @@ function StatisticsPage({ user }) {
         };
     }, []);
 
+    const pvpStats = useMemo(() => {
+        const pvp = statistics.pvp || {};
+        const wins = (pvp.winsAttacking || 0) + (pvp.winsDefending || 0);
+        const losses = (pvp.lossesAttacking || 0) + (pvp.lossesDefending || 0);
+        const total = wins + losses;
+        return {
+            wins,
+            losses,
+            total,
+            winRate: total > 0 ? Math.round((wins / total) * 100) : 0
+        };
+    }, [statistics]);
+
     const summaryCards = useMemo(() => {
         const { summary = {} } = statistics;
         return [
             {
-                label: 'Batallas ganadas',
-                value: formatNumber(summary.battlesWon),
+                label: 'Victorias PvP',
+                value: formatNumber(pvpStats.wins),
                 icon: Trophy,
                 tone: 'text-emerald-200',
                 accent: 'from-emerald-500/25'
             },
             {
-                label: 'Batallas perdidas',
-                value: formatNumber(summary.battlesLost),
+                label: 'Derrotas PvP',
+                value: formatNumber(pvpStats.losses),
                 icon: Skull,
                 tone: 'text-red-200',
                 accent: 'from-red-500/20'
             },
             {
-                label: 'Win rate',
-                value: formatPercent(summary.winRate),
+                label: 'Win Rate PvP',
+                value: formatPercent(pvpStats.winRate),
                 icon: Crown,
                 tone: 'text-cyan-100',
                 accent: 'from-cyan-500/20'
@@ -165,7 +188,7 @@ function StatisticsPage({ user }) {
                 accent: 'from-purple-500/20'
             }
         ];
-    }, [statistics]);
+    }, [statistics, pvpStats]);
 
     if (!user) return null;
 
@@ -228,12 +251,36 @@ function StatisticsPage({ user }) {
                         </section>
 
                         <section className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
-                            <CombatPanel combat={statistics.combat} />
-                            <EconomyPanel economy={statistics.economy} />
-                            <InventoryPanel inventory={statistics.inventory} />
-                            <ProgressPanel progress={statistics.progress} />
-                            <PvpPanel pvp={statistics.pvp} />
-                            <RecentPanel recent={statistics.recent} />
+                            <PvPCombatPanel
+                                pvp={statistics.pvp}
+                                isOpen={sections.pvp}
+                                onToggle={() => toggleSection('pvp')}
+                            />
+                            <PvECombatPanel
+                                combat={statistics.combat}
+                                isOpen={sections.pve}
+                                onToggle={() => toggleSection('pve')}
+                            />
+                            <EconomyPanel
+                                economy={statistics.economy}
+                                isOpen={sections.economy}
+                                onToggle={() => toggleSection('economy')}
+                            />
+                            <InventoryPanel
+                                inventory={statistics.inventory}
+                                isOpen={sections.inventory}
+                                onToggle={() => toggleSection('inventory')}
+                            />
+                            <ProgressPanel
+                                progress={statistics.progress}
+                                isOpen={sections.progress}
+                                onToggle={() => toggleSection('progress')}
+                            />
+                            <RecentPanel
+                                recent={statistics.recent}
+                                isOpen={sections.recent}
+                                onToggle={() => toggleSection('recent')}
+                            />
                         </section>
                     </>
                 )}
@@ -267,11 +314,16 @@ function SummaryCard({ label, value, icon, tone, accent }) {
     );
 }
 
-function SectionPanel({ title, icon, children, aside, subtitle, locked = false }) {
+function SectionPanel({ title, icon, children, aside, subtitle, locked = false, isOpen = true, onToggle }) {
+    const isCollapsible = onToggle !== undefined;
+
     return (
         <section className={`relative overflow-hidden rounded-lg border bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(2,6,23,0.94))] shadow-[0_18px_50px_rgba(0,0,0,0.34)] ${locked ? 'border-purple-800/40' : 'border-amber-900/40'}`}>
             <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent ${locked ? 'via-purple-500/70' : 'via-amber-500/75'} to-transparent`} />
-            <header className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 md:px-5">
+            <header
+                className={`flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 md:px-5 ${isCollapsible ? 'cursor-pointer select-none hover:bg-white/[0.02]' : ''}`}
+                onClick={isCollapsible ? onToggle : undefined}
+            >
                 <div className="flex min-w-0 items-center gap-3">
                     <div className={`h-11 w-11 shrink-0 rounded-lg border flex items-center justify-center bg-black/35 shadow-[inset_0_0_18px_rgba(245,158,11,0.07)] ${locked ? 'border-purple-500/35' : 'border-amber-600/40'}`}>
                         {createElement(icon, { size: 24, className: locked ? 'text-purple-300' : 'text-amber-300' })}
@@ -281,11 +333,21 @@ function SectionPanel({ title, icon, children, aside, subtitle, locked = false }
                         {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
                     </div>
                 </div>
-                {aside}
+                <div className="flex items-center gap-3 shrink-0">
+                    {aside}
+                    {isCollapsible && (
+                        <ChevronDown
+                            size={18}
+                            className={`text-slate-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : 'rotate-0'}`}
+                        />
+                    )}
+                </div>
             </header>
-            <div className="p-4 md:p-5">
-                {children}
-            </div>
+            {isOpen && (
+                <div className="p-4 md:p-5">
+                    {children}
+                </div>
+            )}
         </section>
     );
 }
@@ -318,24 +380,87 @@ function MetricTile({ label, value, icon, tone = 'text-slate-100' }) {
     );
 }
 
-function CombatPanel({ combat }) {
-    const difficulty = combat.difficultyKills || {};
+function PvPCombatPanel({ pvp, isOpen, onToggle }) {
+    const wins = (pvp.winsAttacking || 0) + (pvp.winsDefending || 0);
+    const losses = (pvp.lossesAttacking || 0) + (pvp.lossesDefending || 0);
+    const total = wins + losses;
+    const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+    const isPvpFuture = total === 0 && (pvp.attacksDone || 0) === 0;
+
     return (
-        <SectionPanel title="Combate" subtitle="Historial de batalla" icon={Swords}>
+        <SectionPanel
+            title="Combate PvP"
+            subtitle="Duelos entre héroes"
+            icon={Swords}
+            isOpen={isOpen}
+            onToggle={onToggle}
+            aside={isPvpFuture ? (
+                <span className="inline-flex items-center gap-1.5 rounded border border-purple-500/45 bg-purple-950/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-purple-100">
+                    <LockKeyhole size={12} />
+                    Próximamente
+                </span>
+            ) : null}
+        >
+            {isPvpFuture && (
+                <div className="mb-4 rounded-lg border border-purple-500/25 bg-purple-950/15 p-4">
+                    <div className="flex items-center gap-3">
+                        <div className="rounded-lg border border-purple-500/30 bg-black/35 p-3">
+                            <LockKeyhole size={22} className="text-purple-200" />
+                        </div>
+                        <p className="text-sm font-medium text-slate-300">
+                            La arena PvP abrirá sus puertas próximamente.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <MetricGrid
                 items={[
-                    { label: 'Batallas totales', value: formatNumber(combat.battlesTotal), icon: Swords },
-                    { label: 'Victorias', value: formatNumber(combat.battlesWon), icon: Trophy, tone: 'text-emerald-300' },
-                    { label: 'Derrotas', value: formatNumber(combat.battlesLost), icon: Skull, tone: 'text-red-300' },
-                    { label: 'Win rate', value: formatPercent(combat.winRate), icon: Crown, tone: 'text-cyan-300' },
-                    { label: 'Racha actual', value: formatNumber(combat.currentWinStreak), icon: Flame, tone: 'text-amber-200' },
-                    { label: 'Mejor racha', value: formatNumber(combat.bestWinStreak), icon: Award, tone: 'text-amber-200' },
+                    { label: 'Batallas PvP totales', value: formatNumber(total), icon: Swords },
+                    { label: 'Victorias PvP', value: formatNumber(wins), icon: Trophy, tone: 'text-emerald-300' },
+                    { label: 'Derrotas PvP', value: formatNumber(losses), icon: Skull, tone: 'text-red-300' },
+                    { label: 'Win Rate PvP', value: formatPercent(winRate), icon: Crown, tone: 'text-cyan-300' },
+                    { label: 'Racha PvP actual', value: formatNumber(0), icon: Flame, tone: 'text-amber-200' },
+                    { label: 'Mejor racha PvP', value: formatNumber(0), icon: Award, tone: 'text-amber-200' },
+                    { label: 'Ataques realizados', value: formatNumber(pvp.attacksDone), icon: Swords },
+                    { label: 'Defensas recibidas', value: formatNumber(pvp.attacksReceived), icon: Shield },
+                    { label: 'Victorias atacando', value: formatNumber(pvp.winsAttacking), icon: Trophy, tone: 'text-emerald-300' },
+                    { label: 'Victorias defendiendo', value: formatNumber(pvp.winsDefending), icon: Shield, tone: 'text-emerald-300' },
+                    { label: 'Venganzas ganadas', value: formatNumber(pvp.revengeWins), icon: Crown, tone: 'text-purple-200' },
+                    { label: 'Venganzas perdidas', value: formatNumber(pvp.revengeLosses), icon: Skull, tone: 'text-red-300' }
+                ]}
+            />
+        </SectionPanel>
+    );
+}
+
+function PvECombatPanel({ combat, isOpen, onToggle }) {
+    const difficulty = combat.difficultyKills || {};
+    const expeditionsTotal = (combat.expeditionWins || 0) + (combat.expeditionLosses || 0);
+    const successRate = expeditionsTotal > 0 ? Math.round(((combat.expeditionWins || 0) / expeditionsTotal) * 100) : 0;
+
+    return (
+        <SectionPanel
+            title="Combate PvE"
+            subtitle="Expediciones y cacería"
+            icon={Target}
+            isOpen={isOpen}
+            onToggle={onToggle}
+        >
+            <MetricGrid
+                items={[
+                    { label: 'Expediciones completadas', value: formatNumber(combat.expeditionsCompleted), icon: Swords },
+                    { label: 'Expediciones exitosas', value: formatNumber(combat.expeditionWins), icon: Trophy, tone: 'text-emerald-300' },
+                    { label: 'Expediciones fallidas', value: formatNumber(combat.expeditionLosses), icon: Skull, tone: 'text-red-300' },
+                    { label: 'Tasa de éxito PvE', value: formatPercent(successRate), icon: Crown, tone: 'text-cyan-300' },
+                    { label: 'Racha PvE actual', value: formatNumber(combat.currentWinStreak), icon: Flame, tone: 'text-amber-200' },
+                    { label: 'Mejor racha PvE', value: formatNumber(combat.bestWinStreak), icon: Award, tone: 'text-amber-200' },
                     { label: 'Mobs eliminados', value: formatNumber(combat.mobsKilled), icon: Target },
-                    { label: 'Jefes eliminados', value: formatNumber(combat.bossesKilled), icon: Crown, tone: 'text-purple-200' },
-                    { label: 'Ocultos eliminados', value: formatNumber(combat.hiddenMobsKilled), icon: EyeOff, tone: 'text-slate-300' },
-                    { label: 'Tier 1', value: formatNumber(difficulty.common), icon: Shield },
-                    { label: 'Tier 2', value: formatNumber(difficulty.rare), icon: Shield, tone: 'text-blue-300' },
-                    { label: 'Tier 3', value: formatNumber(difficulty.legendary), icon: Shield, tone: 'text-amber-300' }
+                    { label: 'Jefes derrotados', value: formatNumber(combat.bossesKilled), icon: Crown, tone: 'text-purple-200' },
+                    { label: 'Enemigos ocultos eliminados', value: formatNumber(combat.hiddenMobsKilled), icon: EyeOff, tone: 'text-slate-300' },
+                    { label: 'Mobs fáciles', value: formatNumber(difficulty.common), icon: Shield },
+                    { label: 'Mobs medios', value: formatNumber(difficulty.rare), icon: Shield, tone: 'text-blue-300' },
+                    { label: 'Jefes / Infernal', value: formatNumber(difficulty.legendary), icon: Shield, tone: 'text-amber-300' }
                 ]}
             />
         </SectionPanel>
@@ -379,9 +504,15 @@ function CurrencyRow({ title, values = {}, includeOnix = false, icon }) {
     );
 }
 
-function EconomyPanel({ economy }) {
+function EconomyPanel({ economy, isOpen, onToggle }) {
     return (
-        <SectionPanel title="Economía" subtitle="Tesorería del personaje" icon={Coins}>
+        <SectionPanel
+            title="Economía"
+            subtitle="Tesorería del personaje"
+            icon={Coins}
+            isOpen={isOpen}
+            onToggle={onToggle}
+        >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <CurrencyRow title="Monedas actuales" values={economy.current} includeOnix icon={Coins} />
                 <CurrencyRow title="Banco" values={economy.bank} icon={Landmark} />
@@ -399,9 +530,15 @@ function EconomyPanel({ economy }) {
     );
 }
 
-function InventoryPanel({ inventory }) {
+function InventoryPanel({ inventory, isOpen, onToggle }) {
     return (
-        <SectionPanel title="Inventario" subtitle="Valor de objetos y equipo" icon={Backpack}>
+        <SectionPanel
+            title="Inventario"
+            subtitle="Valor de objetos y equipo"
+            icon={Backpack}
+            isOpen={isOpen}
+            onToggle={onToggle}
+        >
             <MetricGrid
                 items={[
                     { label: 'Valor inventario', value: formatCopper(inventory.inventoryValueCopper), icon: Coins, tone: 'text-amber-200' },
@@ -458,9 +595,15 @@ function ProgressCluster({ title, icon, items }) {
     );
 }
 
-function ProgressPanel({ progress }) {
+function ProgressPanel({ progress, isOpen, onToggle }) {
     return (
-        <SectionPanel title="Progreso" subtitle="Avance del jugador" icon={ScrollText}>
+        <SectionPanel
+            title="Progreso"
+            subtitle="Avance del jugador"
+            icon={ScrollText}
+            isOpen={isOpen}
+            onToggle={onToggle}
+        >
             <div className="mb-3 rounded-lg border border-amber-700/35 bg-black/30 p-4">
                 <div className="flex items-center justify-between gap-4">
                     <div>
@@ -515,50 +658,7 @@ function ProgressPanel({ progress }) {
     );
 }
 
-function PvpPanel({ pvp }) {
-    return (
-        <SectionPanel
-            title="PvP futuro"
-            subtitle="Arena bloqueada"
-            icon={Shield}
-            locked
-            aside={(
-                <span className="inline-flex items-center gap-1.5 rounded border border-purple-500/45 bg-purple-950/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-purple-100">
-                    <LockKeyhole size={12} />
-                    Próximamente
-                </span>
-            )}
-        >
-            <div className="mb-4 rounded-lg border border-purple-500/25 bg-purple-950/15 p-4">
-                <div className="flex items-center gap-3">
-                    <div className="rounded-lg border border-purple-500/30 bg-black/35 p-3">
-                        <LockKeyhole size={22} className="text-purple-200" />
-                    </div>
-                    <p className="text-sm font-medium text-slate-300">
-                        La arena PvP abrirá sus puertas próximamente.
-                    </p>
-                </div>
-            </div>
-
-            <div className="opacity-80">
-                <MetricGrid
-                    items={[
-                        { label: 'Ataques', value: formatNumber(pvp.attacksDone), icon: Swords },
-                        { label: 'Defensas', value: formatNumber(pvp.attacksReceived), icon: Shield },
-                        { label: 'Victorias atacando', value: formatNumber(pvp.winsAttacking), icon: Trophy, tone: 'text-emerald-300' },
-                        { label: 'Victorias defendiendo', value: formatNumber(pvp.winsDefending), icon: Shield, tone: 'text-emerald-300' },
-                        { label: 'Venganzas ganadas', value: formatNumber(pvp.revengeWins), icon: Crown, tone: 'text-purple-200' },
-                        { label: 'Venganzas perdidas', value: formatNumber(pvp.revengeLosses), icon: Skull, tone: 'text-red-300' },
-                        { label: 'Dinero robado', value: formatCopper(currencyToCopper(pvp.stolen)), icon: Coins },
-                        { label: 'Dinero perdido', value: formatCopper(currencyToCopper(pvp.lost)), icon: Banknote }
-                    ]}
-                />
-            </div>
-        </SectionPanel>
-    );
-}
-
-function RecentPanel({ recent }) {
+function RecentPanel({ recent, isOpen, onToggle }) {
     const rows = [
         { icon: Swords, label: 'Última batalla', value: recent.lastBattleAt },
         { icon: CheckCircle2, label: 'Última victoria', value: recent.lastWinAt },
@@ -570,7 +670,13 @@ function RecentPanel({ recent }) {
     ];
 
     return (
-        <SectionPanel title="Actividad reciente" subtitle="Línea de eventos" icon={Clock3}>
+        <SectionPanel
+            title="Actividad reciente"
+            subtitle="Línea de eventos"
+            icon={Clock3}
+            isOpen={isOpen}
+            onToggle={onToggle}
+        >
             <div className="relative space-y-2">
                 <div className="absolute bottom-4 left-[18px] top-4 w-px bg-gradient-to-b from-amber-500/35 via-slate-700/50 to-transparent" />
                 {rows.map((row) => (
