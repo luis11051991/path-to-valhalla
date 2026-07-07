@@ -55,7 +55,7 @@ exports.moveItem = async (req, res) => {
     const playerRes = await client.query('SELECT level FROM players WHERE id = $1', [userId]);
     const playerLevel = playerRes.rows[0].level;
 
-    const itemQuery = `SELECT pi.*, it.slot as valid_slot_type, it.name, it.stackable, it.min_level FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.id = $1 AND pi.player_id = $2`;
+    const itemQuery = `SELECT pi.*, it.slot as valid_slot_type, it.name, it.stackable, it.min_level FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.id = $1 AND pi.player_id = $2 FOR UPDATE`;
     const itemRes = await client.query(itemQuery, [itemId, userId]);
     if (itemRes.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Ítem no encontrado.' }); }
     const sourceItem = itemRes.rows[0];
@@ -68,7 +68,50 @@ exports.moveItem = async (req, res) => {
                 return res.status(400).json({ message: `Nivel insuficiente (Req: ${sourceItem.min_level}).` });
             }
         }
-        await client.query(`UPDATE player_items SET is_equipped = true, equipped_slot = $1, bag_slot = NULL, is_bound = true WHERE id = $2`, [destination.slot, itemId]);
+        // 1. Bloquear todos los items equipados en el slot destino
+        const existingRes = await client.query(
+            'SELECT id FROM player_items WHERE player_id = $1 AND is_equipped = true AND equipped_slot = $2 FOR UPDATE',
+            [userId, destination.slot]
+        );
+        // 2. Calcular cuántos slots libres necesitamos
+        const itemsToUnequip = existingRes.rows.filter(r => r.id !== itemId);
+        if (itemsToUnequip.length > 0) {
+            // 3. Encontrar slots de mochila libres
+            const occupiedRes = await client.query(
+                'SELECT bag_slot FROM player_items WHERE player_id = $1 AND bag_slot IS NOT NULL',
+                [userId]
+            );
+            const occupied = new Set(occupiedRes.rows.map(r => r.bag_slot));
+            const freeSlots = [];
+            for (let i = 0; i < 240 && freeSlots.length < itemsToUnequip.length; i++) {
+                if (!occupied.has(i)) freeSlots.push(i);
+            }
+            if (freeSlots.length < itemsToUnequip.length) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ message: 'No tienes espacio libre en la mochila para reemplazar este equipo.' });
+            }
+            // 4. Mover cada item viejo a un slot libre distinto
+            for (let j = 0; j < itemsToUnequip.length; j++) {
+                await client.query(
+                    'UPDATE player_items SET is_equipped = false, equipped_slot = NULL, bag_slot = $1 WHERE id = $2',
+                    [freeSlots[j], itemsToUnequip[j].id]
+                );
+            }
+        }
+        // 5. Equipar el item nuevo
+        await client.query(
+            'UPDATE player_items SET is_equipped = true, equipped_slot = $1, bag_slot = NULL, is_bound = true WHERE id = $2',
+            [destination.slot, itemId]
+        );
+        // 6. Validación final: solo 1 item equipado en el slot destino
+        const finalCount = await client.query(
+            'SELECT COUNT(*) as cnt FROM player_items WHERE player_id = $1 AND is_equipped = true AND equipped_slot = $2',
+            [userId, destination.slot]
+        );
+        if (parseInt(finalCount.rows[0].cnt) !== 1) {
+            await client.query('ROLLBACK');
+            return res.status(500).json({ message: 'Error de consistencia: múltiples items en el mismo slot.' });
+        }
     } else if (destination.type === 'bag') {
         const targetBagSlot = destination.slot; 
         const targetItemRes = await client.query('SELECT pi.*, it.stackable FROM player_items pi JOIN items_templates it ON pi.template_id = it.id WHERE pi.player_id = $1 AND pi.is_equipped = false AND pi.bag_slot = $2', [userId, targetBagSlot]);

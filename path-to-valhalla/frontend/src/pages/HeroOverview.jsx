@@ -396,20 +396,59 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         const map = {
             weapon: ['main_hand'],
             offhand: ['off_hand'],
+            off_hand: ['off_hand'],
             helmet: ['head'],
+            head: ['head'],
             armor: ['chest'],
+            chest: ['chest'],
             gloves: ['gloves'],
             boots: ['feet'],
+            feet: ['feet'],
             amulet: ['neck'],
+            neck: ['neck'],
             ring: ['ring_1', 'ring_2'],
+            ring_1: ['ring_1'],
+            ring_2: ['ring_2'],
             earring: ['earring_1', 'earring_2'],
+            earring_1: ['earring_1'],
+            earring_2: ['earring_2'],
+            main_hand: ['main_hand'],
         };
         return map[itemSlot] || null;
     };
 
+    const resolveSlot = (item) => {
+        // 1. Usar item.slot directamente si existe y está en el mapa
+        if (item.slot) {
+            const mapped = itemSlotToEquippedSlots(item.slot);
+            if (mapped) return mapped;
+        }
+        // 2. Fallback por type
+        if (item.type === 'weapon') return ['main_hand'];
+        if (item.type === 'armor') {
+            const slots = item.allowed_slots || item.slot_types || [];
+            if (slots.includes('head') || slots.includes('helmet')) return ['head'];
+            if (slots.includes('chest') || slots.includes('armor')) return ['chest'];
+            if (slots.includes('gloves')) return ['gloves'];
+            if (slots.includes('feet') || slots.includes('boots')) return ['feet'];
+            return ['chest'];
+        }
+        if (item.type === 'accessory') {
+            const slots = item.allowed_slots || item.slot_types || [];
+            if (slots.includes('ring') || slots.includes('ring_1') || slots.includes('ring_2')) return ['ring_1', 'ring_2'];
+            if (slots.includes('earring') || slots.includes('earring_1') || slots.includes('earring_2')) return ['earring_1', 'earring_2'];
+            if (slots.includes('neck') || slots.includes('amulet')) return ['neck'];
+            if (slots.includes('off_hand') || slots.includes('offhand')) return ['off_hand'];
+            return ['neck'];
+        }
+        if (item.base_stats?.damage_min != null || item.base_stats?.damage != null) return ['main_hand'];
+        if (item.base_stats?.armor != null) return ['chest'];
+        return null;
+    };
+
     const findEquippedForComparison = (selected) => {
-        if (!selected || !selected.slot) return { equipped: null, slotName: null, secondary: null };
-        const candidateSlots = itemSlotToEquippedSlots(selected.slot);
+        if (!selected) return { equipped: null, slotName: null, secondary: null };
+        const candidateSlots = resolveSlot(selected);
         if (!candidateSlots) return { equipped: null, slotName: null, secondary: null };
 
         // Para slots con dos posiciones (ring, earring), buscar la mejor coincidencia
@@ -817,7 +856,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         <div className="mt-2 pt-2 border-t border-amber-500/20">
                             <h4 className="text-[10px] text-amber-500 font-serif uppercase tracking-widest mb-1.5">Comparación</h4>
 
-                            {(!slotName || !item.slot) && (
+                            {!slotName && (
                                 <p className="text-[9px] text-slate-500 italic">Este tipo de equipo aún no tiene slot visible en el personaje.</p>
                             )}
 
