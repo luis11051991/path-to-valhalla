@@ -1003,9 +1003,9 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             {/* ... RESTO DEL DISEÑO (Fondo, Columnas, etc) ... */}
             <div className="absolute inset-0 z-0 pointer-events-none"><img src={raceData.bgImage} className="w-full h-full object-cover opacity-60 fixed inset-0" /><div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/60 to-slate-900/30 fixed inset-0" /></div>
 
-            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start animate-in fade-in duration-300">
-                {/* COL 1: PERFIL */}
-                <div className="lg:col-span-3 space-y-4">
+            <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-start animate-in fade-in duration-300">
+                {/* COL 1: PERFIL + STATS */}
+                <div className="md:col-span-1 lg:col-span-3 xl:col-span-3 space-y-4">
                     <div className="bg-black/50 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 flex items-center gap-4 shadow-lg">
                         <div className="relative group cursor-zoom-in w-16 h-16 shrink-0" onClick={() => setShowAvatarModal(true)}>
                             <div className="w-full h-full rounded border-2 border-amber-600 bg-slate-900 overflow-hidden relative z-10">
@@ -1200,9 +1200,9 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
                 </div>
 
-                {/* COL 2: PAPER DOLL */}
-                <div className="lg:col-span-5">
-                    <div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 h-[700px] relative shadow-2xl flex flex-col items-center">
+                {/* COL 2: PAPER DOLL + MASCOTA */}
+                <div className="md:col-span-1 lg:col-span-5 xl:col-span-5">
+                    <div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 min-h-[600px] h-[70vh] max-h-[780px] relative shadow-2xl flex flex-col items-center">
                         <h3 className="text-amber-500 font-serif uppercase tracking-widest text-sm mb-4 border-b border-amber-500/20 w-full text-center pb-2">Equipamiento</h3>
                         <div className="relative w-full h-full max-w-[420px]">
                             <div className="absolute inset-x-0 top-12 bottom-12 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none">
@@ -1230,8 +1230,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
                 </div>
 
-                {/* COL 3: MOCHILA */}
-                <div className="lg:col-span-4">
+                {/* COL 3: MOCHILA + DETALLE */}
+                <div className="md:col-span-2 lg:col-span-4 xl:col-span-4">
                     <div className="bg-slate-900 border-2 border-amber-900/50 rounded-lg p-1 flex flex-col shadow-2xl relative">
                         {/* BARRA DE BÚSQUEDA Y FILTROS */}
                         <div className="flex flex-col gap-1 px-1 pt-1 pb-1.5">
