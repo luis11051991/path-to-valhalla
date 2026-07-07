@@ -27,6 +27,7 @@ const bankRoutes = require('./src/routes/bankRoutes');
 const achievementRoutes = require('./src/routes/achievementRoutes');
 const statisticsRoutes = require('./src/routes/statisticsRoutes');
 const allianceRoutes = require('./src/routes/allianceRoutes');
+const playerService = require('./src/services/playerService');
 
 // CORRECCIÓN AQUÍ: Agregamos el /src/ que faltaba
 const bestiaryRoutes = require('./src/routes/bestiaryRoutes');
@@ -62,6 +63,21 @@ app.post('/api/login', authController.login);
 app.post('/api/choose-race', playerController.chooseRace);
 app.post('/api/train-stats', playerController.trainStats);
 app.post('/api/rent-bag', playerController.rentBag);
+
+// --- PERFIL PÚBLICO DE JUGADOR ---
+app.get('/api/players/:playerId/public-profile', authMiddleware, async (req, res) => {
+    try {
+        const result = await playerService.getPublicProfile(req.params.playerId);
+        return res.json(result);
+    } catch (error) {
+        const statusCode = error.statusCode || 500;
+        if (statusCode >= 500) console.error('Error al obtener perfil público:', error);
+        return res.status(statusCode).json({
+            success: false,
+            message: error.message || 'Error al obtener perfil público.'
+        });
+    }
+});
 
 // ---> RUTAS DE HABILIDADES <---
 app.get('/api/my-skills', authMiddleware, playerController.getMySkills);

@@ -1827,6 +1827,9 @@ async function startJudgement(playerId, payload = {}) {
         `, [membership.alliance_id, accusedPlayerId]);
         if (activeTargetJudgement.rows.length > 0) throw httpError(400, 'Ese miembro ya tiene un juicio activo.');
 
+        const activeMembersCount = await countActiveMembers(membership.alliance_id, client);
+        const eligibleVotersCount = Math.max(0, activeMembersCount - 1);
+
         const result = await client.query(`
             INSERT INTO alliance_judgements (
                 alliance_id,
@@ -1835,18 +1838,18 @@ async function startJudgement(playerId, payload = {}) {
                 reason,
                 status,
                 starts_at,
-                ends_at
+                ends_at,
+                eligible_voters_count
             )
-            VALUES ($1, $2, $3, $4, 'active', NOW(), NOW() + INTERVAL '1 hour')
+            VALUES ($1, $2, $3, $4, 'active', NOW(), NOW() + INTERVAL '1 hour', $5)
             RETURNING *
-        `, [membership.alliance_id, playerId, accusedPlayerId, reason]);
+        `, [membership.alliance_id, playerId, accusedPlayerId, reason, eligibleVotersCount]);
 
         await insertActivity(client, membership.alliance_id, playerId, 'judgement.created', `Se proclamo juicio contra ${target.username}.`, {
             judgementId: result.rows[0].id,
             accusedPlayerId
         });
 
-        const activeMembersCount = await countActiveMembers(membership.alliance_id, client);
         const judgementRow = await getJudgementRow(client, result.rows[0].id, playerId);
 
         return {
@@ -1905,12 +1908,31 @@ async function voteJudgement(playerId, judgementId, payload = {}) {
             vote
         });
 
+        let message = 'Voto registrado.';
+        const voteCountResult = await client.query(`
+            SELECT COUNT(*) AS total
+            FROM alliance_judgement_votes
+            WHERE judgement_id = $1
+        `, [judgementId]);
+        const totalVotes = toNumber(voteCountResult.rows[0]?.total);
+        const eligibleVotersCount = toNumber(judgement.eligible_voters_count);
+
+        if (eligibleVotersCount > 0 && totalVotes >= eligibleVotersCount) {
+            const updatedJudgementResult = await client.query(`
+                SELECT *
+                FROM alliance_judgements
+                WHERE id = $1
+            `, [judgementId]);
+            await resolveJudgementRow(client, updatedJudgementResult.rows[0], playerId);
+            message = 'Voto registrado. Todos los votantes emitieron su voto. El juicio ha sido resuelto.';
+        }
+
         const activeMembersCount = await countActiveMembers(membership.alliance_id, client);
         const judgementRow = await getJudgementRow(client, judgementId, playerId);
 
         return {
             success: true,
-            message: 'Voto registrado.',
+            message,
             judgement: mapJudgement(judgementRow, membership, judgementRow.my_vote, activeMembersCount)
         };
     });

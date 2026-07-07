@@ -44,6 +44,7 @@ function AlliancePublicProfile({ user }) {
     if (!user) return null;
 
     const alliance = profile?.alliance;
+    const hasOwnAlliance = alliance?.applyBlockedReason === 'Ya perteneces a una alianza.';
 
     return (
         <div className="relative min-h-full overflow-hidden bg-[#07090d] text-slate-100">
@@ -99,20 +100,26 @@ function AlliancePublicProfile({ user }) {
                                             <p className="mt-1 text-sm text-slate-400">Líder: {alliance.leaderName || 'Desconocido'}</p>
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowApply(true)}
-                                        disabled={!alliance.canApply}
-                                        title={alliance.applyBlockedReason || ''}
-                                        className={`inline-flex items-center justify-center gap-2 rounded border px-4 py-3 text-xs font-black uppercase tracking-widest ${
-                                            alliance.canApply
-                                                ? 'border-amber-500/60 bg-amber-700/25 text-amber-100 hover:bg-amber-700/40'
-                                                : 'cursor-not-allowed border-slate-800 bg-slate-900/70 text-slate-600'
-                                        }`}
-                                    >
-                                        {alliance.canApply ? <UserPlus size={15} /> : <Lock size={15} />}
-                                        {alliance.hasPendingApplication ? 'Solicitud pendiente' : 'Aplicar'}
-                                    </button>
+                                    {hasOwnAlliance ? (
+                                        <span className="inline-flex items-center gap-2 rounded border border-slate-700 bg-black/30 px-4 py-3 text-xs font-bold text-slate-400">
+                                            Ya perteneces a una alianza.
+                                        </span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowApply(true)}
+                                            disabled={!alliance.canApply}
+                                            title={alliance.applyBlockedReason || ''}
+                                            className={`inline-flex items-center justify-center gap-2 rounded border px-4 py-3 text-xs font-black uppercase tracking-widest ${
+                                                alliance.canApply
+                                                    ? 'border-amber-500/60 bg-amber-700/25 text-amber-100 hover:bg-amber-700/40'
+                                                    : 'cursor-not-allowed border-slate-800 bg-slate-900/70 text-slate-600'
+                                            }`}
+                                        >
+                                            {alliance.canApply ? <UserPlus size={15} /> : <Lock size={15} />}
+                                            {alliance.hasPendingApplication ? 'Solicitud pendiente' : 'Aplicar'}
+                                        </button>
+                                    )}
                                 </div>
 
                                 <p className="text-base leading-7 text-slate-300">{alliance.description}</p>
@@ -150,13 +157,15 @@ function AlliancePublicProfile({ user }) {
                                     ))}
                                 </div>
                             </Panel>
-                            <Link
-                                to="/alliance/create"
-                                className="inline-flex w-full items-center justify-center gap-2 rounded border border-slate-700 bg-black/35 px-4 py-3 text-xs font-bold uppercase tracking-widest text-slate-300 hover:border-amber-700 hover:text-amber-100"
-                            >
-                                <Crown size={15} />
-                                Fundar otra alianza
-                            </Link>
+                            {!hasOwnAlliance && (
+                                <Link
+                                    to="/alliance/create"
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded border border-slate-700 bg-black/35 px-4 py-3 text-xs font-bold uppercase tracking-widest text-slate-300 hover:border-amber-700 hover:text-amber-100"
+                                >
+                                    <Crown size={15} />
+                                    Fundar otra alianza
+                                </Link>
+                            )}
                         </aside>
                     </div>
                 )}

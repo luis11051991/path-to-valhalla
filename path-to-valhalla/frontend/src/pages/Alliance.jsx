@@ -1,5 +1,5 @@
 import { createElement, useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     AlertTriangle,
     ArrowRight,
@@ -29,6 +29,7 @@ import {
 import { ALLIANCE_JOIN_LABELS as JOIN_LABELS, ALLIANCE_JOIN_OPTIONS, OFFICIAL_ALLIANCE_EMBLEMS } from '../constants/alliance';
 import { allianceService } from '../services/allianceService';
 import { formatBuildingEffect, formatUnlockRequirement } from '../utils/allianceFormatters';
+import PlayerProfileModal from '../components/player/PlayerProfileModal';
 
 const CURRENCY_ICONS = {
     copper: '/icons/currency/copper.png',
@@ -422,10 +423,13 @@ function InfoPill({ label, value }) {
 }
 
 function AllianceInternal({ data, user, onRefresh, onUpdateUser }) {
-    const [activeTab, setActiveTab] = useState('home');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const tabFromUrl = searchParams.get('tab') || '';
+    const activeTab = TABS.some((t) => t.id === tabFromUrl) ? tabFromUrl : 'home';
     const [feedback, setFeedback] = useState(null);
     const [confirmDialog, setConfirmDialog] = useState(null);
     const [judgementDraftMember, setJudgementDraftMember] = useState(null);
+    const [profilePlayerId, setProfilePlayerId] = useState(null);
     const { alliance, permissions, role } = data;
     const canAccessAdmin = permissions.editMessage
         || permissions.editAlliance
@@ -438,7 +442,11 @@ function AllianceInternal({ data, user, onRefresh, onUpdateUser }) {
     });
 
     const handleTab = (tabId) => {
-        setActiveTab(tabId);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('tab', tabId);
+            return next;
+        });
     };
 
     const handleLeave = async () => {
@@ -551,9 +559,14 @@ function AllianceInternal({ data, user, onRefresh, onUpdateUser }) {
                     user={user}
                     permissions={permissions}
                     onFeedback={setFeedback}
+                    onOpenProfile={setProfilePlayerId}
                     onOpenJudgement={(member) => {
                         setJudgementDraftMember(member);
-                        setActiveTab('judgement');
+                        setSearchParams((prev) => {
+                            const next = new URLSearchParams(prev);
+                            next.set('tab', 'judgement');
+                            return next;
+                        });
                     }}
                 />
             )}
@@ -570,6 +583,7 @@ function AllianceInternal({ data, user, onRefresh, onUpdateUser }) {
                     initialAccused={judgementDraftMember}
                     onConsumedInitial={() => setJudgementDraftMember(null)}
                     onRefresh={onRefresh}
+                    onOpenProfile={setProfilePlayerId}
                 />
             )}
             {activeTab === 'applications' && (
@@ -578,6 +592,7 @@ function AllianceInternal({ data, user, onRefresh, onUpdateUser }) {
                     permissions={permissions}
                     pendingCount={data.pendingApplicationsCount}
                     onRefresh={onRefresh}
+                    onOpenProfile={setProfilePlayerId}
                 />
             )}
             {activeTab === 'admin' && (
@@ -596,6 +611,11 @@ function AllianceInternal({ data, user, onRefresh, onUpdateUser }) {
                 variant={confirmDialog?.variant}
                 onConfirm={confirmCurrentAction}
                 onCancel={() => setConfirmDialog(null)}
+            />
+            <PlayerProfileModal
+                playerId={profilePlayerId}
+                isOpen={Boolean(profilePlayerId)}
+                onClose={() => setProfilePlayerId(null)}
             />
         </div>
     );
@@ -975,7 +995,7 @@ function EffectBlock({ title, effect, empty = 'Sin beneficio' }) {
     );
 }
 
-function AllianceMembers({ user, permissions, onFeedback, onOpenJudgement }) {
+function AllianceMembers({ user, permissions, onFeedback, onOpenJudgement, onOpenProfile }) {
     const [members, setMembers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -1063,7 +1083,10 @@ function AllianceMembers({ user, permissions, onFeedback, onOpenJudgement }) {
                                 <button
                                     key={member.playerId}
                                     type="button"
-                                    onClick={() => setSelectedId(member.playerId)}
+                                    onClick={() => {
+                                        setSelectedId(member.playerId);
+                                        onOpenProfile?.(member.playerId);
+                                    }}
                                     className={`grid w-full grid-cols-[minmax(0,1fr)_80px_120px] items-center gap-3 rounded border px-3 py-3 text-left transition-colors ${
                                         selected?.playerId === member.playerId
                                             ? 'border-amber-500/60 bg-amber-950/20'
@@ -1073,7 +1096,23 @@ function AllianceMembers({ user, permissions, onFeedback, onOpenJudgement }) {
                                     <div className="min-w-0">
                                         <p className="flex items-center gap-2 truncate font-bold text-slate-100">
                                             {member.role === 'leader' && <Crown size={13} className="shrink-0 text-amber-300" />}
-                                            {member.username}
+                                            <span
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    onOpenProfile?.(member.playerId);
+                                                }}
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                        event.preventDefault();
+                                                        onOpenProfile?.(member.playerId);
+                                                    }
+                                                }}
+                                                className="hover:text-amber-200 transition-colors cursor-pointer"
+                                            >
+                                                {member.username}
+                                            </span>
                                         </p>
                                         <p className="text-[11px] text-amber-300/80">{ROLE_LABELS[member.role] || member.role}</p>
                                     </div>
@@ -1344,7 +1383,7 @@ function AllianceDonationsPanel({ onUpdateUser, onRefresh }) {
     );
 }
 
-function AllianceJudgementPanel({ user, permissions, initialAccused, onConsumedInitial, onRefresh }) {
+function AllianceJudgementPanel({ user, permissions, initialAccused, onConsumedInitial, onRefresh, onOpenProfile }) {
     const [data, setData] = useState(null);
     const [eligibleMembers, setEligibleMembers] = useState([]);
     const [form, setForm] = useState({ accusedPlayerId: '', reason: '' });
@@ -1406,7 +1445,12 @@ function AllianceJudgementPanel({ user, permissions, initialAccused, onConsumedI
         try {
             const result = await allianceService.voteJudgement(data.activeJudgement.id, voteValue);
             setFeedback(result.message || 'Voto registrado.');
-            setData((prev) => ({ ...prev, activeJudgement: result.judgement }));
+            if (result.judgement?.status !== 'active') {
+                await loadJudgements();
+                await onRefresh?.();
+            } else {
+                setData((prev) => ({ ...prev, activeJudgement: result.judgement }));
+            }
         } catch (requestError) {
             setFeedback(requestError.message || 'No se pudo registrar el voto.');
         } finally {
@@ -1498,6 +1542,7 @@ function AllianceJudgementPanel({ user, permissions, initialAccused, onConsumedI
                         submitting={submitting}
                         onVote={requestVote}
                         onResolve={resolve}
+                        onOpenProfile={onOpenProfile}
                     />
                 ) : (
                     <div className="rounded-lg border border-white/10 bg-black/30 p-6 text-center">
@@ -1567,7 +1612,7 @@ function AllianceJudgementPanel({ user, permissions, initialAccused, onConsumedI
     );
 }
 
-function ActiveJudgementCard({ judgement, user, submitting, onVote, onResolve }) {
+function ActiveJudgementCard({ judgement, user, submitting, onVote, onResolve, onOpenProfile }) {
     const accused = judgement.accusedPlayer || {};
     const isAccused = String(accused.id) === String(user.id);
 
@@ -1602,7 +1647,20 @@ function ActiveJudgementCard({ judgement, user, submitting, onVote, onResolve })
                         )}
                     </div>
                     <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-red-200/80">Acusado</p>
-                    <h4 className="font-serif text-3xl font-black text-amber-100">{accused.username}</h4>
+                    <h4
+                        className="font-serif text-3xl font-black text-amber-100 hover:text-amber-200 transition-colors cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onOpenProfile?.(accused.id)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                onOpenProfile?.(accused.id);
+                            }
+                        }}
+                    >
+                        {accused.username}
+                    </h4>
                     <p className="mt-1 text-sm text-slate-400">
                         Nivel {formatNumber(accused.level)} · {ROLE_LABELS[accused.role] || accused.role || 'Miembro'}
                     </p>
@@ -1725,7 +1783,7 @@ function formatRemaining(seconds = 0) {
     return `${minutes}m ${String(secs).padStart(2, '0')}s restantes`;
 }
 
-function AllianceApplicationsPanel({ allianceId, permissions, pendingCount = 0, onRefresh }) {
+function AllianceApplicationsPanel({ allianceId, permissions, pendingCount = 0, onRefresh, onOpenProfile }) {
     const [applications, setApplications] = useState([]);
     const [feedback, setFeedback] = useState(null);
     const canManageApplications = Boolean(permissions.manageApplications);
@@ -1793,7 +1851,20 @@ function AllianceApplicationsPanel({ allianceId, permissions, pendingCount = 0, 
                     <div key={application.applicationId} className="rounded-lg border border-white/10 bg-black/30 p-4">
                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                             <div>
-                                <h3 className="font-serif text-xl font-bold text-amber-100">{application.player?.username || 'Aspirante'}</h3>
+                                <h3
+                                    className="font-serif text-xl font-bold text-amber-100 hover:text-amber-200 transition-colors cursor-pointer"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => onOpenProfile?.(application.player?.id)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            onOpenProfile?.(application.player?.id);
+                                        }
+                                    }}
+                                >
+                                    {application.player?.username || 'Aspirante'}
+                                </h3>
                                 <p className="text-xs text-slate-500">
                                     Nivel {formatNumber(application.level)} · Poder {application.power ?? 'Pendiente'} · {new Date(application.createdAt).toLocaleString('es-ES')}
                                 </p>
