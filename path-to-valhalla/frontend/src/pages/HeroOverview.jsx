@@ -1013,7 +1013,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     if (!user) return null;
 
     return (
-        <div className="min-h-full relative font-sans p-4 flex flex-col gap-4">
+        <div className="min-h-full relative font-sans p-4 flex flex-col gap-4 mx-auto w-full max-w-screen-2xl">
             <GlobalTooltip />
             
             {/* MENÚ FLOTANTE CONTEXTUAL (Clic Derecho) */}
@@ -1127,121 +1127,11 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                             </div>
                         </div>
                     )}
-                    
-                    {/* ACORDEÓN: Estadísticas de Combate */}
-                    <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
-                        <button onClick={() => setShowCombatStats(!showCombatStats)} className="w-full flex items-center justify-between text-left">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Estadísticas de Combate</h3>
-                            <span className={`text-amber-400 transition-transform duration-200 ${showCombatStats ? 'rotate-180' : ''}`}>▼</span>
-                        </button>
-                        {showCombatStats && (
-                            <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2">
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
-                                    <span className="text-red-400 font-mono text-sm">{user.current_hp} / {displayMaxHp}</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
-                                    <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
-                                    <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.crit} className="w-5 h-5 drop-shadow" /> Crítico</span>
-                                    <span className="text-yellow-200 font-mono text-sm">{derivedStats.critChance.toFixed(1)}%</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.block} className="w-5 h-5 drop-shadow" /> Bloqueo</span>
-                                    <span className="text-blue-200 font-mono text-sm">{derivedStats.blockChance.toFixed(1)}%</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.wisdom} className="w-5 h-5 drop-shadow" /> Poder Curación</span>
-                                    <span className="text-green-400 font-mono text-sm">+{derivedStats.healingPct}%</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.intelligence} className="w-5 h-5 drop-shadow" /> Daño Habilidad</span>
-                                    <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ACORDEÓN: Bonos Activos */}
-                    <div className="mt-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
-                        <button onClick={() => setShowActiveBonuses(!showActiveBonuses)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Bonos Activos</h3>
-                            <span className={`text-amber-400 transition-transform duration-200 ${showActiveBonuses ? 'rotate-180' : ''}`}>▼</span>
-                        </button>
-                        {showActiveBonuses && (() => {
-                            const allianceBonuses = user.active_bonuses?.alliance || [];
-                            const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
-                            const hasAny = allianceBonuses.length > 0 || hasPetBonus;
-
-                            const PET_STAT_LABELS = {
-                                strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución',
-                                intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte'
-                            };
-
-                            return (
-                                <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
-                                    {!hasAny && (
-                                        <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
-                                    )}
-                                    {allianceBonuses.map((b, i) => (
-                                        <div key={i} className="flex items-center gap-1.5 text-[10px]">
-                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 font-bold uppercase tracking-wider text-[8px]">Alianza</span>
-                                            <span className="text-slate-300">{b.source}</span>
-                                            <span className="text-amber-300 font-mono ml-auto">{b.label}</span>
-                                        </div>
-                                    ))}
-                                    {hasPetBonus && (
-                                        <div className="flex items-start gap-1.5 text-[10px]">
-                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 font-bold uppercase tracking-wider text-[8px] mt-0.5">Mascota</span>
-                                            <div className="flex-1 min-w-0">
-                                                <span className="text-slate-300">{equippedPet.name}</span>
-                                                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-green-400 font-mono">
-                                                    {Object.entries(equippedPet.bonus_stats).map(([k, v]) => (
-                                                        <span key={k}>{PET_STAT_LABELS[k] || k} +{v}</span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })()}
-                    </div>
-
-                    {/* ACORDEÓN: Sugerencias rápidas */}
-                    <div className="mt-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
-                        <button onClick={() => setShowQuickSuggestions(!showQuickSuggestions)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Sugerencias rápidas</h3>
-                            <span className={`text-amber-400 transition-transform duration-200 ${showQuickSuggestions ? 'rotate-180' : ''}`}>▼</span>
-                        </button>
-                        {showQuickSuggestions && (
-                            <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
-                                {quickSuggestions.length === 0 ? (
-                                    <p className="text-[10px] text-slate-500 italic">Todo está en orden por ahora.</p>
-                                ) : (
-                                    quickSuggestions.map((s, i) => (
-                                        <div key={i} className="flex items-start gap-2 text-[10px]">
-                                            <span className={`shrink-0 font-bold mt-0.5 ${s.tone === 'amber' ? 'text-amber-400' : s.tone === 'green' ? 'text-green-400' : s.tone === 'blue' ? 'text-blue-400' : 'text-slate-400'}`}>▶</span>
-                                            <span className={`${s.tone === 'amber' ? 'text-amber-200' : s.tone === 'green' ? 'text-green-200' : s.tone === 'blue' ? 'text-blue-200' : 'text-slate-300'}`}>
-                                                {s.text}
-                                            </span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        )}
-                    </div>
                 </div>
 
                 {/* COL 2: PAPER DOLL + MASCOTA */}
                 <div className="md:col-span-1 lg:col-span-5 xl:col-span-5">
-                    <div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 min-h-[600px] h-[70vh] max-h-[780px] relative shadow-2xl flex flex-col items-center">
+                    <div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 min-h-[600px] h-[70vh] max-h-[780px] relative shadow-2xl flex flex-col items-center overflow-hidden">
                         <h3 className="text-amber-500 font-serif uppercase tracking-widest text-sm mb-4 border-b border-amber-500/20 w-full text-center pb-2">Equipamiento</h3>
                         <div className="relative w-full h-full max-w-[420px]">
                             <div className="absolute inset-x-0 top-12 bottom-12 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none">
@@ -1270,7 +1160,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 </div>
 
                 {/* COL 3: MOCHILA + DETALLE */}
-                <div className="md:col-span-2 lg:col-span-4 xl:col-span-4">
+                <div className="md:col-span-2 lg:col-span-4 xl:col-span-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
                     <div className="bg-slate-900 border-2 border-amber-900/50 rounded-lg p-1 flex flex-col shadow-2xl relative">
                         {/* BARRA DE BÚSQUEDA Y FILTROS */}
                         <div className="flex flex-col gap-1 px-1 pt-1 pb-1.5">
@@ -1337,7 +1227,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </div>
 
                         {/* GRILLA / VISTA FILTRADA */}
-                        <div className="flex-1 bg-black/60 border border-slate-700 rounded m-1 p-2 overflow-y-auto relative min-h-[280px] max-h-[340px]">
+                        <div className="flex-1 bg-black/60 border border-slate-700 rounded m-1 p-2 overflow-y-auto relative min-h-[280px] max-h-[340px] lg:max-h-[400px]">
                             {hasActiveFilters ? (
                                 filteredInventory.length === 0 ? (
                                     <div className="flex items-center justify-center h-full text-slate-600 text-[10px] italic">Sin resultados.</div>
@@ -1413,6 +1303,119 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
                         {/* PANEL DE DETALLE DEL ITEM SELECCIONADO */}
                         {selectedItem && renderItemDetail(selectedItem)}
+                    </div>
+                </div>
+
+                {/* COL 4: ACORDEONES (mobile: después de inventario) */}
+                <div className="md:col-span-2 lg:col-span-3 space-y-4">
+                    {/* ACORDEÓN: Estadísticas de Combate */}
+                    <div className="p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
+                        <button onClick={() => setShowCombatStats(!showCombatStats)} className="w-full flex items-center justify-between text-left">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Estadísticas de Combate</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showCombatStats ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showCombatStats && (
+                            <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2">
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
+                                    <span className="text-red-400 font-mono text-sm">{user.current_hp} / {displayMaxHp}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
+                                    <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
+                                    <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.crit} className="w-5 h-5 drop-shadow" /> Crítico</span>
+                                    <span className="text-yellow-200 font-mono text-sm">{derivedStats.critChance.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.block} className="w-5 h-5 drop-shadow" /> Bloqueo</span>
+                                    <span className="text-blue-200 font-mono text-sm">{derivedStats.blockChance.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.wisdom} className="w-5 h-5 drop-shadow" /> Poder Curación</span>
+                                    <span className="text-green-400 font-mono text-sm">+{derivedStats.healingPct}%</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.intelligence} className="w-5 h-5 drop-shadow" /> Daño Habilidad</span>
+                                    <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ACORDEÓN: Bonos Activos */}
+                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        <button onClick={() => setShowActiveBonuses(!showActiveBonuses)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Bonos Activos</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showActiveBonuses ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showActiveBonuses && (() => {
+                            const allianceBonuses = user.active_bonuses?.alliance || [];
+                            const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
+                            const hasAny = allianceBonuses.length > 0 || hasPetBonus;
+
+                            const PET_STAT_LABELS = {
+                                strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución',
+                                intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte'
+                            };
+
+                            return (
+                                <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
+                                    {!hasAny && (
+                                        <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
+                                    )}
+                                    {allianceBonuses.map((b, i) => (
+                                        <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 font-bold uppercase tracking-wider text-[8px]">Alianza</span>
+                                            <span className="text-slate-300">{b.source}</span>
+                                            <span className="text-amber-300 font-mono ml-auto">{b.label}</span>
+                                        </div>
+                                    ))}
+                                    {hasPetBonus && (
+                                        <div className="flex items-start gap-1.5 text-[10px]">
+                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 font-bold uppercase tracking-wider text-[8px] mt-0.5">Mascota</span>
+                                            <div className="flex-1 min-w-0">
+                                                <span className="text-slate-300">{equippedPet.name}</span>
+                                                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-green-400 font-mono">
+                                                    {Object.entries(equippedPet.bonus_stats).map(([k, v]) => (
+                                                        <span key={k}>{PET_STAT_LABELS[k] || k} +{v}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+
+                    {/* ACORDEÓN: Sugerencias rápidas */}
+                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        <button onClick={() => setShowQuickSuggestions(!showQuickSuggestions)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Sugerencias rápidas</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showQuickSuggestions ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showQuickSuggestions && (
+                            <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
+                                {quickSuggestions.length === 0 ? (
+                                    <p className="text-[10px] text-slate-500 italic">Todo está en orden por ahora.</p>
+                                ) : (
+                                    quickSuggestions.map((s, i) => (
+                                        <div key={i} className="flex items-start gap-2 text-[10px]">
+                                            <span className={`shrink-0 font-bold mt-0.5 ${s.tone === 'amber' ? 'text-amber-400' : s.tone === 'green' ? 'text-green-400' : s.tone === 'blue' ? 'text-blue-400' : 'text-slate-400'}`}>▶</span>
+                                            <span className={`${s.tone === 'amber' ? 'text-amber-200' : s.tone === 'green' ? 'text-green-200' : s.tone === 'blue' ? 'text-blue-200' : 'text-slate-300'}`}>
+                                                {s.text}
+                                            </span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
