@@ -36,6 +36,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [showEvolutionModal, setShowEvolutionModal] = useState(false);
     const [showPetModal, setShowPetModal] = useState(false);
     const [showPowerDetail, setShowPowerDetail] = useState(false);
+    const [showCombatStats, setShowCombatStats] = useState(false);
+    const [showActiveBonuses, setShowActiveBonuses] = useState(false);
 
     const [backgroundsList, setBackgroundsList] = useState([]);
     const [currentBgUrl, setCurrentBgUrl] = useState(user?.active_background_url);
@@ -674,6 +676,22 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                     <div className="h-full bg-yellow-500 shadow-[0_0_5px_rgba(234,179,8,0.8)]" style={{ width: `${xpPercent}%` }}></div>
                                 </div>
                             </div>
+                            {user.power && (
+                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
+                                    <span className="text-[10px] text-slate-500 uppercase tracking-widest">Poder Total</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-amber-400 font-mono font-extrabold text-sm drop-shadow-[0_0_6px_rgba(251,191,36,0.4)]">
+                                            {user.power.total.toLocaleString()}
+                                        </span>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setShowPowerDetail(true); }}
+                                            className="text-[9px] text-slate-500 hover:text-amber-400 transition-colors uppercase tracking-wider"
+                                        >
+                                            Ver desglose
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -686,26 +704,34 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
                     <StatsPanel stats={user.stats} bonuses={equipPetBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
 
-                    {/* DESGLOSE DE ATRIBUTOS (desde backend) */}
+                    {/* DESGLOSE DE ATRIBUTOS */}
                     {user.stat_breakdown && (
-                        <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs mb-3 border-b border-amber-500/20 pb-2">Desglose de Atributos</h3>
-                            <div className="space-y-2">
+                        <div className="mt-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs px-3 pt-3 pb-2 border-b border-amber-500/20">Desglose de Atributos</h3>
+                            <div className="divide-y divide-amber-900/30">
                                 {Object.entries(user.stat_breakdown).map(([key, bd]) => {
                                     const labelMap = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
-                                    const parts = [`Base ${bd.base}`];
-                                    if (bd.equipment > 0) parts.push(`Equipo +${bd.equipment}`);
-                                    if (bd.pet > 0) parts.push(`Mascota +${bd.pet}`);
-                                    if (bd.alliance > 0) parts.push(`Alianza +${bd.alliancePercent}% (+${bd.alliance})`);
+                                    const bonuses = [];
+                                    if (bd.equipment > 0) bonuses.push({ label: 'Equipo', value: `+${bd.equipment}`, color: 'text-cyan-400' });
+                                    if (bd.pet > 0) bonuses.push({ label: 'Mascota', value: `+${bd.pet}`, color: 'text-green-400' });
+                                    if (bd.alliance > 0) bonuses.push({ label: 'Alianza', value: `+${bd.alliancePercent}% (+${bd.alliance})`, color: 'text-amber-400' });
                                     return (
-                                        <div key={key} className="flex items-start justify-between group">
-                                            <div className="flex items-center gap-2 w-2/5 shrink-0">
-                                                <img src={STAT_IMAGES[key] || `/icons/stats/${key}.png`} className="w-4 h-4 object-contain" />
+                                        <div key={key} className="flex items-center px-3 py-2 hover:bg-white/[0.02] transition-colors">
+                                            <div className="flex items-center gap-2 w-[120px] shrink-0">
+                                                <img src={STAT_IMAGES[key] || `/icons/stats/${key}.png`} className="w-5 h-5 object-contain" />
                                                 <span className="text-xs font-bold text-slate-300">{labelMap[key] || key}</span>
                                             </div>
-                                            <div className="text-right flex flex-col items-end">
-                                                <span className="text-white font-mono font-bold text-sm leading-tight">{bd.total}</span>
-                                                <span className="text-[10px] text-slate-500 leading-tight">{parts.join(' · ')}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className="text-white font-mono font-bold text-sm tabular-nums">{bd.total}</span>
+                                                    <span className="text-[10px] text-slate-600 mx-1">|</span>
+                                                    <span className="text-[10px] text-slate-500 font-mono">Base {bd.base}</span>
+                                                    {bonuses.map((b, i) => (
+                                                        <span key={i} className="text-[10px] font-mono">
+                                                            <span className={`${b.color}`}>{b.value}</span>
+                                                        </span>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     );
@@ -714,132 +740,89 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </div>
                     )}
                     
-                    {/* Resumen Stats ESTANDARIZADO (Sin bordes, 7 stats) */}
-                    <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] space-y-2">
-                        
-                        {/* 1. Vida */}
-                        <div className="flex justify-between items-center pb-1">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
-                            <span className="text-red-400 font-mono text-sm">{user.current_hp} / {displayMaxHp}</span>
-                        </div>
-
-                        {/* 2. Daño */}
-                        <div className="flex justify-between items-center pb-1">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
-                            <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
-                        </div>
-
-                        {/* 3. Defensa */}
-                        <div className="flex justify-between items-center pb-1">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
-                            <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
-                        </div>
-
-                        {/* 4. Crítico (Agregado) */}
-                        <div className="flex justify-between items-center pb-1">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.crit} className="w-5 h-5 drop-shadow" /> Crítico</span>
-                            <span className="text-yellow-200 font-mono text-sm">{derivedStats.critChance.toFixed(1)}%</span>
-                        </div>
-
-                        {/* 5. Bloqueo (Agregado) */}
-                        <div className="flex justify-between items-center pb-1">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.block} className="w-5 h-5 drop-shadow" /> Bloqueo</span>
-                            <span className="text-blue-200 font-mono text-sm">{derivedStats.blockChance.toFixed(1)}%</span>
-                        </div>
-
-                        {/* 6. Cura */}
-                        <div className="flex justify-between items-center pb-1">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.wisdom} className="w-5 h-5 drop-shadow" /> Poder Curación</span>
-                            <span className="text-green-400 font-mono text-sm">+{derivedStats.healingPct}%</span>
-                        </div>
-
-                        {/* 7. Daño Skill */}
-                        <div className="flex justify-between items-center">
-                            <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.intelligence} className="w-5 h-5 drop-shadow" /> Daño Habilidad</span>
-                            <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
-                        </div>
+                    {/* ACORDEÓN: Estadísticas de Combate */}
+                    <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
+                        <button onClick={() => setShowCombatStats(!showCombatStats)} className="w-full flex items-center justify-between text-left">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Estadísticas de Combate</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showCombatStats ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showCombatStats && (
+                            <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2">
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
+                                    <span className="text-red-400 font-mono text-sm">{user.current_hp} / {displayMaxHp}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
+                                    <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
+                                    <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.crit} className="w-5 h-5 drop-shadow" /> Crítico</span>
+                                    <span className="text-yellow-200 font-mono text-sm">{derivedStats.critChance.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.block} className="w-5 h-5 drop-shadow" /> Bloqueo</span>
+                                    <span className="text-blue-200 font-mono text-sm">{derivedStats.blockChance.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.wisdom} className="w-5 h-5 drop-shadow" /> Poder Curación</span>
+                                    <span className="text-green-400 font-mono text-sm">+{derivedStats.healingPct}%</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.intelligence} className="w-5 h-5 drop-shadow" /> Daño Habilidad</span>
+                                    <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* PODER TOTAL */}
-                    {user.power && (
-                        <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Poder Total</h3>
-                                <span className="text-amber-400 font-mono font-extrabold text-lg drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
-                                    {user.power.total.toLocaleString()}
-                                </span>
-                            </div>
-                            <button
-                                onClick={() => setShowPowerDetail(!showPowerDetail)}
-                                className="mt-2 text-[10px] text-slate-500 hover:text-amber-400 transition-colors uppercase tracking-wider flex items-center gap-1"
-                            >
-                                {showPowerDetail ? 'Ocultar' : 'Ver'} desglose
-                                <span className={`inline-block transition-transform ${showPowerDetail ? 'rotate-180' : ''}`}>▼</span>
-                            </button>
-                            {showPowerDetail && user.power.breakdown && (
-                                <div className="mt-2 pt-2 border-t border-white/10 space-y-1 text-xs">
-                                    {[
-                                        { key: 'attributes', label: 'Atributos', color: 'text-green-400' },
-                                        { key: 'combat', label: 'Combate', color: 'text-orange-400' },
-                                        { key: 'level', label: 'Nivel', color: 'text-blue-400' },
-                                        { key: 'rarity', label: 'Rareza equipada', color: 'text-purple-400' }
-                                    ].map(({ key, label, color }) => (
-                                        <div key={key} className="flex justify-between">
-                                            <span className="text-slate-400">{label}</span>
-                                            <span className={`font-mono ${color}`}>
-                                                {user.power.breakdown[key]?.toLocaleString() || 0}
-                                            </span>
+                    {/* ACORDEÓN: Bonos Activos */}
+                    <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
+                        <button onClick={() => setShowActiveBonuses(!showActiveBonuses)} className="w-full flex items-center justify-between text-left">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Bonos Activos</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showActiveBonuses ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showActiveBonuses && (() => {
+                            const allianceBonuses = user.active_bonuses?.alliance || [];
+                            const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
+                            const hasAny = allianceBonuses.length > 0 || hasPetBonus;
+                            return (
+                                <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2">
+                                    {!hasAny && (
+                                        <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
+                                    )}
+                                    {allianceBonuses.length > 0 && (
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Alianza</span>
+                                            {allianceBonuses.map((b, i) => (
+                                                <div key={i} className="flex items-center gap-2 text-xs">
+                                                    <span className="text-amber-400 font-bold">✦</span>
+                                                    <span className="text-slate-300">{b.source}:</span>
+                                                    <span className="text-green-400 font-mono">{b.label}</span>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
-                                    <div className="flex justify-between pt-1 border-t border-white/10 mt-1">
-                                        <span className="text-slate-300 font-bold">Total</span>
-                                        <span className="text-amber-400 font-mono font-bold">
-                                            {user.power.total.toLocaleString()}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* BONOS ACTIVOS */}
-                    {(() => {
-                        const allianceBonuses = user.active_bonuses?.alliance || [];
-                        const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
-                        const hasAny = allianceBonuses.length > 0 || hasPetBonus;
-                        return (
-                            <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
-                                <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs mb-2 border-b border-amber-500/20 pb-2">Bonos Activos</h3>
-                                {!hasAny && (
-                                    <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
-                                )}
-                                {allianceBonuses.length > 0 && (
-                                    <div className="space-y-1">
-                                        <span className="text-[10px] text-slate-500 uppercase tracking-wider">Alianza</span>
-                                        {allianceBonuses.map((b, i) => (
-                                            <div key={i} className="flex items-center gap-2 text-xs">
+                                    )}
+                                    {hasPetBonus && (
+                                        <div className="mt-1 space-y-1">
+                                            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Mascota</span>
+                                            <div className="flex items-center gap-2 text-xs">
                                                 <span className="text-amber-400 font-bold">✦</span>
-                                                <span className="text-slate-300">{b.source}:</span>
-                                                <span className="text-green-400 font-mono">{b.label}</span>
+                                                <span className="text-slate-300">{equippedPet.name}:</span>
+                                                <span className="text-green-400 font-mono">
+                                                    +{Object.entries(equippedPet.bonus_stats).map(([k, v]) => `${k} ${v}`).join(', ')}
+                                                </span>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {hasPetBonus && (
-                                    <div className="mt-1 space-y-1">
-                                        <span className="text-[10px] text-slate-500 uppercase tracking-wider">Mascota</span>
-                                        <div className="flex items-center gap-2 text-xs">
-                                            <span className="text-amber-400 font-bold">✦</span>
-                                            <span className="text-slate-300">{equippedPet.name}:</span>
-                                            <span className="text-green-400 font-mono">
-                                                +{Object.entries(equippedPet.bonus_stats).map(([k, v]) => `${k} ${v}`).join(', ')}
-                                            </span>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })()}
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
                 </div>
 
                 {/* COL 2: PAPER DOLL */}
@@ -928,6 +911,39 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
                 </div>
             </div>
+
+            {/* MODAL DESGLOSE PODER */}
+            {showPowerDetail && user.power?.breakdown && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={() => setShowPowerDetail(false)}>
+                    <div className="bg-slate-900 border-2 border-amber-600 rounded-lg p-5 max-w-xs w-full mx-4 shadow-[0_0_40px_rgba(245,158,11,0.25)]" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4 border-b border-amber-500/20 pb-2">
+                            <h3 className="text-amber-500 font-serif font-bold uppercase tracking-widest text-sm">Desglose de Poder</h3>
+                            <button onClick={() => setShowPowerDetail(false)} className="text-slate-400 hover:text-white transition-colors"><X size={16} /></button>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                            {[
+                                { key: 'attributes', label: 'Atributos', color: 'text-green-400' },
+                                { key: 'combat', label: 'Combate', color: 'text-orange-400' },
+                                { key: 'level', label: 'Nivel', color: 'text-blue-400' },
+                                { key: 'rarity', label: 'Rareza equipada', color: 'text-purple-400' }
+                            ].map(({ key, label, color }) => (
+                                <div key={key} className="flex justify-between items-center">
+                                    <span className="text-slate-400">{label}</span>
+                                    <span className={`font-mono font-bold ${color}`}>
+                                        {user.power.breakdown[key]?.toLocaleString() || 0}
+                                    </span>
+                                </div>
+                            ))}
+                            <div className="flex justify-between items-center pt-2 mt-2 border-t border-white/10">
+                                <span className="text-slate-300 font-bold text-sm">Total</span>
+                                <span className="text-amber-400 font-mono font-bold text-sm">
+                                    {user.power.total.toLocaleString()}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* MODALES EXTRA (Avatar, Pet, Background, Evolution) - Mismo código */}
             {showAvatarModal && (
