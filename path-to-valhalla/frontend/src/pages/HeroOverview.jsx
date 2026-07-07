@@ -119,6 +119,20 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         fetchPets();
     }, []);
 
+    // Auto-dismiss success messages after 3 seconds
+    useEffect(() => {
+        if (!successMsg) return;
+        const timer = setTimeout(() => setSuccessMsg(null), 3000);
+        return () => clearTimeout(timer);
+    }, [successMsg]);
+
+    // Auto-dismiss error messages after 5 seconds
+    useEffect(() => {
+        if (!errorMsg) return;
+        const timer = setTimeout(() => setErrorMsg(null), 5000);
+        return () => clearTimeout(timer);
+    }, [errorMsg]);
+
     const fetchPets = () => {
         fetch(apiUrl('/api/my-pets'), { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
             .then(res => res.json())
@@ -1046,18 +1060,26 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 {/* COL 1: PERFIL + STATS */}
                 <div className="md:col-span-1 lg:col-span-3 xl:col-span-3 space-y-4">
                     <div className="bg-black/50 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 flex items-center gap-4 shadow-lg">
-                        <div className="relative group cursor-zoom-in w-16 h-16 shrink-0" onClick={() => setShowAvatarModal(true)}>
-                            <div className="w-full h-full rounded border-2 border-amber-600 bg-slate-900 overflow-hidden relative z-10">
-                                <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                        <div className="relative group cursor-zoom-in w-20 h-20 shrink-0" onClick={() => setShowAvatarModal(true)}>
+                            <div className="w-full h-full rounded-full border-2 border-amber-500/80 bg-slate-900 overflow-hidden relative z-10 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                                <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-80 rounded-full" />
                                 <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-top z-10 drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
                             </div>
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 rounded">
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 rounded-full">
                                 <Maximize2 size={16} className="text-white" />
                             </div>
                         </div>
                         <div className="flex-1">
                             <h2 className="text-xl font-serif text-amber-500">{user.username}</h2>
-                            <p className="text-slate-400 text-[10px] uppercase tracking-widest">{raceData.name} Lvl {user.level}</p>
+                            <p className="text-slate-400 text-[10px] uppercase tracking-widest">
+                                {raceData.name} Lvl {user.level}
+                                {user.stat_points > 0 && (
+                                    <span className="inline-flex items-center gap-1 ml-2 px-1.5 py-0.5 rounded-full bg-amber-900/60 border border-amber-600/50 text-[8px] text-amber-300 font-bold uppercase tracking-wider">
+                                        <Zap size={10} className="text-amber-400" />
+                                        {user.stat_points} pts.
+                                    </span>
+                                )}
+                            </p>
                             <div className="w-full mt-2">
                                 <div className="flex justify-between text-[9px] text-slate-400 mb-0.5"><span>EXP</span><span>{Math.floor(xpPercent)}%</span></div>
                                 <div className="h-1.5 bg-slate-800 border border-slate-600 rounded-full overflow-hidden">
@@ -1065,18 +1087,20 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                 </div>
                             </div>
                             {user.power && (
-                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
-                                    <span className="text-[10px] text-slate-500 uppercase tracking-widest">Poder Total</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-amber-400 font-mono font-extrabold text-sm drop-shadow-[0_0_6px_rgba(251,191,36,0.4)]">
+                                <div className="mt-3 pt-3 border-t border-amber-500/20">
+                                    <div className="bg-black/40 rounded-lg border border-amber-900/40 px-3 py-2">
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Poder Total</span>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setShowPowerDetail(true); }}
+                                                className="text-[9px] text-amber-500/70 hover:text-amber-400 transition-colors uppercase tracking-wider"
+                                            >
+                                                Ver desglose
+                                            </button>
+                                        </div>
+                                        <div className="text-2xl font-mono font-extrabold text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)] leading-none">
                                             {user.power.total.toLocaleString()}
-                                        </span>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setShowPowerDetail(true); }}
-                                            className="text-[9px] text-slate-500 hover:text-amber-400 transition-colors uppercase tracking-wider"
-                                        >
-                                            Ver desglose
-                                        </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
