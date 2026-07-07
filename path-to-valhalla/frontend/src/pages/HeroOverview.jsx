@@ -38,6 +38,14 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [showPowerDetail, setShowPowerDetail] = useState(false);
     const [showCombatStats, setShowCombatStats] = useState(false);
     const [showActiveBonuses, setShowActiveBonuses] = useState(false);
+    const [showQuickSuggestions, setShowQuickSuggestions] = useState(false);
+
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterType, setFilterType] = useState('all');
+    const [filterRarity, setFilterRarity] = useState('all');
+    const [equipping, setEquipping] = useState(false);
+    const [showSlotChoice, setShowSlotChoice] = useState(null); // { item, slots: [a, b] }
 
     const [backgroundsList, setBackgroundsList] = useState([]);
     const [currentBgUrl, setCurrentBgUrl] = useState(user?.active_background_url);
@@ -153,6 +161,35 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             }
         } catch (err) { setErrorMsg("Error de conexión al usar objeto."); }
         setContextMenu(null);
+    };
+
+    const handleEquipSelected = async (item, targetSlot) => {
+        if (!item || !targetSlot) return;
+        setEquipping(true);
+        try {
+            const res = await fetch(apiUrl('/api/inventory/move'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ userId: user.id, itemId: item.id, destination: { type: 'equipped', slot: targetSlot } })
+            });
+            const data = await res.json();
+            if (data.success) {
+                if (data.user && data.inventory) {
+                    onUpdateUser({ ...user, ...data.user, real_inventory: data.inventory });
+                } else {
+                    await refreshUser();
+                }
+                setSelectedItem(null);
+                setSuccessMsg('Objeto equipado.');
+            } else {
+                setErrorMsg(data.message || 'No se pudo equipar el objeto.');
+            }
+        } catch {
+            setErrorMsg('Error de conexión al equipar.');
+        } finally {
+            setEquipping(false);
+            setShowSlotChoice(null);
+        }
     };
 
     const handleContextMenu = (e, item) => {
@@ -322,6 +359,91 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         const realIndex = ((activeBag - 1) * 40) + slotIndex;
         return user.real_inventory?.find(i => !i.is_equipped && i.bag_slot === realIndex);
     };
+
+    const matchesTypeFilter = (item, filter) => {
+        const s = item.slot || '';
+        const t = item.type || '';
+        switch (filter) {
+            case 'weapon': return s === 'weapon' || t === 'weapon';
+            case 'armor': return ['helmet', 'armor', 'boots', 'gloves', 'belt', 'cloak', 'pants', 'bracers'].includes(s);
+            case 'accessory': return ['ring', 'earring', 'amulet', 'neck', 'offhand'].includes(s) || t === 'accessory';
+            case 'consumable': return ['consumable', 'scroll', 'recipe'].includes(t);
+            case 'material': return t === 'material';
+            default: return true;
+        }
+    };
+
+    const filteredInventory = useMemo(() => {
+        if (!user.real_inventory) return [];
+        let items = user.real_inventory.filter(i => !i.is_equipped);
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            items = items.filter(i => i.name.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
+        }
+        if (filterType !== 'all') items = items.filter(i => matchesTypeFilter(i, filterType));
+        if (filterRarity !== 'all') items = items.filter(i => i.rarity === filterRarity);
+        return items;
+    }, [user.real_inventory, searchQuery, filterType, filterRarity]);
+
+    const hasActiveFilters = searchQuery.trim() || filterType !== 'all' || filterRarity !== 'all';
+
+    const isEquippable = (item) => {
+        if (!item) return false;
+        return ['weapon', 'armor', 'accessory'].includes(item.type);
+    };
+
+    const itemSlotToEquippedSlots = (itemSlot) => {
+        const map = {
+            weapon: ['main_hand'],
+            offhand: ['off_hand'],
+            helmet: ['head'],
+            armor: ['chest'],
+            gloves: ['gloves'],
+            boots: ['feet'],
+            amulet: ['neck'],
+            ring: ['ring_1', 'ring_2'],
+            earring: ['earring_1', 'earring_2'],
+        };
+        return map[itemSlot] || null;
+    };
+
+    const findEquippedForComparison = (selected) => {
+        if (!selected || !selected.slot) return { equipped: null, slotName: null, secondary: null };
+        const candidateSlots = itemSlotToEquippedSlots(selected.slot);
+        if (!candidateSlots) return { equipped: null, slotName: null, secondary: null };
+
+        // Para slots con dos posiciones (ring, earring), buscar la mejor coincidencia
+        if (candidateSlots.length > 1) {
+            const eq1 = getEquippedItem(candidateSlots[0]);
+            const eq2 = getEquippedItem(candidateSlots[1]);
+            if (!eq1 && !eq2) return { equipped: null, slotName: candidateSlots[0], secondary: null };
+            if (eq1 && !eq2) return { equipped: eq1, slotName: candidateSlots[0], secondary: null };
+            if (!eq1 && eq2) return { equipped: eq2, slotName: candidateSlots[1], secondary: null };
+            // Ambos ocupados: mostrar el primero y marcar secundario
+            return { equipped: eq1, slotName: candidateSlots[0], secondary: { equipped: eq2, slotName: candidateSlots[1] } };
+        }
+
+        const eq = getEquippedItem(candidateSlots[0]);
+        return { equipped: eq, slotName: candidateSlots[0], secondary: null };
+    };
+
+    const SLOT_LABELS = {
+        main_hand: 'Mano principal', off_hand: 'Mano secundaria', head: 'Cabeza',
+        chest: 'Pecho', gloves: 'Guantes', feet: 'Pies', neck: 'Cuello',
+        ring_1: 'Anillo 1', ring_2: 'Anillo 2', earring_1: 'Pendiente 1', earring_2: 'Pendiente 2'
+    };
+
+    const STAT_LABELS = {
+        strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución',
+        intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte',
+        damage_min: 'Daño mínimo', damage_max: 'Daño máximo',
+        weapon_damage: 'Daño', armor: 'Armadura', defense: 'Defensa',
+        crit_chance: 'Crítico', block_chance: 'Bloqueo',
+        healing_bonus: 'Curación', skill_damage: 'Daño de habilidad',
+        skill_damage_bonus: 'Daño de habilidad'
+    };
+
+    const formatStatKey = (key) => STAT_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     const getAllowedSlotsForItem = (item) => {
         if (!item) return [];
@@ -510,6 +632,24 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const displayMaxHp = user.calculatedMaxHp ?? user.calculated_max_hp ?? 0;
     const equippedPet = myPets.find(p => p.is_active);
 
+    const quickSuggestions = useMemo(() => {
+        const tips = [];
+        if (user.stat_points > 0) tips.push({ icon: 'Zap', text: `Tienes ${user.stat_points} punto${user.stat_points !== 1 ? 's' : ''} de atributo disponible${user.stat_points !== 1 ? 's' : ''}.`, tone: 'amber' });
+        if (selectedItem && isEquippable(selectedItem)) tips.push({ icon: 'ArrowUpCircle', text: 'Puedes equipar este objeto o compararlo con tu equipo actual.', tone: 'blue' });
+        const inv = user.real_inventory || [];
+        const visibleSlots = ['head', 'earring_1', 'earring_2', 'neck', 'main_hand', 'chest', 'off_hand', 'ring_1', 'ring_2', 'gloves', 'feet'];
+        const emptySlots = visibleSlots.filter(s => !inv.find(i => i.is_equipped && i.equipped_slot === s));
+        if (emptySlots.length > 0) tips.push({ icon: 'Shield', text: `Hay ${emptySlots.length} espacio${emptySlots.length !== 1 ? 's' : ''} de equipo vacío${emptySlots.length !== 1 ? 's' : ''}.`, tone: 'slate' });
+        if (user.active_bonuses?.alliance?.length > 0) tips.push({ icon: 'Users', text: 'Tu alianza te otorga bonos activos.', tone: 'amber' });
+        if (equippedPet) tips.push({ icon: 'PawPrint', text: 'Tu mascota activa está otorgando bonificaciones.', tone: 'green' });
+        else if (myPets.length > 0) tips.push({ icon: 'PawPrint', text: 'Tienes mascotas disponibles para equipar.', tone: 'slate' });
+        if (user.power) tips.push({ icon: 'Zap', text: `Tu poder total actual es ${user.power.total.toLocaleString()}.`, tone: 'amber' });
+        const totalInventorySlots = user.real_inventory?.filter(i => !i.is_equipped).length || 0;
+        const totalBagCapacity = 240; // 6 bags × 40 slots
+        if (totalInventorySlots > totalBagCapacity * 0.75) tips.push({ icon: 'Package', text: 'Tu mochila está bastante llena, considera organizarla.', tone: 'slate' });
+        return tips;
+    }, [user.stat_points, selectedItem, user.active_bonuses, equippedPet, myPets.length, user.power, user.real_inventory]);
+
     const getItemStyles = (rarity) => {
         switch (rarity) {
             case 'uncommon': return { text: 'text-green-400', border: 'border-green-800', glow: '' };
@@ -588,6 +728,215 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 )}
                 
                 <div className="text-[10px] mt-2 text-right border-t border-white/10 pt-1 flex justify-between items-center"> <span className="text-slate-500">Valor de venta:</span> {formatCurrency(item.price_copper)} </div>
+            </div>
+        );
+    };
+
+    const renderItemDetail = (item) => {
+        if (!item) return null;
+        const styles = getItemStyles(item.rarity);
+        const stats = item.base_stats || {};
+        const isStackable = item.stackable || item.quantity > 1;
+
+        const renderStatValue = (val) => Array.isArray(val) ? `${val[0]} - ${val[1]}` : val;
+
+        return (
+            <div className="bg-slate-900/90 border-t-2 border-amber-900/50 p-3">
+                <div className="flex items-start gap-3 mb-2">
+                    <div className={`w-12 h-12 rounded border ${styles.border} bg-slate-800 flex items-center justify-center shrink-0 ${styles.glow}`}>
+                        {item.image_url ? (
+                            <img src={item.image_url} alt={item.name} className="w-full h-full object-contain p-0.5" />
+                        ) : (
+                            <span className="text-[8px] text-slate-500">?</span>
+                        )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className={`font-bold text-xs ${styles.text} truncate`}>{item.name}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[9px] text-slate-500 uppercase tracking-wider">{item.type}</span>
+                            <span className="text-[9px] text-slate-700">·</span>
+                            <span className={`text-[9px] uppercase tracking-wider ${styles.text}`}>{item.rarity}</span>
+                        </div>
+                    </div>
+                    <button onClick={() => setSelectedItem(null)} className="text-slate-500 hover:text-white transition-colors shrink-0">
+                        <X size={14} />
+                    </button>
+                </div>
+
+                {item.description && (
+                    <p className="text-[10px] text-slate-400 italic mb-2 border-b border-white/5 pb-2">{item.description}</p>
+                )}
+
+                {Object.keys(stats).length > 0 && (
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mb-2">
+                        {stats.heal_amount && (
+                            <span className="text-[10px] text-green-400 flex items-center gap-1 col-span-2">
+                                <span className="text-green-500">+</span> Recupera {stats.heal_amount} HP
+                            </span>
+                        )}
+                        {stats.damage_min != null && (
+                            <span className="text-[10px] text-slate-300 flex items-center gap-1">
+                                <img src={STAT_IMAGES.damage} className="w-3 h-3" />
+                                Daño: <span className="text-white">{stats.damage_min} - {stats.damage_max}</span>
+                            </span>
+                        )}
+                        {stats.armor != null && (
+                            <span className="text-[10px] text-slate-300 flex items-center gap-1">
+                                <img src={STAT_IMAGES.defense} className="w-3 h-3" />
+                                Armadura: <span className="text-white">{renderStatValue(stats.armor)}</span>
+                            </span>
+                        )}
+                        {Object.entries(stats).map(([key, val]) => {
+                            if (['damage_min', 'damage_max', 'damage', 'armor', 'heal_amount', 'learn_recipe_id', 'learn_skill_id'].includes(key)) return null;
+                            if (!Array.isArray(val) && val <= 0) return null;
+                            const iconPath = STAT_IMAGES[key] || '/icons/stats/luck.png';
+                            return (
+                                <span key={key} className="text-[10px] text-green-400 flex items-center gap-1">
+                                    <img src={iconPath} className="w-3 h-3" />
+                                    {key}: <span className="text-white">+{renderStatValue(val)}</span>
+                                </span>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* COMPARACIÓN: solo para items equipables */}
+                {isEquippable(item) && (() => {
+                    const { equipped, slotName, secondary } = findEquippedForComparison(item);
+                    const equippedStats = equipped?.base_stats || {};
+
+                    // Recolectar todas las keys de stats de ambos items
+                    const allKeys = [...new Set([...Object.keys(stats), ...Object.keys(equippedStats)])].filter(
+                        k => !['learn_recipe_id', 'learn_skill_id'].includes(k)
+                    );
+
+                    const slotLabel = SLOT_LABELS[slotName] || slotName;
+                    const slotLabelSecondary = secondary ? SLOT_LABELS[secondary.slotName] || secondary.slotName : null;
+
+                    return (
+                        <div className="mt-2 pt-2 border-t border-amber-500/20">
+                            <h4 className="text-[10px] text-amber-500 font-serif uppercase tracking-widest mb-1.5">Comparación</h4>
+
+                            {(!slotName || !item.slot) && (
+                                <p className="text-[9px] text-slate-500 italic">Este tipo de equipo aún no tiene slot visible en el personaje.</p>
+                            )}
+
+                            {slotName && (
+                                <>
+                                    {/* Encabezados */}
+                                    <div className="grid grid-cols-3 gap-1 mb-1 text-[9px] text-slate-600 uppercase tracking-wider font-bold border-b border-white/5 pb-1">
+                                        <span></span>
+                                        <span className="text-center">Equipado</span>
+                                        <span className="text-center">Seleccionado</span>
+                                    </div>
+
+                                    {/* Items: icono + nombre + rareza */}
+                                    <div className="grid grid-cols-3 gap-1 mb-1.5 text-[9px]">
+                                        <span className="text-slate-500 self-center">{slotLabel}</span>
+                                        <div className="text-center flex flex-col items-center">
+                                            {equipped ? (
+                                                <>
+                                                    <div className={`w-8 h-8 rounded border ${getItemStyles(equipped.rarity).border} bg-slate-800 flex items-center justify-center mb-0.5`}>
+                                                        {equipped.image_url ? <img src={equipped.image_url} className="w-full h-full object-contain" /> : <span className="text-[6px] text-slate-500">?</span>}
+                                                    </div>
+                                                    <span className={`${getItemStyles(equipped.rarity).text} font-bold truncate max-w-[60px]`}>{equipped.name}</span>
+                                                </>
+                                            ) : (
+                                                <span className="text-slate-600 italic">Vacío</span>
+                                            )}
+                                        </div>
+                                        <div className="text-center flex flex-col items-center">
+                                            <div className={`w-8 h-8 rounded border ${styles.border} bg-slate-800 flex items-center justify-center mb-0.5`}>
+                                                {item.image_url ? <img src={item.image_url} className="w-full h-full object-contain" /> : <span className="text-[6px] text-slate-500">?</span>}
+                                            </div>
+                                            <span className={`${styles.text} font-bold truncate max-w-[60px]`}>{item.name}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Stats comparison */}
+                                    <div className="space-y-0.5">
+                                        {allKeys.length === 0 && <p className="text-[9px] text-slate-600 italic">Sin atributos adicionales.</p>}
+                                        {allKeys.map(key => {
+                                            const currentVal = stats[key];
+                                            const equippedVal = equippedStats[key];
+                                            if (currentVal === undefined && equippedVal === undefined) return null;
+
+                                            const renderVal = (v) => v === undefined ? 0 : (Array.isArray(v) ? Math.floor((v[0] + v[1]) / 2) : v);
+                                            const displayVal = (v) => v === undefined ? '0' : (Array.isArray(v) ? `${v[0]} - ${v[1]}` : String(v));
+
+                                            const cur = renderVal(currentVal);
+                                            const eq = renderVal(equippedVal);
+                                            const diff = cur - eq;
+
+                                            if (diff === 0) return null;
+
+                                            return (
+                                                <div key={key} className="grid grid-cols-3 gap-1 text-[10px]">
+                                                    <span className="text-slate-500">{formatStatKey(key)}</span>
+                                                    <span className="text-center text-slate-400">{displayVal(equippedVal)}</span>
+                                                    <span className={`text-center font-mono font-bold ${diff > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                        {diff > 0 ? '+' : ''}{diff}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Slot secundario (ring_2 / earring_2) */}
+                                    {secondary && (
+                                        <div className="mt-1.5 pt-1.5 border-t border-white/5">
+                                            <p className="text-[9px] text-slate-500 italic">
+                                                También equipado en {slotLabelSecondary}: <span className={`${getItemStyles(secondary.equipped.rarity).text}`}>{secondary.equipped.name}</span>
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Botón Equipar */}
+                                    <div className="mt-2 pt-2 border-t border-white/5">
+                                        {showSlotChoice?.item?.id === item.id ? (
+                                            <div className="flex gap-1">
+                                                {showSlotChoice.slots.map((s) => {
+                                                    const equippedInSlot = getEquippedItem(s);
+                                                    return (
+                                                        <button
+                                                            key={s}
+                                                            onClick={() => handleEquipSelected(item, s)}
+                                                            disabled={equipping}
+                                                            className="flex-1 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                                                        >
+                                                            Reemplazar {SLOT_LABELS[s] || s}
+                                                            {equippedInSlot && <span className="block text-[8px] text-amber-200 normal-case font-normal">{equippedInSlot.name}</span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                                <button onClick={() => setShowSlotChoice(null)} className="px-2 py-1.5 rounded bg-slate-800 text-slate-400 hover:text-white text-[10px] transition-colors">
+                                                    <X size={12} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => secondary ? setShowSlotChoice({ item, slots: [slotName, secondary.slotName] }) : handleEquipSelected(item, slotName)}
+                                                disabled={equipping}
+                                                className="w-full py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {equipping ? 'Equipando...' : (secondary ? 'Elegir slot' : 'Equipar')}
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    );
+                })()}
+
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500 border-t border-white/5 pt-1.5">
+                    {isStackable && <span>Cantidad: <span className="text-slate-300 font-mono">{item.quantity}</span></span>}
+                    {item.durability_current != null && !['consumable', 'material', 'scroll', 'recipe'].includes(item.type) && (
+                        <span>Durabilidad: <span className={`font-mono ${item.durability_current < 20 ? 'text-red-400' : 'text-slate-300'}`}>{item.durability_current}/{item.durability_max || 100}</span></span>
+                    )}
+                    <span>Valor: {formatCurrency(item.price_copper)}</span>
+                    {item.is_bound && <span className="text-red-500">Vinculado</span>}
+                </div>
             </div>
         );
     };
@@ -781,8 +1130,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
 
                     {/* ACORDEÓN: Bonos Activos */}
-                    <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
-                        <button onClick={() => setShowActiveBonuses(!showActiveBonuses)} className="w-full flex items-center justify-between text-left">
+                    <div className="mt-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        <button onClick={() => setShowActiveBonuses(!showActiveBonuses)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
                             <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Bonos Activos</h3>
                             <span className={`text-amber-400 transition-transform duration-200 ${showActiveBonuses ? 'rotate-180' : ''}`}>▼</span>
                         </button>
@@ -790,38 +1139,64 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                             const allianceBonuses = user.active_bonuses?.alliance || [];
                             const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
                             const hasAny = allianceBonuses.length > 0 || hasPetBonus;
+
+                            const PET_STAT_LABELS = {
+                                strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución',
+                                intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte'
+                            };
+
                             return (
-                                <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2">
+                                <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
                                     {!hasAny && (
                                         <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
                                     )}
-                                    {allianceBonuses.length > 0 && (
-                                        <div className="space-y-1">
-                                            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Alianza</span>
-                                            {allianceBonuses.map((b, i) => (
-                                                <div key={i} className="flex items-center gap-2 text-xs">
-                                                    <span className="text-amber-400 font-bold">✦</span>
-                                                    <span className="text-slate-300">{b.source}:</span>
-                                                    <span className="text-green-400 font-mono">{b.label}</span>
-                                                </div>
-                                            ))}
+                                    {allianceBonuses.map((b, i) => (
+                                        <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 font-bold uppercase tracking-wider text-[8px]">Alianza</span>
+                                            <span className="text-slate-300">{b.source}</span>
+                                            <span className="text-amber-300 font-mono ml-auto">{b.label}</span>
                                         </div>
-                                    )}
+                                    ))}
                                     {hasPetBonus && (
-                                        <div className="mt-1 space-y-1">
-                                            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Mascota</span>
-                                            <div className="flex items-center gap-2 text-xs">
-                                                <span className="text-amber-400 font-bold">✦</span>
-                                                <span className="text-slate-300">{equippedPet.name}:</span>
-                                                <span className="text-green-400 font-mono">
-                                                    +{Object.entries(equippedPet.bonus_stats).map(([k, v]) => `${k} ${v}`).join(', ')}
-                                                </span>
+                                        <div className="flex items-start gap-1.5 text-[10px]">
+                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 font-bold uppercase tracking-wider text-[8px] mt-0.5">Mascota</span>
+                                            <div className="flex-1 min-w-0">
+                                                <span className="text-slate-300">{equippedPet.name}</span>
+                                                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-green-400 font-mono">
+                                                    {Object.entries(equippedPet.bonus_stats).map(([k, v]) => (
+                                                        <span key={k}>{PET_STAT_LABELS[k] || k} +{v}</span>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
                                 </div>
                             );
                         })()}
+                    </div>
+
+                    {/* ACORDEÓN: Sugerencias rápidas */}
+                    <div className="mt-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        <button onClick={() => setShowQuickSuggestions(!showQuickSuggestions)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Sugerencias rápidas</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showQuickSuggestions ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showQuickSuggestions && (
+                            <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
+                                {quickSuggestions.length === 0 ? (
+                                    <p className="text-[10px] text-slate-500 italic">Todo está en orden por ahora.</p>
+                                ) : (
+                                    quickSuggestions.map((s, i) => (
+                                        <div key={i} className="flex items-start gap-2 text-[10px]">
+                                            <span className={`shrink-0 font-bold mt-0.5 ${s.tone === 'amber' ? 'text-amber-400' : s.tone === 'green' ? 'text-green-400' : s.tone === 'blue' ? 'text-blue-400' : 'text-slate-400'}`}>▶</span>
+                                            <span className={`${s.tone === 'amber' ? 'text-amber-200' : s.tone === 'green' ? 'text-green-200' : s.tone === 'blue' ? 'text-blue-200' : 'text-slate-300'}`}>
+                                                {s.text}
+                                            </span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -857,8 +1232,63 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 
                 {/* COL 3: MOCHILA */}
                 <div className="lg:col-span-4">
-                    <div className="bg-slate-900 border-2 border-amber-900/50 rounded-lg p-1 h-[700px] flex flex-col shadow-2xl relative">
-                        <div className="flex gap-1 mb-1 px-1 overflow-x-auto">
+                    <div className="bg-slate-900 border-2 border-amber-900/50 rounded-lg p-1 flex flex-col shadow-2xl relative">
+                        {/* BARRA DE BÚSQUEDA Y FILTROS */}
+                        <div className="flex flex-col gap-1 px-1 pt-1 pb-1.5">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar en inventario..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded text-[10px] text-slate-300 px-2 py-1.5 pr-7 placeholder-slate-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                                />
+                                {searchQuery && (
+                                    <button onClick={() => setSearchQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300">
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex gap-1 flex-wrap">
+                                {[
+                                    { key: 'all', label: 'Todos' },
+                                    { key: 'weapon', label: 'Armas' },
+                                    { key: 'armor', label: 'Armaduras' },
+                                    { key: 'accessory', label: 'Accesorios' },
+                                    { key: 'consumable', label: 'Consumibles' },
+                                    { key: 'material', label: 'Materiales' },
+                                ].map(({ key, label }) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => setFilterType(filterType === key ? 'all' : key)}
+                                        className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold transition-colors ${filterType === key ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex gap-1 flex-wrap">
+                                {[
+                                    { key: 'all', label: 'Todas' },
+                                    { key: 'common', label: 'Común' },
+                                    { key: 'uncommon', label: 'Poco común' },
+                                    { key: 'rare', label: 'Raro' },
+                                    { key: 'legendary', label: 'Legendario' },
+                                    { key: 'mythic', label: 'Mítico' },
+                                ].map(({ key, label }) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => setFilterRarity(filterRarity === key ? 'all' : key)}
+                                        className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold transition-colors ${filterRarity === key ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* TABS DE BOLSAS */}
+                        <div className="flex gap-1 px-1 overflow-x-auto">
                             {[1, 2, 3, 4, 5, 6].map((num) => (
                                 <button key={num} onClick={() => setActiveBag(num)} className={`flex-1 py-1.5 text-[10px] font-bold uppercase border-t-2 transition-colors relative ${activeBag === num ? 'bg-amber-900/80 text-amber-100 border-amber-500' : 'bg-slate-800 text-slate-500 border-transparent hover:bg-slate-700'} ${!isBagUnlocked(num) ? 'opacity-70' : ''}`}>
                                     {!isBagUnlocked(num) && <Lock size={10} className="absolute top-0.5 right-0.5 text-red-400" />}
@@ -866,21 +1296,47 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                 </button>
                             ))}
                         </div>
-                        <div className="flex-1 bg-black/60 border border-slate-700 rounded p-2 overflow-y-auto relative">
-                            {!isBagUnlocked(activeBag) ? (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 z-20">
+
+                        {/* GRILLA / VISTA FILTRADA */}
+                        <div className="flex-1 bg-black/60 border border-slate-700 rounded m-1 p-2 overflow-y-auto relative min-h-[280px] max-h-[340px]">
+                            {hasActiveFilters ? (
+                                filteredInventory.length === 0 ? (
+                                    <div className="flex items-center justify-center h-full text-slate-600 text-[10px] italic">Sin resultados.</div>
+                                ) : (
+                                    <div className="grid grid-cols-5 gap-1.5 content-start">
+                                        {filteredInventory.map((item) => (
+                                            <div
+                                                key={item.id}
+                                                className={`aspect-square border rounded-sm flex items-center justify-center cursor-pointer shadow-inner relative group transition-all ${selectedItem?.id === item.id ? 'border-amber-400 ring-1 ring-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.3)]' : 'border-amber-600/50 bg-slate-800'} hover:border-amber-400`}
+                                                onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
+                                                onMouseEnter={(e) => handleMouseEnter(item, e, 'left')}
+                                                onMouseLeave={handleMouseLeave}
+                                                onContextMenu={(e) => handleContextMenu(e, item)}
+                                            >
+                                                {item.image_url ? (
+                                                    <>
+                                                        <img src={item.image_url} alt={item.name} className="w-full h-full object-contain p-0.5 drop-shadow-md" />
+                                                        {item.quantity > 1 && <span className="absolute bottom-0 right-0 bg-black/90 text-[10px] text-white px-1.5 font-mono font-bold border-tl border-slate-700 rounded-tl z-10">{item.quantity}</span>}
+                                                    </>
+                                                ) : <span className="text-[8px] text-slate-500">?</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            ) : !isBagUnlocked(activeBag) ? (
+                                <div className="flex flex-col items-center justify-center h-full text-center p-6">
                                     <Lock size={48} className={activeBag >= 4 ? "text-purple-500 mb-4" : "text-slate-500 mb-4"} />
-                                    <h3 className="text-white font-bold mb-2">Mochila Bloqueada</h3>
+                                    <h3 className="text-white font-bold mb-2 text-sm">Mochila Bloqueada</h3>
                                     {activeBag === 3 ? <p className="text-slate-400 text-xs">Nivel 20 requerido.</p> : <div><p className="text-slate-400 text-xs mb-4">Premium</p><button onClick={() => handleRentBagClick(activeBag)} className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded flex items-center justify-center gap-2 mx-auto"><Gem size={12} /> 50 ónix</button></div>}
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-5 gap-1.5 h-full content-start">
+                                <div className="grid grid-cols-5 gap-1.5 content-start">
                                     {[...Array(40)].map((_, i) => {
                                         const item = getBagItem(i);
                                         return (
                                             <div
                                                 key={i}
-                                                className={`aspect-square border rounded-sm flex items-center justify-center cursor-pointer shadow-inner relative group transition-colors ${item ? 'bg-slate-800 border-amber-600/50 cursor-grab active:cursor-grabbing' : 'bg-slate-800/50 border-slate-700 hover:border-amber-500/30'}`}
+                                                className={`aspect-square border rounded-sm flex items-center justify-center shadow-inner relative group transition-all ${item ? 'bg-slate-800 border-amber-600/50 cursor-grab active:cursor-grabbing' : 'bg-slate-800/50 border-slate-700 hover:border-amber-500/30'} ${selectedItem?.id === item?.id ? 'ring-1 ring-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.3)]' : ''}`}
                                                 onDragOver={handleDragOver}
                                                 onDrop={(e) => handleDrop(e, { type: 'bag', slot: ((activeBag - 1) * 40) + i })}
                                                 draggable={!!item}
@@ -889,6 +1345,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                                 onMouseEnter={(e) => handleMouseEnter(item, e, 'left')}
                                                 onMouseLeave={handleMouseLeave}
                                                 onContextMenu={(e) => item && handleContextMenu(e, item)}
+                                                onClick={() => item && setSelectedItem(selectedItem?.id === item.id ? null : item)}
                                             >
                                                 {item ? (
                                                     item.image_url ? (
@@ -904,10 +1361,19 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                 </div>
                             )}
                         </div>
-                        <div className="mt-1 flex justify-between items-center px-2 py-1 text-[10px] text-slate-500 bg-slate-950 rounded-b">
-                            <span>Libres: {40 - (user.real_inventory?.filter(i => !i.is_equipped && i.bag_slot >= (activeBag - 1) * 40 && i.bag_slot < activeBag * 40).length || 0)}</span>
+
+                        {/* BARRA INFERIOR */}
+                        <div className="mx-1 mb-1 flex justify-between items-center px-2 py-1 text-[10px] text-slate-500 bg-slate-950 rounded-b">
+                            {hasActiveFilters ? (
+                                <span>{filteredInventory.length} resultado{filteredInventory.length !== 1 ? 's' : ''}</span>
+                            ) : (
+                                <span>Libres: {40 - (user.real_inventory?.filter(i => !i.is_equipped && i.bag_slot >= (activeBag - 1) * 40 && i.bag_slot < activeBag * 40).length || 0)}</span>
+                            )}
                             <button onClick={handleOrganizeInventory} className="text-amber-500 hover:underline font-bold uppercase flex items-center gap-1">Organizar</button>
                         </div>
+
+                        {/* PANEL DE DETALLE DEL ITEM SELECCIONADO */}
+                        {selectedItem && renderItemDetail(selectedItem)}
                     </div>
                 </div>
             </div>
