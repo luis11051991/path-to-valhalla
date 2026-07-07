@@ -35,6 +35,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [showAvatarModal, setShowAvatarModal] = useState(false);
     const [showEvolutionModal, setShowEvolutionModal] = useState(false);
     const [showPetModal, setShowPetModal] = useState(false);
+    const [showPowerDetail, setShowPowerDetail] = useState(false);
 
     const [backgroundsList, setBackgroundsList] = useState([]);
     const [currentBgUrl, setCurrentBgUrl] = useState(user?.active_background_url);
@@ -440,8 +441,19 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const maxXp = getRequiredXp(user.level);
     const xpPercent = Math.min((currentXp / maxXp) * 100, 100);
 
-    // --- CÁLCULOS DE STATS ---
-    const itemBonuses = useMemo(() => {
+    // --- CÁLCULOS DE STATS (backend como fuente de verdad) ---
+    const equipPetBonuses = useMemo(() => {
+        if (user.stat_breakdown) {
+            const result = {};
+            for (const stat of ['strength', 'dexterity', 'constitution', 'intelligence', 'charisma', 'luck']) {
+                const bd = user.stat_breakdown[stat];
+                result[stat] = (bd?.equipment || 0) + (bd?.pet || 0);
+            }
+            for (const stat of ['damage_min', 'damage_max', 'armor', 'defense']) {
+                result[stat] = user.total_stats?.[stat] || 0;
+            }
+            return result;
+        }
         let bonuses = { strength: 0, dexterity: 0, constitution: 0, intelligence: 0, charisma: 0, luck: 0, armor: 0, damage_min: 0, damage_max: 0, defense: 0 };
         if (user.real_inventory) {
             user.real_inventory.forEach(item => {
@@ -454,47 +466,44 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 }
             });
         }
-        return bonuses;
-    }, [user.real_inventory]);
-
-    const petBonuses = useMemo(() => {
         const active = myPets.find(p => p.is_active);
-        if (!active || active.current_hunger <= 0) return {};
-        return active.bonus_stats || {};
-    }, [myPets]);
-
-    const totalBonuses = useMemo(() => {
-        const combined = { ...itemBonuses };
-        Object.entries(petBonuses).forEach(([key, val]) => {
-            combined[key] = (combined[key] || 0) + val;
-        });
-        return combined;
-    }, [itemBonuses, petBonuses]);
+        if (active && active.current_hunger > 0 && active.bonus_stats) {
+            Object.entries(active.bonus_stats).forEach(([key, val]) => {
+                bonuses[key] = (bonuses[key] || 0) + val;
+            });
+        }
+        return bonuses;
+    }, [user.stat_breakdown, user.total_stats, user.real_inventory, myPets]);
 
     const derivedStats = useMemo(() => {
-        const totalStats = {
-            strength: (user.stats.strength || 0) + (totalBonuses.strength || 0),
-            dexterity: (user.stats.dexterity || 0) + (totalBonuses.dexterity || 0),
-            constitution: (user.stats.constitution || 0) + (totalBonuses.constitution || 0),
-            intelligence: (user.stats.intelligence || 0) + (totalBonuses.intelligence || 0),
-            charisma: (user.stats.charisma || 0) + (totalBonuses.charisma || 0),
-            luck: (user.stats.luck || 0) + (totalBonuses.luck || 0),
+        const bd = user.derived_stats;
+        if (bd) {
+            return {
+                totalDamageMin: bd.physicalDamageMin,
+                totalDamageMax: bd.physicalDamageMax,
+                defense: bd.defense,
+                critChance: bd.critChance,
+                blockChance: bd.blockChance,
+                skillDamagePct: bd.skillDamageBonus,
+                healingPct: bd.healingPower
+            };
+        }
+        const totalStats = user.total_stats || user.stats || {};
+        const s = totalStats.strength || 0;
+        const d = totalStats.dexterity || 0;
+        const c = totalStats.constitution || 0;
+        const i = totalStats.intelligence || 0;
+        const l = totalStats.luck || 0;
+        return {
+            totalDamageMin: (totalStats.damage_min || 0) + s * 2,
+            totalDamageMax: (totalStats.damage_max || 0) + s * 2,
+            defense: (totalStats.armor || 0) + (totalStats.defense || 0) + Math.floor(c / 2),
+            critChance: Math.min(d * 0.25, 25),
+            blockChance: Math.min(l * 0.25, 25),
+            skillDamagePct: Math.min(i * 0.25, 25),
+            healingPct: Math.min(i * 0.5, 25)
         };
-
-        const strBonus = totalStats.strength * 2;
-        const totalDamageMin = (totalBonuses.damage_min || 0) + strBonus;
-        const totalDamageMax = (totalBonuses.damage_max || 0) + strBonus;
-        const defense = (totalBonuses.armor || 0) + (totalBonuses.defense || 0) + Math.floor(totalStats.constitution / 2);
-
-        let critChance = Math.min(totalStats.dexterity * 0.25, 25);
-        let blockChance = Math.min(totalStats.luck * 0.25, 25);
-
-        // --- AGREGAR CÁLCULOS DE INTELIGENCIA (CON TOPE 25%) ---
-        const skillDamagePct = Math.min(totalStats.intelligence * 0.25, 25).toFixed(2); 
-        const healingPct = Math.min(totalStats.intelligence * 0.5, 25).toFixed(2);
-
-        return { totalDamageMin, totalDamageMax, defense, critChance, blockChance, skillDamagePct, healingPct };
-    }, [user.stats, totalBonuses]);
+    }, [user.derived_stats, user.total_stats, user.stats]);
 
     const displayMaxHp = user.calculatedMaxHp ?? user.calculated_max_hp ?? 0;
     const equippedPet = myPets.find(p => p.is_active);
@@ -675,7 +684,35 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </button>
                     )}
 
-                    <StatsPanel stats={user.stats} bonuses={totalBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
+                    <StatsPanel stats={user.stats} bonuses={equipPetBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
+
+                    {/* DESGLOSE DE ATRIBUTOS (desde backend) */}
+                    {user.stat_breakdown && (
+                        <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs mb-3 border-b border-amber-500/20 pb-2">Desglose de Atributos</h3>
+                            <div className="space-y-2">
+                                {Object.entries(user.stat_breakdown).map(([key, bd]) => {
+                                    const labelMap = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
+                                    const parts = [`Base ${bd.base}`];
+                                    if (bd.equipment > 0) parts.push(`Equipo +${bd.equipment}`);
+                                    if (bd.pet > 0) parts.push(`Mascota +${bd.pet}`);
+                                    if (bd.alliance > 0) parts.push(`Alianza +${bd.alliancePercent}% (+${bd.alliance})`);
+                                    return (
+                                        <div key={key} className="flex items-start justify-between group">
+                                            <div className="flex items-center gap-2 w-2/5 shrink-0">
+                                                <img src={STAT_IMAGES[key] || `/icons/stats/${key}.png`} className="w-4 h-4 object-contain" />
+                                                <span className="text-xs font-bold text-slate-300">{labelMap[key] || key}</span>
+                                            </div>
+                                            <div className="text-right flex flex-col items-end">
+                                                <span className="text-white font-mono font-bold text-sm leading-tight">{bd.total}</span>
+                                                <span className="text-[10px] text-slate-500 leading-tight">{parts.join(' · ')}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                     
                     {/* Resumen Stats ESTANDARIZADO (Sin bordes, 7 stats) */}
                     <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] space-y-2">
@@ -722,6 +759,87 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                             <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
                         </div>
                     </div>
+
+                    {/* PODER TOTAL */}
+                    {user.power && (
+                        <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Poder Total</h3>
+                                <span className="text-amber-400 font-mono font-extrabold text-lg drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
+                                    {user.power.total.toLocaleString()}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setShowPowerDetail(!showPowerDetail)}
+                                className="mt-2 text-[10px] text-slate-500 hover:text-amber-400 transition-colors uppercase tracking-wider flex items-center gap-1"
+                            >
+                                {showPowerDetail ? 'Ocultar' : 'Ver'} desglose
+                                <span className={`inline-block transition-transform ${showPowerDetail ? 'rotate-180' : ''}`}>▼</span>
+                            </button>
+                            {showPowerDetail && user.power.breakdown && (
+                                <div className="mt-2 pt-2 border-t border-white/10 space-y-1 text-xs">
+                                    {[
+                                        { key: 'attributes', label: 'Atributos', color: 'text-green-400' },
+                                        { key: 'combat', label: 'Combate', color: 'text-orange-400' },
+                                        { key: 'level', label: 'Nivel', color: 'text-blue-400' },
+                                        { key: 'rarity', label: 'Rareza equipada', color: 'text-purple-400' }
+                                    ].map(({ key, label, color }) => (
+                                        <div key={key} className="flex justify-between">
+                                            <span className="text-slate-400">{label}</span>
+                                            <span className={`font-mono ${color}`}>
+                                                {user.power.breakdown[key]?.toLocaleString() || 0}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between pt-1 border-t border-white/10 mt-1">
+                                        <span className="text-slate-300 font-bold">Total</span>
+                                        <span className="text-amber-400 font-mono font-bold">
+                                            {user.power.total.toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* BONOS ACTIVOS */}
+                    {(() => {
+                        const allianceBonuses = user.active_bonuses?.alliance || [];
+                        const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
+                        const hasAny = allianceBonuses.length > 0 || hasPetBonus;
+                        return (
+                            <div className="mt-3 p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
+                                <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs mb-2 border-b border-amber-500/20 pb-2">Bonos Activos</h3>
+                                {!hasAny && (
+                                    <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
+                                )}
+                                {allianceBonuses.length > 0 && (
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] text-slate-500 uppercase tracking-wider">Alianza</span>
+                                        {allianceBonuses.map((b, i) => (
+                                            <div key={i} className="flex items-center gap-2 text-xs">
+                                                <span className="text-amber-400 font-bold">✦</span>
+                                                <span className="text-slate-300">{b.source}:</span>
+                                                <span className="text-green-400 font-mono">{b.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {hasPetBonus && (
+                                    <div className="mt-1 space-y-1">
+                                        <span className="text-[10px] text-slate-500 uppercase tracking-wider">Mascota</span>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-amber-400 font-bold">✦</span>
+                                            <span className="text-slate-300">{equippedPet.name}:</span>
+                                            <span className="text-green-400 font-mono">
+                                                +{Object.entries(equippedPet.bonus_stats).map(([k, v]) => `${k} ${v}`).join(', ')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {/* COL 2: PAPER DOLL */}

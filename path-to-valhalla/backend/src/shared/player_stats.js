@@ -31,16 +31,169 @@ const addStats = (target, source) => {
     });
 };
 
-const computeTotalStats = ({ baseStats = {}, equippedItems = [], petBonuses = {} }) => {
-    const total = { ...normalizeStats(baseStats) };
-    equippedItems.forEach((statObj) => addStats(total, statObj || {}));
+const computeTotalStats = ({ baseStats = {}, equippedItems = [], petBonuses = {}, alliancePercent = 0 }) => {
+    const base = normalizeStats(baseStats);
+    const total = { ...base };
+    equippedItems.forEach((item) => addStats(total, item.stats || item || {}));
     addStats(total, petBonuses || {});
+    const pct = Number(alliancePercent) || 0;
+    if (pct > 0) {
+        for (const stat of CORE_STATS) {
+            total[stat] = (total[stat] || 0) + Math.round((base[stat] || 0) * pct / 100);
+        }
+    }
     return total;
+};
+
+// ===== ALIANZA: BONUS PORCENTUAL =====
+const getEffectForLevel = (levelEffects = [], level = 1) => {
+    if (!Array.isArray(levelEffects)) return {};
+    const exact = levelEffects.find((e) => Number(e.level) === Number(level));
+    if (exact) return exact;
+    const sorted = [...levelEffects]
+        .filter((e) => Number(e.level) <= Number(level))
+        .sort((a, b) => Number(b.level) - Number(a.level));
+    return sorted[0] || {};
+};
+
+const getAllianceStatsPercent = async (playerId, client) => {
+    const db = getDb(client);
+    const res = await db.query(`
+        SELECT ab.level, abd.level_effects
+        FROM alliance_members am
+        JOIN alliance_buildings ab ON ab.alliance_id = am.alliance_id
+        JOIN alliance_building_definitions abd ON abd.id = ab.building_definition_id
+        WHERE am.player_id = $1
+          AND am.is_active = true
+          AND abd.code = 'training_field'
+          AND ab.is_unlocked = true
+        LIMIT 1
+    `, [playerId]);
+
+    if (res.rows.length === 0) return 0;
+
+    const { level, level_effects } = res.rows[0];
+    const effects = typeof level_effects === 'string'
+        ? JSON.parse(level_effects)
+        : level_effects || [];
+
+    const effect = getEffectForLevel(effects, Number(level));
+    return Number(effect?.statsPercent) || 0;
+};
+
+// ===== STAT BREAKDOWN =====
+const CORE_STATS = ['strength', 'dexterity', 'constitution', 'intelligence', 'charisma', 'luck'];
+
+const computeStatBreakdown = ({ baseStats, equippedItems, petBonuses, alliancePercent }) => {
+    const base = normalizeStats(baseStats);
+    const pct = Number(alliancePercent) || 0;
+
+    const equipmentSum = {};
+    (equippedItems || []).forEach((item) => addStats(equipmentSum, item.stats || item || {}));
+
+    const pet = normalizeStats(petBonuses);
+
+    const breakdown = {};
+    for (const stat of CORE_STATS) {
+        const baseVal = base[stat] || 0;
+        const equipVal = equipmentSum[stat] || 0;
+        const petVal = pet[stat] || 0;
+        const allianceVal = Math.round(baseVal * pct / 100);
+
+        breakdown[stat] = {
+            base: baseVal,
+            equipment: equipVal,
+            pet: petVal,
+            alliancePercent: pct,
+            alliance: allianceVal,
+            total: baseVal + equipVal + petVal + allianceVal
+        };
+    }
+
+    return breakdown;
 };
 
 const computeMaxHp = (totalConstitution = 0) => {
     const con = Number(totalConstitution) || 0;
-    return 100 + (con * 20); // Fórmula base + constitución
+    return 100 + (con * 20);
+};
+
+// ===== POWER =====
+const RARITY_POWER_MAP = {
+    common: 0,
+    uncommon: 10,
+    rare: 25,
+    epic: 60,
+    legendary: 150,
+    mythic: 300
+};
+
+const computePower = (totalStats, level, equippedItems, derivedStats) => {
+    const s = Number(totalStats.strength) || 0;
+    const d = Number(totalStats.dexterity) || 0;
+    const c = Number(totalStats.constitution) || 0;
+    const i = Number(totalStats.intelligence) || 0;
+    const l = Number(totalStats.luck) || 0;
+    const ch = Number(totalStats.charisma) || 0;
+
+    const attributePower = Math.floor(s * 4 + d * 3 + c * 4 + i * 3 + l * 2 + ch * 1.5);
+
+    const avgWeaponDmg = ((Number(totalStats.damage_min) || 0) + (Number(totalStats.damage_max) || 0)) / 2;
+    const armor = Number(totalStats.armor) || 0;
+    const defenseFlat = Number(totalStats.defense) || 0;
+
+    const combatPower = Math.floor(
+        (avgWeaponDmg || 0) * 4 +
+        armor * 3 +
+        defenseFlat * 3 +
+        (Number(derivedStats.critChance) || 0) * 12 +
+        (Number(derivedStats.blockChance) || 0) * 12 +
+        (Number(derivedStats.healingPower) || 0) * 8 +
+        (Number(derivedStats.skillDamageBonus) || 0) * 8
+    );
+
+    const levelPower = (Number(level) || 0) * 25;
+
+    const rarityPower = (equippedItems || []).reduce((sum, item) => {
+        return sum + (RARITY_POWER_MAP[item.rarity] || 0);
+    }, 0);
+
+    const total = Math.floor(attributePower + combatPower + levelPower + rarityPower);
+
+    return {
+        total,
+        breakdown: {
+            attributes: attributePower,
+            combat: combatPower,
+            level: levelPower,
+            rarity: rarityPower
+        }
+    };
+};
+
+// ===== DERIVED STATS =====
+const computeDerivedStats = (totalStats = {}) => {
+    const s = Number(totalStats.strength) || 0;
+    const d = Number(totalStats.dexterity) || 0;
+    const c = Number(totalStats.constitution) || 0;
+    const i = Number(totalStats.intelligence) || 0;
+    const l = Number(totalStats.luck) || 0;
+
+    const weaponMin = Number(totalStats.damage_min) || 0;
+    const weaponMax = Number(totalStats.damage_max) || 0;
+    const armor = Number(totalStats.armor) || 0;
+    const defenseFlat = Number(totalStats.defense) || 0;
+
+    return {
+        maxHp: computeMaxHp(c),
+        physicalDamageMin: weaponMin + s * 2,
+        physicalDamageMax: weaponMax + s * 2,
+        defense: armor + defenseFlat + Math.floor(c / 2),
+        critChance: Math.min(d * 0.25, 25),
+        blockChance: Math.min(l * 0.25, 25),
+        healingPower: Math.min(i * 0.5, 25),
+        skillDamageBonus: Math.min(i * 0.25, 25)
+    };
 };
 
 // --- NUEVA LÓGICA DE REGENERACIÓN UNIFICADA ---
@@ -104,13 +257,16 @@ const getDb = (client) => client || pool;
 const getEquippedStats = async (playerId, client) => {
     const db = getDb(client);
     const res = await db.query(
-        `SELECT COALESCE(pi.base_stats, it.base_stats) AS stats
+        `SELECT COALESCE(pi.base_stats, it.base_stats) AS stats, it.rarity
          FROM player_items pi
          JOIN items_templates it ON pi.template_id = it.id
          WHERE pi.player_id = $1 AND pi.is_equipped = true`,
         [playerId]
     );
-    return res.rows.map((row) => normalizeStats(row.stats));
+    return res.rows.map((row) => ({
+        stats: normalizeStats(row.stats),
+        rarity: row.rarity
+    }));
 };
 
 const getActivePetBonuses = async (playerId, client) => {
@@ -141,11 +297,34 @@ const hydratePlayer = async (userOrId, client) => {
     const equippedStats = await getEquippedStats(basePlayer.id, db);
     const petBonuses = await getActivePetBonuses(basePlayer.id, db);
 
+    const alliancePercent = await getAllianceStatsPercent(basePlayer.id, db);
+
     const totalStats = computeTotalStats({
         baseStats: basePlayer.stats,
         equippedItems: equippedStats,
-        petBonuses
+        petBonuses,
+        alliancePercent
     });
+
+    const statBreakdown = computeStatBreakdown({
+        baseStats: basePlayer.stats,
+        equippedItems: equippedStats,
+        petBonuses,
+        alliancePercent
+    });
+
+    const derivedStats = computeDerivedStats(totalStats);
+
+    const power = computePower(totalStats, basePlayer.level, equippedStats, derivedStats);
+
+    const activeBonuses = { alliance: [] };
+    if (alliancePercent > 0) {
+        activeBonuses.alliance.push({
+            source: 'Campo de Entrenamiento',
+            label: `+${alliancePercent}% atributos`,
+            statsPercent: alliancePercent
+        });
+    }
 
     const maxHp = computeMaxHp(totalStats.constitution || 0);
     
@@ -191,12 +370,16 @@ const hydratePlayer = async (userOrId, client) => {
         ...basePlayer,
         stats: normalizeStats(basePlayer.stats),
         current_hp: currentHp,
-        energy: currentEnergy, // Devolvemos valor actualizado
-        valor: currentValor,   // Devolvemos valor actualizado
+        energy: currentEnergy,
+        valor: currentValor,
         last_regen_at: lastRegenAt,
         calculatedMaxHp: maxHp,
         calculated_max_hp: maxHp,
-        total_stats: totalStats
+        total_stats: totalStats,
+        stat_breakdown: statBreakdown,
+        derived_stats: derivedStats,
+        power,
+        active_bonuses: activeBonuses
     };
 };
 
@@ -205,6 +388,10 @@ module.exports = {
     HP_REGEN_EVERY_SECONDS,
     computeTotalStats,
     computeMaxHp,
-    applyRegen, // Exportamos la nueva función
-    hydratePlayer
+    applyRegen,
+    hydratePlayer,
+    computeStatBreakdown,
+    computeDerivedStats,
+    computePower,
+    getAllianceStatsPercent
 };
