@@ -76,14 +76,18 @@ function PetStableModal({
     const isFullFeedText = feedCostText.toLowerCase().includes('recupera');
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={onClose}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-2 sm:p-4 animate-in fade-in" onClick={onClose}>
             <div
-                className="relative w-full max-w-6xl max-h-[90vh] lg:h-[75vh] bg-slate-950 border-2 border-amber-600 rounded-xl overflow-y-auto lg:overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]"
+                className="relative w-full max-w-6xl max-h-[90vh] lg:h-[75vh] bg-slate-950 border-2 border-amber-600 rounded-xl shadow-[0_0_50px_rgba(245,158,11,0.2)] overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
-                <button onClick={onClose} className="absolute top-3 right-3 text-white z-50 p-1.5 bg-black/60 rounded-full hover:bg-red-600 transition-colors"><X size={18} /></button>
+                <button onClick={onClose} className="absolute top-3 right-3 z-50 p-1.5 bg-black/60 rounded-full hover:bg-red-600 transition-colors hidden lg:block"><X size={18} className="text-white" /></button>
 
-                <div className="flex flex-col lg:flex-row h-full">
+                <div className="h-full overflow-y-auto lg:overflow-hidden">
+                    <div className="flex flex-col lg:flex-row min-h-full">
+                        <div className="sticky top-0 z-50 lg:hidden flex justify-end p-2 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800">
+                            <button onClick={onClose} className="p-1.5 bg-slate-800 hover:bg-red-600 rounded-full transition-colors"><X size={18} className="text-slate-300" /></button>
+                        </div>
                     {/* LEFT COLUMN — Pet list */}
                     <div className="lg:w-[280px] lg:min-w-[280px] lg:border-r border-slate-800 bg-black/40 flex flex-col lg:overflow-y-auto">
                         <div className="p-4 border-b border-slate-800 shrink-0">
@@ -144,10 +148,10 @@ function PetStableModal({
                     </div>
 
                     {/* CENTER COLUMN — Pet detail */}
-                    <div className="flex-1 flex flex-col bg-slate-950">
+                    <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
                         {activePet ? (
                             <>
-                                <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center min-h-[200px]">
+                                <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center min-h-[200px] max-h-[55vh]">
                                     <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div>
                                     <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-transparent to-transparent z-[5]"></div>
                                     <img src={activePet.image_url} className="h-full w-full object-contain p-4 animate-in zoom-in duration-500 z-10" />
@@ -157,7 +161,7 @@ function PetStableModal({
                                         <p className="text-slate-300 text-xs max-w-md mx-auto italic drop-shadow-[0_2px_3px_rgba(0,0,0,0.8)] mt-1">"{activePet.description}"</p>
                                     </div>
                                 </div>
-                                <div className="bg-slate-900/80 border-t border-slate-800 p-3 space-y-2">
+                                <div className="bg-slate-900/80 border-t border-slate-800 p-3 space-y-2 shrink-0 min-h-[150px]">
                                     <div className="flex items-center justify-between">
                                         <span className="text-[11px] text-slate-500">Tier {activePet.tier}</span>
                                     </div>
@@ -349,6 +353,7 @@ function PetStableModal({
                                 </div>
                             )}
                         </div>
+                    </div>
                     </div>
                 </div>
             </div>
