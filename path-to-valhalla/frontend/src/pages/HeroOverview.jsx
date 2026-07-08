@@ -39,6 +39,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [showCombatStats, setShowCombatStats] = useState(false);
     const [showActiveBonuses, setShowActiveBonuses] = useState(false);
     const [showQuickSuggestions, setShowQuickSuggestions] = useState(false);
+    const [showBreakdown, setShowBreakdown] = useState(false);
+    const [showDesglosePopup, setShowDesglosePopup] = useState(false);
 
     const [selectedItem, setSelectedItem] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -945,7 +947,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                     )}
 
                                     {/* Botón Equipar */}
-                                    <div className="mt-2 pt-2 border-t border-white/5">
+                                    <div className="sticky bottom-0 bg-slate-900/90 mt-2 pt-2 border-t border-white/5 backdrop-blur-sm">
                                         {showSlotChoice?.item?.id === item.id ? (
                                             <div className="flex gap-1">
                                                 {showSlotChoice.slots.map((s) => {
@@ -1061,11 +1063,11 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 <div className="md:col-span-1 lg:col-span-3 xl:col-span-3 space-y-4">
                     <div className="bg-black/50 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 flex items-center gap-4 shadow-lg">
                         <div className="relative group cursor-zoom-in w-20 h-20 shrink-0" onClick={() => setShowAvatarModal(true)}>
-                            <div className="w-full h-full rounded-full border-2 border-amber-500/80 bg-slate-900 overflow-hidden relative z-10 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
-                                <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-80 rounded-full" />
-                                <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-top z-10 drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
+                            <div className="w-full h-full rounded-xl border-2 border-amber-500/80 bg-slate-900 overflow-hidden relative z-10 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                                <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-80 rounded-xl" />
+                                <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-[center_18%] scale-125 z-10 drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
                             </div>
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 rounded-full">
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 rounded-xl">
                                 <Maximize2 size={16} className="text-white" />
                             </div>
                         </div>
@@ -1114,71 +1116,216 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         </button>
                     )}
 
-                    <StatsPanel stats={user.stats} bonuses={equipPetBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} />
+                    {/* MÓDULO UNIFICADO: ATRIBUTOS (Entrenamiento + Desglose) */}
+                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        {/* HEADER */}
+                        <div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-amber-500/20">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Atributos</h3>
+                            {user.stat_points > 0 && (
+                                <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 border border-amber-600/50 text-[8px] text-amber-300 font-bold uppercase tracking-wider animate-pulse">
+                                    <Zap size={9} className="text-amber-400" />
+                                    {user.stat_points} pts.
+                                </span>
+                            )}
+                            {user.stat_breakdown && (
+                                <button onClick={() => setShowDesglosePopup(true)} className="text-[9px] text-amber-500/70 hover:text-amber-400 transition-colors uppercase tracking-wider">
+                                    Desglose
+                                </button>
+                            )}
+                        </div>
 
-                    {/* DESGLOSE DE ATRIBUTOS */}
-                    {user.stat_breakdown && (
-                        <div className="mt-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs px-3 pt-3 pb-2 border-b border-amber-500/20">Desglose de Atributos</h3>
-                            <div className="divide-y divide-amber-900/30">
-                                {Object.entries(user.stat_breakdown).map(([key, bd]) => {
-                                    const labelMap = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
-                                    const bonuses = [];
-                                    if (bd.equipment > 0) bonuses.push({ label: 'Equipo', value: `+${bd.equipment}`, color: 'text-cyan-400' });
-                                    if (bd.pet > 0) bonuses.push({ label: 'Mascota', value: `+${bd.pet}`, color: 'text-green-400' });
-                                    if (bd.alliance > 0) bonuses.push({ label: 'Alianza', value: `+${bd.alliancePercent}% (+${bd.alliance})`, color: 'text-amber-400' });
-                                    return (
-                                        <div key={key} className="flex items-center px-3 py-2 hover:bg-white/[0.02] transition-colors">
-                                            <div className="flex items-center gap-2 w-[120px] shrink-0">
-                                                <img src={STAT_IMAGES[key] || `/icons/stats/${key}.png`} className="w-5 h-5 object-contain" />
-                                                <span className="text-xs font-bold text-slate-300">{labelMap[key] || key}</span>
-                                            </div>
+                        {/* ENTRENAMIENTO */}
+                        <div className="p-3">
+                            <StatsPanel stats={user.stats} bonuses={equipPetBonuses} availablePoints={user.stat_points || 0} maxHp={displayMaxHp} onSave={handleSaveStats} compact />
+                        </div>
+                    </div>
+
+                    {/* ACORDEÓN: Estadísticas de Combate */}
+                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        <button onClick={() => setShowCombatStats(!showCombatStats)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Estadísticas de Combate</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showCombatStats ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showCombatStats && (
+                            <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-2">
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
+                                    <span className="text-red-400 font-mono text-sm">{user.current_hp} / {displayMaxHp}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
+                                    <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
+                                    <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.crit} className="w-5 h-5 drop-shadow" /> Crítico</span>
+                                    <span className="text-yellow-200 font-mono text-sm">{derivedStats.critChance.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.block} className="w-5 h-5 drop-shadow" /> Bloqueo</span>
+                                    <span className="text-blue-200 font-mono text-sm">{derivedStats.blockChance.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.wisdom} className="w-5 h-5 drop-shadow" /> Poder Curación</span>
+                                    <span className="text-green-400 font-mono text-sm">+{derivedStats.healingPct}%</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.intelligence} className="w-5 h-5 drop-shadow" /> Daño Habilidad</span>
+                                    <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ACORDEÓN: Bonos Activos */}
+                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        <button onClick={() => setShowActiveBonuses(!showActiveBonuses)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Bonos Activos</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showActiveBonuses ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showActiveBonuses && (() => {
+                            const allianceBonuses = user.active_bonuses?.alliance || [];
+                            const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
+                            const hasAny = allianceBonuses.length > 0 || hasPetBonus;
+
+                            const PET_STAT_LABELS = {
+                                strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución',
+                                intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte'
+                            };
+
+                            return (
+                                <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
+                                    {!hasAny && (
+                                        <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
+                                    )}
+                                    {allianceBonuses.map((b, i) => (
+                                        <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 font-bold uppercase tracking-wider text-[8px]">Alianza</span>
+                                            <span className="text-slate-300">{b.source}</span>
+                                            <span className="text-amber-300 font-mono ml-auto">{b.label}</span>
+                                        </div>
+                                    ))}
+                                    {hasPetBonus && (
+                                        <div className="flex items-start gap-1.5 text-[10px]">
+                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 font-bold uppercase tracking-wider text-[8px] mt-0.5">Mascota</span>
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                    <span className="text-white font-mono font-bold text-sm tabular-nums">{bd.total}</span>
-                                                    <span className="text-[10px] text-slate-600 mx-1">|</span>
-                                                    <span className="text-[10px] text-slate-500 font-mono">Base {bd.base}</span>
-                                                    {bonuses.map((b, i) => (
-                                                        <span key={i} className="text-[10px] font-mono">
-                                                            <span className={`${b.color}`}>{b.value}</span>
-                                                        </span>
+                                                <span className="text-slate-300">{equippedPet.name}</span>
+                                                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-green-400 font-mono">
+                                                    {Object.entries(equippedPet.bonus_stats).map(([k, v]) => (
+                                                        <span key={k}>{PET_STAT_LABELS[k] || k} +{v}</span>
                                                     ))}
                                                 </div>
                                             </div>
                                         </div>
-                                    );
-                                })}
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+
+                    {/* ACORDEÓN: Sugerencias rápidas */}
+                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
+                        <button onClick={() => setShowQuickSuggestions(!showQuickSuggestions)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
+                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Sugerencias rápidas</h3>
+                            <span className={`text-amber-400 transition-transform duration-200 ${showQuickSuggestions ? 'rotate-180' : ''}`}>▼</span>
+                        </button>
+                        {showQuickSuggestions && (
+                            <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
+                                {quickSuggestions.length === 0 ? (
+                                    <p className="text-[10px] text-slate-500 italic">Todo está en orden por ahora.</p>
+                                ) : (
+                                    quickSuggestions.map((s, i) => (
+                                        <div key={i} className="flex items-start gap-2 text-[10px]">
+                                            <span className={`shrink-0 font-bold mt-0.5 ${s.tone === 'amber' ? 'text-amber-400' : s.tone === 'green' ? 'text-green-400' : s.tone === 'blue' ? 'text-blue-400' : 'text-slate-400'}`}>▶</span>
+                                            <span className={`${s.tone === 'amber' ? 'text-amber-200' : s.tone === 'green' ? 'text-green-200' : s.tone === 'blue' ? 'text-blue-200' : 'text-slate-300'}`}>
+                                                {s.text}
+                                            </span>
+                                        </div>
+                                    ))
+                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
                 {/* COL 2: PAPER DOLL + MASCOTA */}
                 <div className="md:col-span-1 lg:col-span-5 xl:col-span-5">
-                    <div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 min-h-[600px] h-[70vh] max-h-[780px] relative shadow-2xl flex flex-col items-center overflow-hidden">
+                    <div className="bg-black/40 backdrop-blur-md border border-amber-900/30 rounded-lg p-4 min-h-[580px] relative shadow-2xl flex flex-col items-center overflow-hidden">
                         <h3 className="text-amber-500 font-serif uppercase tracking-widest text-sm mb-4 border-b border-amber-500/20 w-full text-center pb-2">Equipamiento</h3>
-                        <div className="relative w-full h-full max-w-[420px]">
+                        <div className="relative w-full flex-1 max-w-[420px]" style={{ minHeight: '420px' }}>
+                            {/* Fondo decorativo — más visible */}
+                            <div className="absolute inset-0 z-[-1] pointer-events-none overflow-hidden">
+                                <img src={raceData.bgImage} className="w-full h-full object-cover opacity-25" />
+                                <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/60" />
+                                <div className="absolute -top-16 -left-16 w-48 h-48 bg-amber-700/20 rounded-full blur-3xl" />
+                                <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-indigo-800/20 rounded-full blur-3xl" />
+                            </div>
                             <div className="absolute inset-x-0 top-12 bottom-12 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none">
-                                <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50 pointer-events-none" />
+                                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40 pointer-events-none" />
                                 <img src={getAvatarImage()} className="h-full w-auto object-contain drop-shadow-[0_0_25px_rgba(0,0,0,0.9)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
                             </div>
+                            {/* HEAD — centro superior */}
                             <div className="absolute top-0 left-1/2 -translate-x-1/2">{renderEquipmentSlot("head", "", "bottom")}</div>
-                            <div className="absolute top-4 left-0">{renderEquipmentSlot("earring_1", "", "right")}</div>
-                            <div className="absolute top-4 right-0">{renderEquipmentSlot("earring_2", "", "left")}</div>
-                            <div className="absolute top-24 left-0">{renderEquipmentSlot("neck", "", "bottom")}</div>
-                            <div className="absolute top-44 left-0">{renderEquipmentSlot("main_hand")}</div>
-                            <div className="absolute bottom-36 left-0">{renderEquipmentSlot("ring_1")}</div>
-                            <div className="absolute bottom-16 left-0">{renderEquipmentSlot("gloves")}</div>
-                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2">{renderEquipmentSlot("feet")}</div>
-                            <div className="absolute top-24 right-0">{renderEquipmentSlot("chest")}</div>
-                            <div className="absolute top-44 right-0">{renderEquipmentSlot("off_hand")}</div>
-                            <div className="absolute bottom-36 right-0">{renderEquipmentSlot("ring_2")}</div>
                             
-                            {/* Pet Slot */}
-                            <div className={`absolute bottom-8 right-8 w-16 h-16 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 shadow-lg z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${equippedPet ? 'border-amber-400' : 'border-slate-600 border-dashed'}`} onClick={() => setShowPetModal(true)} title="Ver Mascotas">
+                            {/* COLUMNA IZQUIERDA — 6 slots equiespaciados */}
+                            <div className="absolute top-[8%] left-0">{renderEquipmentSlot("earring_1", "", "right")}</div>
+                            <div className="absolute top-[24%] left-0">{renderEquipmentSlot("neck", "", "bottom")}</div>
+                            <div className="absolute top-[40%] left-0">{renderEquipmentSlot("main_hand")}</div>
+                            <div className="absolute top-[56%] left-0">{renderEquipmentSlot("ring_1")}</div>
+                            <div className="absolute top-[72%] left-0">{renderEquipmentSlot("gloves")}</div>
+                            
+                            {/* COLUMNA DERECHA — 6 slots equiespaciados (incluye mascota) */}
+                            <div className="absolute top-[8%] right-0">{renderEquipmentSlot("earring_2", "", "left")}</div>
+                            <div className="absolute top-[24%] right-0">{renderEquipmentSlot("chest")}</div>
+                            <div className="absolute top-[40%] right-0">{renderEquipmentSlot("off_hand")}</div>
+                            <div className="absolute top-[56%] right-0">{renderEquipmentSlot("ring_2")}</div>
+                            
+                            {/* Mascota — slot circular integrado como 6° de la columna derecha */}
+                            <div className={`absolute top-[72%] right-0 w-16 h-16 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 shadow-lg z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm ${equippedPet ? 'border-amber-400' : 'border-slate-600 border-dashed'}`} onClick={() => setShowPetModal(true)} title="Ver Mascotas">
                                 {equippedPet ? <img src={equippedPet.image_url} className="w-full h-full object-cover rounded-full p-1" /> : <img src="/icons/slots/pet_slot.png" className="w-10 h-10 opacity-30" />}
                                 {equippedPet && equippedPet.current_hunger < 20 && <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />}
                             </div>
+                            
+                            {/* FEET — centro inferior */}
+                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2">{renderEquipmentSlot("feet")}</div>
+                        </div>
+
+                        {/* PET INFO — integrado como footer del panel */}
+                        <div onClick={() => setShowPetModal(true)} className="cursor-pointer border-t border-amber-900/40 w-full group">
+                            {equippedPet ? (
+                                <div className="flex items-center gap-2.5 p-2.5">
+                                    <div className="relative w-10 h-10 rounded-full border-2 border-amber-400/70 flex items-center justify-center bg-black/60 shrink-0 overflow-hidden">
+                                        <img src={equippedPet.image_url} className="w-full h-full object-cover" />
+                                        {equippedPet.current_hunger < 20 && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full animate-ping" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-xs font-bold text-slate-200 truncate group-hover:text-amber-300 transition-colors">{equippedPet.name}</span>
+                                            <span className="text-[8px] px-1 py-0.5 rounded bg-green-900/60 text-green-400 font-bold uppercase leading-none">Activa</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-2.5 text-[10px] text-green-400 font-mono mt-0.5">
+                                            {equippedPet.bonus_stats && Object.keys(equippedPet.bonus_stats).length > 0 ? (
+                                                Object.entries(equippedPet.bonus_stats).map(([k, v]) => {
+                                                    const labels = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
+                                                    return <span key={k}>{labels[k] || k} +{v}</span>;
+                                                })
+                                            ) : (
+                                                <span className="text-slate-500 italic font-sans">Sin bonos activos.</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 p-2.5 opacity-60 hover:opacity-100 transition-opacity">
+                                    <div className="w-10 h-10 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center bg-black/40 shrink-0">
+                                        <img src="/icons/slots/pet_slot.png" className="w-6 h-6 opacity-30" />
+                                    </div>
+                                    <span className="text-[11px] text-slate-500 italic">Equipa una mascota</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1330,118 +1477,6 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
                 </div>
 
-                {/* COL 4: ACORDEONES (mobile: después de inventario) */}
-                <div className="md:col-span-2 lg:col-span-3 space-y-4">
-                    {/* ACORDEÓN: Estadísticas de Combate */}
-                    <div className="p-3 rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)]">
-                        <button onClick={() => setShowCombatStats(!showCombatStats)} className="w-full flex items-center justify-between text-left">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Estadísticas de Combate</h3>
-                            <span className={`text-amber-400 transition-transform duration-200 ${showCombatStats ? 'rotate-180' : ''}`}>▼</span>
-                        </button>
-                        {showCombatStats && (
-                            <div className="mt-2 pt-2 border-t border-amber-500/20 space-y-2">
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.health} className="w-5 h-5 drop-shadow" /> Salud</span>
-                                    <span className="text-red-400 font-mono text-sm">{user.current_hp} / {displayMaxHp}</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.damage} className="w-5 h-5 drop-shadow" /> Daño Físico</span>
-                                    <span className="text-amber-400 font-mono font-extrabold text-sm">{derivedStats.totalDamageMin} - {derivedStats.totalDamageMax}</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.defense} className="w-5 h-5 drop-shadow" /> Defensa</span>
-                                    <span className="text-white font-mono text-sm">{derivedStats.defense}</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.crit} className="w-5 h-5 drop-shadow" /> Crítico</span>
-                                    <span className="text-yellow-200 font-mono text-sm">{derivedStats.critChance.toFixed(1)}%</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.block} className="w-5 h-5 drop-shadow" /> Bloqueo</span>
-                                    <span className="text-blue-200 font-mono text-sm">{derivedStats.blockChance.toFixed(1)}%</span>
-                                </div>
-                                <div className="flex justify-between items-center pb-1">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.wisdom} className="w-5 h-5 drop-shadow" /> Poder Curación</span>
-                                    <span className="text-green-400 font-mono text-sm">+{derivedStats.healingPct}%</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-300 flex items-center gap-2 font-semibold tracking-wide"><img src={STAT_IMAGES.intelligence} className="w-5 h-5 drop-shadow" /> Daño Habilidad</span>
-                                    <span className="text-purple-400 font-mono text-sm">+{derivedStats.skillDamagePct}%</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ACORDEÓN: Bonos Activos */}
-                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
-                        <button onClick={() => setShowActiveBonuses(!showActiveBonuses)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Bonos Activos</h3>
-                            <span className={`text-amber-400 transition-transform duration-200 ${showActiveBonuses ? 'rotate-180' : ''}`}>▼</span>
-                        </button>
-                        {showActiveBonuses && (() => {
-                            const allianceBonuses = user.active_bonuses?.alliance || [];
-                            const hasPetBonus = equippedPet && equippedPet.current_hunger > 0 && Object.keys(equippedPet.bonus_stats || {}).length > 0;
-                            const hasAny = allianceBonuses.length > 0 || hasPetBonus;
-
-                            const PET_STAT_LABELS = {
-                                strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución',
-                                intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte'
-                            };
-
-                            return (
-                                <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
-                                    {!hasAny && (
-                                        <p className="text-[10px] text-slate-500 italic">No hay bonos activos.</p>
-                                    )}
-                                    {allianceBonuses.map((b, i) => (
-                                        <div key={i} className="flex items-center gap-1.5 text-[10px]">
-                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 font-bold uppercase tracking-wider text-[8px]">Alianza</span>
-                                            <span className="text-slate-300">{b.source}</span>
-                                            <span className="text-amber-300 font-mono ml-auto">{b.label}</span>
-                                        </div>
-                                    ))}
-                                    {hasPetBonus && (
-                                        <div className="flex items-start gap-1.5 text-[10px]">
-                                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 font-bold uppercase tracking-wider text-[8px] mt-0.5">Mascota</span>
-                                            <div className="flex-1 min-w-0">
-                                                <span className="text-slate-300">{equippedPet.name}</span>
-                                                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-green-400 font-mono">
-                                                    {Object.entries(equippedPet.bonus_stats).map(([k, v]) => (
-                                                        <span key={k}>{PET_STAT_LABELS[k] || k} +{v}</span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })()}
-                    </div>
-
-                    {/* ACORDEÓN: Sugerencias rápidas */}
-                    <div className="rounded-lg border border-amber-900/40 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-black/70 shadow-[0_0_25px_rgba(0,0,0,0.35)] overflow-hidden">
-                        <button onClick={() => setShowQuickSuggestions(!showQuickSuggestions)} className="w-full flex items-center justify-between text-left px-3 py-2.5">
-                            <h3 className="text-amber-500 font-serif uppercase tracking-widest text-xs">Sugerencias rápidas</h3>
-                            <span className={`text-amber-400 transition-transform duration-200 ${showQuickSuggestions ? 'rotate-180' : ''}`}>▼</span>
-                        </button>
-                        {showQuickSuggestions && (
-                            <div className="px-3 pb-3 pt-2 border-t border-amber-500/20 space-y-1.5">
-                                {quickSuggestions.length === 0 ? (
-                                    <p className="text-[10px] text-slate-500 italic">Todo está en orden por ahora.</p>
-                                ) : (
-                                    quickSuggestions.map((s, i) => (
-                                        <div key={i} className="flex items-start gap-2 text-[10px]">
-                                            <span className={`shrink-0 font-bold mt-0.5 ${s.tone === 'amber' ? 'text-amber-400' : s.tone === 'green' ? 'text-green-400' : s.tone === 'blue' ? 'text-blue-400' : 'text-slate-400'}`}>▶</span>
-                                            <span className={`${s.tone === 'amber' ? 'text-amber-200' : s.tone === 'green' ? 'text-green-200' : s.tone === 'blue' ? 'text-blue-200' : 'text-slate-300'}`}>
-                                                {s.text}
-                                            </span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
             </div>
 
             {/* MODAL DESGLOSE PODER */}
@@ -1472,6 +1507,50 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                     {user.power.total.toLocaleString()}
                                 </span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DESGLOSE DE ATRIBUTOS — tabla clara */}
+            {showDesglosePopup && user.stat_breakdown && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDesglosePopup(false)}>
+                    <div className="bg-slate-900 border-2 border-amber-600 rounded-lg p-5 max-w-lg w-full mx-4 shadow-[0_0_40px_rgba(245,158,11,0.25)]" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4 border-b border-amber-500/20 pb-2">
+                            <h3 className="text-amber-500 font-serif font-bold uppercase tracking-widest text-sm">Desglose de Atributos</h3>
+                            <button onClick={() => setShowDesglosePopup(false)} className="text-slate-400 hover:text-white transition-colors"><X size={16} /></button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="text-[9px] text-slate-500 uppercase tracking-wider border-b border-amber-900/30">
+                                        <th className="text-left py-1.5 pr-2 font-bold">Atributo</th>
+                                        <th className="text-right px-1 py-1.5 font-bold">Base</th>
+                                        <th className="text-right px-1 py-1.5 font-bold">Equipo</th>
+                                        <th className="text-right px-1 py-1.5 font-bold">Mascota</th>
+                                        <th className="text-right px-1 py-1.5 font-bold">Alianza</th>
+                                        <th className="text-right pl-2 py-1.5 font-bold">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(user.stat_breakdown).map(([key, bd]) => {
+                                        const labelMap = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
+                                        return (
+                                            <tr key={key} className="border-b border-amber-900/20 hover:bg-amber-900/10">
+                                                <td className="py-2 pr-2 flex items-center gap-1.5">
+                                                    <img src={STAT_IMAGES[key] || `/icons/stats/${key}.png`} className="w-4 h-4 object-contain shrink-0" />
+                                                    <span className="text-slate-200 font-bold">{labelMap[key] || key}</span>
+                                                </td>
+                                                <td className="text-right px-1 py-2 font-mono text-slate-400">{bd.base}</td>
+                                                <td className="text-right px-1 py-2 font-mono">{bd.equipment > 0 ? <span className="text-cyan-400">+{bd.equipment}</span> : <span className="text-slate-600">—</span>}</td>
+                                                <td className="text-right px-1 py-2 font-mono">{bd.pet > 0 ? <span className="text-green-400">+{bd.pet}</span> : <span className="text-slate-600">—</span>}</td>
+                                                <td className="text-right px-1 py-2 font-mono">{bd.alliance > 0 ? <span className="text-amber-400">+{bd.alliancePercent}% (+{bd.alliance})</span> : <span className="text-slate-600">—</span>}</td>
+                                                <td className="text-right pl-2 py-2 font-mono font-bold text-white">{bd.total}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

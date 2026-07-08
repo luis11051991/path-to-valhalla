@@ -35,7 +35,7 @@ const STAT_CONFIG = {
     }
 };
 
-const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0 }) => {
+const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0, compact = false }) => {
     // Estado temporal (lo que estás modificando antes de confirmar)
     const [pendingStats, setPendingStats] = useState(stats);
     const [spentPoints, setSpentPoints] = useState(0);
@@ -95,10 +95,14 @@ const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0 }) => {
         setSpentPoints(0);
     };
 
+    const wrapperClass = compact
+        ? 'relative transition-all duration-300'
+        : 'bg-slate-900/80 border border-slate-700 rounded-lg p-4 mb-4 relative transition-all duration-300';
+
     return (
-        <div className="bg-slate-900/80 border border-slate-700 rounded-lg p-4 mb-4 relative transition-all duration-300">
+        <div className={wrapperClass}>
             
-            {/* SECCIÓN 1: CABECERA Y PUNTOS DISPONIBLES */}
+            {!compact && (
             <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
                 <h3 className="text-amber-500 font-bold uppercase tracking-widest text-sm">Entrenamiento</h3>
                 <div className="flex items-center gap-2">
@@ -108,6 +112,7 @@ const StatsPanel = ({ stats, bonuses, availablePoints, onSave, maxHp = 0 }) => {
                     </span>
                 </div>
             </div>
+            )}
 
             {/* SECCIÓN 2: LISTA DE ATRIBUTOS (Aquí está el bucle inteligente) */}
             <div className="space-y-2 mb-4">
