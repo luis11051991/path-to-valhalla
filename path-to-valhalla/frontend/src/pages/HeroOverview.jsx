@@ -1065,7 +1065,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         <div className="relative group cursor-zoom-in w-20 h-20 shrink-0" onClick={() => setShowAvatarModal(true)}>
                             <div className="w-full h-full rounded-xl border-2 border-amber-500/80 bg-slate-900 overflow-hidden relative z-10 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
                                 <img src={getBackgroundImage()} className="absolute inset-0 w-full h-full object-cover opacity-80 rounded-xl" />
-                                <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-[center_18%] scale-125 z-10 drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
+                                <img src={getAvatarImage()} className="absolute inset-0 w-full h-full object-cover object-[center_12%] scale-125 z-10 drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
                             </div>
                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-20 rounded-xl">
                                 <Maximize2 size={16} className="text-white" />
@@ -1263,7 +1263,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                 <div className="absolute -top-16 -left-16 w-48 h-48 bg-amber-700/20 rounded-full blur-3xl" />
                                 <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-indigo-800/20 rounded-full blur-3xl" />
                             </div>
-                            <div className="absolute inset-x-0 top-12 bottom-12 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none">
+                            <div className="absolute inset-x-0 top-10 bottom-10 flex items-center justify-center z-0 opacity-90 pointer-events-none select-none">
                                 <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40 pointer-events-none" />
                                 <img src={getAvatarImage()} className="h-full w-auto object-contain drop-shadow-[0_0_25px_rgba(0,0,0,0.9)]" style={{ filter: 'contrast(1.28) saturate(1.2) brightness(0.9)' }} />
                             </div>
@@ -1407,7 +1407,7 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                         {filteredInventory.map((item) => (
                                             <div
                                                 key={item.id}
-                                                className={`aspect-square border rounded-sm flex items-center justify-center cursor-pointer shadow-inner relative group transition-all ${selectedItem?.id === item.id ? 'border-amber-400 ring-1 ring-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.3)]' : 'border-amber-600/50 bg-slate-800'} hover:border-amber-400`}
+                                                className={`aspect-square border rounded-sm flex items-center justify-center cursor-pointer shadow-inner relative group transition-all ${selectedItem?.id === item.id ? 'border-amber-400 ring-1 ring-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.3)]' : 'border-slate-700/60 bg-slate-800/80'} hover:border-amber-400`}
                                                 onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
                                                 onMouseEnter={(e) => handleMouseEnter(item, e, 'left')}
                                                 onMouseLeave={handleMouseLeave}
