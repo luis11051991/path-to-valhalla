@@ -8,6 +8,7 @@ import { RACES } from '../constants/races';
 import { apiUrl } from '../constants/api';
 import StatsPanel from '../components/StatsPanel';
 import EvolutionModal from '../components/EvolutionModal';
+import PetStableModal from '../components/pets/PetStableModal';
 import { getRequiredXp } from '../shared/level_xp';
 
 const STAT_IMAGES = {
@@ -1607,60 +1608,17 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 <EvolutionModal user={user} status={evolutionStatus} activeQuestData={evolutionQuestData} onClose={() => setShowEvolutionModal(false)} onEvolveSuccess={(updatedUser) => { onUpdateUser(updatedUser); setShowEvolutionModal(false); setEvolutionStatus('completed'); }} />
             )}
 
-            {showPetModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowPetModal(false)}>
-                    <div className="relative w-full max-w-4xl h-[70vh] bg-slate-950 border-2 border-amber-600 rounded-xl flex overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]" onClick={e => e.stopPropagation()}>
-                        <div className="w-1/3 border-r border-slate-800 bg-black/40 flex flex-col">
-                            <h3 className="p-4 text-amber-500 font-serif font-bold uppercase tracking-widest border-b border-slate-800 flex items-center gap-2"><PawPrint size={18} /> Establo</h3>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                                {myPets.length === 0 ? <div className="text-center p-4 text-slate-500 text-xs">No tienes mascotas aún.</div> : myPets.map(pet => (
-                                    <div key={pet.player_pet_id} onClick={() => setActivePet(pet)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors border ${activePet?.player_pet_id === pet.player_pet_id ? 'bg-amber-900/30 border-amber-500' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'}`}>
-                                        <img src={pet.image_url} className="w-10 h-10 object-cover rounded bg-black" />
-                                        <div><div className="text-sm text-slate-200 font-bold">{pet.name}</div><div className="text-[10px] text-slate-500">Nivel {pet.tier}</div></div>
-                                        {pet.is_active && <span className="ml-auto text-[10px] bg-green-900 text-green-300 px-1 rounded">ACTIVA</span>}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="w-2/3 relative flex flex-col bg-slate-950">
-                            <button onClick={() => setShowPetModal(false)} className="absolute top-4 right-4 text-white z-50 p-2 bg-black/50 rounded-full hover:bg-red-600"><X /></button>
-                            {activePet ? (
-                                <>
-                                    <div className="flex-1 relative w-full bg-black overflow-hidden flex items-center justify-center">
-                                        <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div>
-                                        <img src={activePet.image_url} className="h-full w-full object-contain p-0 animate-in zoom-in duration-500 z-10" />
-                                        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 to-transparent z-20"></div>
-                                        <div className="absolute bottom-4 left-0 right-0 text-center z-30">
-                                            <h2 className="text-4xl font-serif text-amber-400 drop-shadow-md mb-1">{activePet.name}</h2>
-                                            <p className="text-slate-300 text-sm max-w-lg mx-auto italic drop-shadow-md">"{activePet.description}"</p>
-                                        </div>
-                                    </div>
-                                    <div className="h-48 bg-slate-900 border-t-4 border-amber-900 p-4 flex gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-40">
-                                        <div className="w-1/2 space-y-2">
-                                            <h4 className="text-amber-500 text-xs uppercase tracking-widest font-bold border-b border-slate-700 pb-1 mb-2">Bonificaciones Activas</h4>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {Object.entries(activePet.bonus_stats || {}).map(([key, val]) => (
-                                                    <div key={key} className="bg-slate-800 px-2 py-1.5 rounded text-xs text-white border border-slate-600 capitalize flex justify-between"><span className="text-slate-400">{key}</span> <span className="font-bold text-green-400">+{val}</span></div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="w-1/2 flex flex-col justify-between">
-                                            <div>
-                                                <div className="flex justify-between text-xs text-slate-300 mb-1 font-bold"><span>Nivel de Saciedad</span><span className={activePet.current_hunger < 30 ? 'text-red-500' : 'text-green-500'}>{activePet.current_hunger}%</span></div>
-                                                <div className="h-3 bg-black rounded-full overflow-hidden border border-slate-700"><div className={`h-full ${activePet.current_hunger < 30 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${activePet.current_hunger}%` }}></div></div>
-                                            </div>
-                                            <div className="flex gap-2 mt-2">
-                                                {activePet.is_active ? <div className="flex-1 py-3 bg-slate-800 text-green-500 border border-green-900 rounded flex items-center justify-center gap-2 font-bold text-xs uppercase cursor-default"><CheckCircle size={16} /> Equipada</div> : <button onClick={() => handleEquipPet(activePet.player_pet_id)} className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold uppercase rounded border border-amber-500 shadow-lg hover:scale-105 transition-all">Equipar Ahora</button>}
-                                                <button onClick={() => handleFeedPet(activePet.player_pet_id)} className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase rounded border border-slate-600 transition-colors flex flex-col items-center justify-center gap-1" title={getFeedCostText(activePet.tier)}><Heart size={14} className="text-red-500" /> Comer</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </>
-                            ) : <div className="flex items-center justify-center h-full text-slate-500">Selecciona una mascota del establo</div>}
-                        </div>
-                    </div>
-                </div>
-            )}
+            <PetStableModal
+                isOpen={showPetModal}
+                onClose={() => setShowPetModal(false)}
+                pets={myPets}
+                activePet={activePet}
+                setActivePet={setActivePet}
+                equippedPet={equippedPet}
+                onEquipPet={handleEquipPet}
+                onFeedPet={handleFeedPet}
+                getFeedCostText={getFeedCostText}
+            />
         </div>
     );
 };
