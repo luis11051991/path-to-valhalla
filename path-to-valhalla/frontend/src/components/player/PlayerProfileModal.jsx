@@ -10,9 +10,6 @@ import {
     Swords,
     Skull,
     Crosshair,
-    ScrollText,
-    Scroll,
-    Eye,
     Map,
     Trophy,
     Star,
@@ -151,11 +148,6 @@ function PlayerProfileModal({ playerId, isOpen, onClose, allianceRole, memberSin
                                         <InfoPill icon={Shield} label="Raza" value={player.race || 'Desconocida'} />
                                         <InfoPill icon={Swords} label="Clase" value={player.className || 'Sin clase'} />
                                         <InfoPill icon={Star} label="Nivel" value={formatNumber(player.level)} />
-                                        <InfoPill icon={Eye} label="Última conexión" value={
-                                            player.lastLogin
-                                                ? new Date(player.lastLogin).toLocaleDateString('es-ES')
-                                                : 'Desconocida'
-                                        } />
                                     </div>
 
                                     {alliance ? (
@@ -211,10 +203,6 @@ function PlayerProfileModal({ playerId, isOpen, onClose, allianceRole, memberSin
                                         <StatCard icon={Crosshair} label="Win rate" value={`${formatNumber(statistics.winRate)}%`} />
                                         <StatCard icon={Map} label="Mazmorras" value={formatNumber(statistics.dungeonsCompleted)} />
                                         <StatCard icon={Skull} label="Jefes derrotados" value={formatNumber(statistics.bossesKilled)} />
-                                        <StatCard icon={ScrollText} label="Logros" value={`${formatNumber(statistics.achievementsCompleted)} / ${formatNumber(statistics.achievementsTotal)}`} />
-                                        <StatCard icon={Scroll} label="Fases de logros" value={formatNumber(statistics.achievementPhasesCompleted)} />
-                                        <StatCard icon={Eye} label="Bestiario" value={formatNumber(statistics.bestiaryDiscovered)} />
-                                        <StatCard icon={Map} label="Misiones completadas" value={formatNumber(statistics.questsCompleted)} />
                                     </div>
                                 </div>
                             )}

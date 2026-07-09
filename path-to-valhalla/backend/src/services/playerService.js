@@ -19,11 +19,7 @@ function buildStatisticsResponse(row) {
         dungeonsCompleted: toNumber(row.expeditions_completed),
         bossesKilled: toNumber(row.bosses_killed),
         hiddenMobsKilled: toNumber(row.hidden_mobs_killed),
-        achievementsCompleted: toNumber(row.achievements_completed),
-        achievementsTotal: 0,
-        achievementPhasesCompleted: toNumber(row.achievement_phases_completed),
-        bestiaryDiscovered: toNumber(row.bestiary_discovered),
-        questsCompleted: toNumber(row.quests_completed)
+        achievementsTotal: 0
     };
 }
 
@@ -35,7 +31,6 @@ async function getPublicProfile(targetPlayerId) {
             p.level,
             p.race,
             p.class_path,
-            p.last_login,
             p.gender,
             c.name AS class_name,
             c.image_url AS class_image
@@ -75,11 +70,7 @@ async function getPublicProfile(targetPlayerId) {
             battles_lost,
             expeditions_completed,
             bosses_killed,
-            hidden_mobs_killed,
-            achievements_completed,
-            achievement_phases_completed,
-            bestiary_discovered,
-            quests_completed
+            hidden_mobs_killed
         FROM player_statistics
         WHERE player_id = $1
     `, [targetPlayerId]);
@@ -103,8 +94,7 @@ async function getPublicProfile(targetPlayerId) {
             gender: playerRow.gender || 'male',
             classPath: playerRow.class_path,
             className: playerRow.class_name,
-            avatarUrl: playerRow.class_image || null,
-            lastLogin: playerRow.last_login || null
+            avatarUrl: playerRow.class_image || null
         },
         alliance: allianceResult.rows.length > 0 ? {
             id: String(allianceResult.rows[0].id),
