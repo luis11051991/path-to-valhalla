@@ -14,6 +14,20 @@ function formatStatName(key) {
     return STAT_TRANSLATIONS[key] || key;
 }
 
+function getPetRarityLabel(tier) {
+    if (tier === 1) return 'Común';
+    if (tier === 2) return 'Raro';
+    if (tier === 3) return 'Legendario';
+    return 'Común';
+}
+
+function getPetRarityClass(tier) {
+    if (tier === 1) return 'text-slate-300 bg-slate-800/70 border-slate-600/50';
+    if (tier === 2) return 'text-blue-300 bg-blue-900/40 border-blue-500/50';
+    if (tier === 3) return 'text-amber-300 bg-amber-900/40 border-amber-500/60';
+    return 'text-slate-300 bg-slate-800/70 border-slate-600/50';
+}
+
 function getHungerPercent(current, max) {
     if (!max) return 0;
     return Math.round((current / max) * 100);
@@ -78,7 +92,7 @@ function PetStableModal({
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-2 sm:p-4 animate-in fade-in" onClick={onClose}>
             <div
-                className="relative w-full max-w-6xl max-h-[90vh] lg:h-[75vh] bg-slate-950 border-2 border-amber-600 rounded-xl shadow-[0_0_50px_rgba(245,158,11,0.2)] overflow-hidden"
+                className="relative w-full max-w-6xl max-h-[92vh] lg:h-[80vh] bg-slate-950 border-2 border-amber-600 rounded-xl shadow-[0_0_50px_rgba(245,158,11,0.2)] overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 <button onClick={onClose} className="absolute top-3 right-3 z-50 p-1.5 bg-black/60 rounded-full hover:bg-red-600 transition-colors hidden lg:block"><X size={18} className="text-white" /></button>
@@ -119,7 +133,15 @@ function PetStableModal({
                                                     <span className="text-sm text-slate-200 font-bold truncate">{pet.name}</span>
                                                     {pet.is_active && <span className="shrink-0 text-[9px] bg-green-900 text-green-300 px-1 py-0.5 rounded font-bold leading-none">ACTIVA</span>}
                                                 </div>
-                                                <div className="text-[10px] text-slate-500">Tier {pet.tier}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-bold leading-none ${getPetRarityClass(pet.tier)}`}>{getPetRarityLabel(pet.tier)}</span>
+                                                    <span className="text-[10px] text-slate-500">Nivel {pet.level || 1}</span>
+                                                </div>
+                                                {pet.experience_to_next_level > 0 && (
+                                                    <div className="h-1 bg-black/50 rounded-full overflow-hidden border border-slate-700/50">
+                                                        <div className="h-full bg-amber-600" style={{ width: `${Math.min(100, (pet.experience || 0) / pet.experience_to_next_level * 100)}%` }}></div>
+                                                    </div>
+                                                )}
                                                 {bonusSum.shown.length > 0 && (
                                                     <div className="text-[10px] text-slate-400">
                                                         {bonusSum.shown.map(([k, v], i) => (
@@ -148,10 +170,10 @@ function PetStableModal({
                     </div>
 
                     {/* CENTER COLUMN — Pet detail */}
-                    <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
+                    <div className="flex-1 flex flex-col bg-slate-950 min-h-0 overflow-y-auto">
                         {activePet ? (
                             <>
-                                <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center min-h-[200px] max-h-[55vh]">
+                                <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center min-h-[200px] max-h-[50vh]">
                                     <div className="absolute inset-0 bg-[url('/patterns/hex.png')] opacity-20"></div>
                                     <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-transparent to-transparent z-[5]"></div>
                                     <img src={activePet.image_url} className="h-full w-full object-contain p-4 animate-in zoom-in duration-500 z-10" />
@@ -161,10 +183,26 @@ function PetStableModal({
                                         <p className="text-slate-300 text-xs max-w-md mx-auto italic drop-shadow-[0_2px_3px_rgba(0,0,0,0.8)] mt-1">"{activePet.description}"</p>
                                     </div>
                                 </div>
-                                <div className="bg-slate-900/80 border-t border-slate-800 p-3 space-y-2 shrink-0 min-h-[150px]">
+                                <div className="bg-slate-900/80 border-t border-slate-800 p-3 space-y-2 shrink-0 min-h-[240px] pb-5">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-[11px] text-slate-500">Tier {activePet.tier}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[11px] px-1.5 py-0.5 rounded border font-bold leading-none ${getPetRarityClass(activePet.tier)}`}>{getPetRarityLabel(activePet.tier)}</span>
+                                            <span className="text-[11px] text-slate-500">Nivel {activePet.level || 1}</span>
+                                        </div>
                                     </div>
+                                    {activePet.experience_to_next_level > 0 ? (
+                                        <div>
+                                            <div className="flex justify-between text-[10px] text-slate-400 mb-0.5">
+                                                <span>EXP</span>
+                                                <span>{activePet.experience || 0}/{activePet.experience_to_next_level}</span>
+                                            </div>
+                                            <div className="h-1.5 bg-black/60 rounded-full overflow-hidden border border-slate-700">
+                                                <div className="h-full bg-amber-600" style={{ width: `${Math.min(100, ((activePet.experience || 0) / activePet.experience_to_next_level) * 100)}%` }}></div>
+                                            </div>
+                                        </div>
+                                    ) : activePet.level >= 10 && (
+                                        <div className="text-[10px] text-amber-500/70">Nivel máximo alcanzado</div>
+                                    )}
                                     <div>
                                         <div className="flex justify-between text-[11px] text-slate-400 mb-1">
                                             <span>Saciedad</span>

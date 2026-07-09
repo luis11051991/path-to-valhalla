@@ -272,14 +272,21 @@ const getEquippedStats = async (playerId, client) => {
 const getActivePetBonuses = async (playerId, client) => {
     const db = getDb(client);
     const res = await db.query(
-        `SELECT p.bonus_stats 
+        `SELECT p.bonus_stats, pp.bonus_growth
          FROM player_pets pp 
          JOIN pets p ON pp.pet_id = p.id 
          WHERE pp.player_id = $1 AND pp.is_active = true AND pp.current_hunger > 0 
          LIMIT 1`,
         [playerId]
     );
-    return normalizeStats(res.rows[0]?.bonus_stats);
+    if (res.rows.length === 0) return {};
+    const base = normalizeStats(res.rows[0]?.bonus_stats);
+    const growth = normalizeStats(res.rows[0]?.bonus_growth);
+    const merged = { ...base };
+    Object.entries(growth).forEach(([key, val]) => {
+        merged[key] = (merged[key] || 0) + (Number(val) || 0);
+    });
+    return merged;
 };
 
 const hydratePlayer = async (userOrId, client) => {

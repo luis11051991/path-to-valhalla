@@ -8,6 +8,7 @@ const statisticsService = require('../services/statisticsService');
 const { getRequiredXp } = require('../shared/level_xp');
 const { computeEnemyXp, computeEnemyLevel } = require('../shared/xp_rewards');
 const { generateEnemyInstance, randomInt, seededRandom } = require('../shared/enemy_generator');
+const { getPetExpGainFromEnemy, getPetHungerCostFromEnemy, applyPetExperience } = require('../shared/pet_xp');
 
 const generateRandomStats = (templateStats, rng) => {
     const finalStats = {};
@@ -398,6 +399,13 @@ exports.startBattle = async (req, res) => {
                     source: 'expedition',
                     zoneId: Number(baseEnemy.zone_id || zoneId)
                 }, client);
+            }
+
+            const petExpGain = getPetExpGainFromEnemy(baseEnemy);
+            const petHungerCost = getPetHungerCostFromEnemy(baseEnemy);
+            const petXpResult = await applyPetExperience(userId, petExpGain, client, petHungerCost);
+            if (petXpResult?.leveledUp) {
+                log.push({ type: 'info', msg: `¡Tu mascota subió a nivel ${petXpResult.newLevel}!` });
             }
         }
 

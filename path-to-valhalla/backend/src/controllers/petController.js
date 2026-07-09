@@ -1,5 +1,25 @@
 const pool = require('../config/db');
 const { hydratePlayer } = require('../shared/player_stats');
+const { getRequiredPetExp, mergePetBonuses } = require('../shared/pet_xp');
+
+function enrichPetRow(row) {
+    const bonusGrowth = typeof row.bonus_growth === 'string'
+        ? JSON.parse(row.bonus_growth)
+        : (row.bonus_growth || {});
+    const bonusStatsBase = typeof row.bonus_stats === 'string'
+        ? JSON.parse(row.bonus_stats)
+        : (row.bonus_stats || {});
+    const bonusStatsFinal = mergePetBonuses(bonusStatsBase, bonusGrowth);
+    return {
+        ...row,
+        level: row.level || 1,
+        experience: row.experience || 0,
+        bonus_growth: bonusGrowth,
+        experience_to_next_level: getRequiredPetExp(row.level || 1, row.tier),
+        bonus_stats_base: bonusStatsBase,
+        bonus_stats: bonusStatsFinal
+    };
+}
 
 // --- OBTENER MIS MASCOTAS ---
 exports.getMyPets = async (req, res) => {
@@ -8,6 +28,7 @@ exports.getMyPets = async (req, res) => {
     try {
         const query = `
             SELECT pp.id as player_pet_id, pp.current_hunger, pp.is_active, pp.nickname,
+                   pp.level, pp.experience, pp.bonus_growth,
                    p.name, p.description, p.image_url, p.tier, p.bonus_stats, p.max_hunger, p.code
             FROM player_pets pp
             JOIN pets p ON pp.pet_id = p.id
@@ -16,7 +37,8 @@ exports.getMyPets = async (req, res) => {
         `;
         
         const result = await pool.query(query, [userId]);
-        res.json({ success: true, pets: result.rows });
+        const pets = result.rows.map(enrichPetRow);
+        res.json({ success: true, pets });
 
     } catch (err) {
         console.error("Error obteniendo mascotas:", err);
@@ -37,6 +59,7 @@ exports.equipPet = async (req, res) => {
 
         const petsRes = await pool.query(`
             SELECT pp.id as player_pet_id, pp.current_hunger, pp.is_active, pp.nickname,
+                   pp.level, pp.experience, pp.bonus_growth,
                    p.name, p.description, p.image_url, p.tier, p.bonus_stats, p.max_hunger, p.code
             FROM player_pets pp
             JOIN pets p ON pp.pet_id = p.id
@@ -44,6 +67,7 @@ exports.equipPet = async (req, res) => {
             ORDER BY pp.is_active DESC, p.tier DESC
         `, [userId]);
 
+        const pets = petsRes.rows.map(enrichPetRow);
         const hydrated = await hydratePlayer(userId);
         const bgResult = await pool.query('SELECT image_url FROM backgrounds WHERE id = $1', [hydrated.active_background_id || 1]);
         const bagsResult = await pool.query('SELECT bag_number, expires_at FROM player_bag_rentals WHERE player_id = $1 AND expires_at > NOW()', [userId]);
@@ -54,7 +78,7 @@ exports.equipPet = async (req, res) => {
             rented_bags: bagsResult.rows
         };
 
-        res.json({ success: true, pets: petsRes.rows, user });
+        res.json({ success: true, pets, user });
 
     } catch (err) {
         await pool.query('ROLLBACK');
