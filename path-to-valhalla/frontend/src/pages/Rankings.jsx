@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Crown, Medal, Search, Shield, Swords, ChevronLeft, ChevronRight, Users, Building2, Star } from 'lucide-react';
+import { Crown, Medal, Search, Shield, Swords, ChevronLeft, ChevronRight, Users, Building2, Star, Trophy, X, AlertTriangle } from 'lucide-react';
 import { rankingService } from '../services/rankingService';
 import PlayerProfileModal from '../components/player/PlayerProfileModal';
 
@@ -11,6 +11,19 @@ const TABS = [
 
 const PAGE_SIZE = 20;
 
+const TOP_CLASSES = [
+  'border-yellow-500/50 bg-gradient-to-r from-yellow-900/20 to-transparent shadow-[0_0_15px_rgba(234,179,8,0.08)]',
+  'border-slate-300/30 bg-gradient-to-r from-slate-700/20 to-transparent shadow-[0_0_10px_rgba(148,163,184,0.05)]',
+  'border-amber-700/40 bg-gradient-to-r from-amber-800/20 to-transparent shadow-[0_0_10px_rgba(180,83,9,0.05)]',
+];
+
+function getInitials(name) {
+  if (!name) return '?';
+  return name.charAt(0).toUpperCase();
+}
+
+const formatPower = (value) => Number(value || 0).toLocaleString('es-ES');
+
 function Rankings({ user }) {
   const [activeTab, setActiveTab] = useState('heroes');
   const [data, setData] = useState([]);
@@ -18,12 +31,14 @@ function Rankings({ user }) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [profilePlayerId, setProfilePlayerId] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const result = activeTab === 'heroes'
         ? await rankingService.getHeroes(page, PAGE_SIZE, search)
@@ -33,9 +48,14 @@ function Rankings({ user }) {
         setData(result.data);
         setTotal(result.total);
         setTotalPages(result.totalPages);
+      } else {
+        setFetchError(result.message || 'Error al cargar el ranking.');
+        setData([]);
       }
     } catch (err) {
       console.error('Error fetching rankings:', err);
+      setFetchError('No se pudo cargar el ranking.');
+      setData([]);
     } finally {
       setLoading(false);
     }
@@ -55,210 +75,303 @@ function Rankings({ user }) {
     setPage(1);
   };
 
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearch('');
+    setPage(1);
+  };
+
   const getRankBadge = (index) => {
-    if (index === 0) return <Crown size={18} className="text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.6)]" />;
-    if (index === 1) return <Medal size={16} className="text-slate-300" />;
-    if (index === 2) return <Medal size={16} className="text-amber-700" />;
-    return <span className="text-xs text-slate-500 w-5 text-center font-mono">{index + 1}</span>;
+    if (index === 0) return <Crown size={20} className="text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.7)]" />;
+    if (index === 1) return <Medal size={18} className="text-slate-300 drop-shadow-[0_0_4px_rgba(148,163,184,0.4)]" />;
+    if (index === 2) return <Medal size={18} className="text-amber-700 drop-shadow-[0_0_4px_rgba(180,83,9,0.4)]" />;
+    return (
+      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono ${
+        index < 9 ? 'bg-slate-800/80 text-slate-400 border border-slate-700/50' : 'text-slate-600'
+      }`}>
+        {index + 1}
+      </span>
+    );
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-5">
-      <div className="flex items-center gap-3 border-b border-amber-900/30 pb-4">
-        <Swords className="text-amber-500" size={28} />
-        <div>
-          <h1 className="text-2xl font-serif font-bold text-amber-100 tracking-wide">Rankings</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Los más poderosos de Valhalla</p>
-        </div>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-1 bg-slate-900/60 border border-amber-900/30 rounded-lg p-1">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
-                activeTab === tab.id
-                  ? 'bg-amber-900/50 text-amber-100 shadow-inner'
-                  : 'text-slate-400 hover:text-amber-100 hover:bg-white/5'
-              }`}
-            >
-              <tab.icon size={14} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleSearch} className="flex gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-none">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              placeholder={`Buscar ${activeTab === 'heroes' ? 'héroe' : 'alianza'}...`}
-              className="w-full sm:w-56 pl-9 pr-3 py-2 bg-slate-900/60 border border-amber-900/30 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-600/50 transition-colors"
-            />
+    <div className="max-w-5xl mx-auto p-4 md:p-6">
+      <div className="bg-gradient-to-b from-slate-900/60 to-slate-950/40 border border-amber-900/30 rounded-xl overflow-hidden">
+        {/* Header */}
+        <div className="relative border-b border-amber-900/30 bg-gradient-to-r from-amber-900/10 via-transparent to-amber-900/5 px-6 py-5">
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-900/60 to-amber-950/60 border border-amber-700/40 flex items-center justify-center shadow-lg shrink-0">
+              <Trophy size={24} className="text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-serif font-bold text-amber-100 tracking-wide">Rankings</h1>
+              <p className="text-xs text-slate-400 mt-0.5">Los héroes y alianzas más poderosos de Valhallus.</p>
+            </div>
           </div>
-        </form>
-      </div>
-
-      {total > 0 && (
-        <p className="text-xs text-slate-500">
-          Mostrando <span className="text-amber-400 font-semibold">{data.length}</span> de{' '}
-          <span className="text-amber-400 font-semibold">{total}</span> {activeTab === 'heroes' ? 'héroes' : 'alianzas'}
-        </p>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-amber-600/50 border-t-amber-400 rounded-full animate-spin" />
         </div>
-      ) : data.length === 0 ? (
-        <div className="text-center py-20 text-slate-500">
-          <Search size={40} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm">No se encontraron resultados.</p>
-        </div>
-      ) : activeTab === 'heroes' ? (
-        <div className="space-y-1.5">
-          {data.map((hero, index) => (
-            <button
-              key={hero.id}
-              onClick={() => setProfilePlayerId(hero.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-slate-900/40 border border-amber-900/20 rounded-lg hover:bg-slate-800/60 hover:border-amber-700/40 transition-all text-left group"
-            >
-              <div className="flex items-center justify-center w-8 h-8">
-                {getRankBadge(index)}
-              </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-slate-100 truncate group-hover:text-amber-200 transition-colors">
-                    {hero.username}
-                  </span>
-                  <span className="text-[10px] uppercase text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded">
-                    {hero.race}
-                  </span>
-                  <span className="text-[10px] uppercase text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded">
-                    {hero.class_name}
-                  </span>
-                </div>
-              </div>
+        {/* Tabs + Search */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between px-6 py-4 border-b border-amber-900/20">
+          <div className="flex gap-1 bg-slate-900/60 border border-amber-900/30 rounded-lg p-1">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-amber-900/60 text-amber-100 shadow-[inset_0_1px_0_rgba(245,158,11,0.15)]'
+                    : 'text-slate-400 hover:text-amber-100 hover:bg-white/5'
+                }`}
+              >
+                <tab.icon size={14} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-              <div className="flex items-center gap-4 text-xs text-slate-400 shrink-0">
-                <span className="flex items-center gap-1">
-                  <Star size={12} className="text-amber-500/70" />
-                  Nv.{hero.level}
-                </span>
-                <span className="font-bold text-amber-300 font-mono tabular-nums min-w-[5ch] text-right">
-                  {Number(hero.power).toLocaleString('es-ES')}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-1.5">
-          {data.map((alliance, index) => (
-            <Link
-              key={alliance.id}
-              to={`/alliance/${alliance.id}`}
-              className="flex items-center gap-3 px-4 py-3 bg-slate-900/40 border border-amber-900/20 rounded-lg hover:bg-slate-800/60 hover:border-amber-700/40 transition-all group"
-            >
-              <div className="flex items-center justify-center w-8 h-8">
-                {getRankBadge(index)}
-              </div>
-
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-slate-800 border border-amber-900/30 flex items-center justify-center overflow-hidden shrink-0">
-                  {alliance.logo_url ? (
-                    <img src={alliance.logo_url} alt="" className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none' }} />
-                  ) : (
-                    <Shield size={18} className="text-amber-600/50" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-100 truncate group-hover:text-amber-200 transition-colors">
-                      {alliance.name}
-                    </span>
-                    {alliance.tag && (
-                      <span className="text-[10px] font-mono text-amber-500/70 bg-amber-900/20 px-1.5 py-0.5 rounded">
-                        [{alliance.tag}]
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 text-xs text-slate-400 shrink-0">
-                <span className="flex items-center gap-1">
-                  <Users size={12} />
-                  {alliance.members_count}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Building2 size={12} />
-                  {alliance.buildings_score}
-                </span>
-                <span className="font-bold text-amber-300 font-mono tabular-nums min-w-[5ch] text-right">
-                  {Number(alliance.total_power).toLocaleString('es-ES')}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="flex items-center gap-1 px-3 py-2 bg-slate-900/60 border border-amber-900/30 rounded-lg text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          >
-            <ChevronLeft size={14} />
-            Anterior
-          </button>
-
-          <div className="flex gap-1">
-            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-              let pageNum;
-              if (totalPages <= 7) {
-                pageNum = i + 1;
-              } else if (page <= 4) {
-                pageNum = i + 1;
-              } else if (page >= totalPages - 3) {
-                pageNum = totalPages - 6 + i;
-              } else {
-                pageNum = page - 3 + i;
-              }
-              return (
+          <form onSubmit={handleSearch} className="flex gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-none">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                placeholder={`Buscar ${activeTab === 'heroes' ? 'héroe' : 'alianza'}...`}
+                className="w-full sm:w-56 pl-9 pr-8 py-2 bg-slate-900/60 border border-amber-900/30 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-600/50 transition-colors"
+              />
+              {searchInput && (
                 <button
-                  key={pageNum}
-                  onClick={() => setPage(pageNum)}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                    page === pageNum
-                      ? 'bg-amber-900/60 text-amber-100 border border-amber-600/40'
-                      : 'bg-slate-900/40 text-slate-400 border border-transparent hover:bg-slate-800/60'
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            {search && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="px-3 py-2 bg-slate-800/60 border border-amber-900/30 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:border-amber-700/40 transition-all"
+              >
+                Limpiar
+              </button>
+            )}
+          </form>
+        </div>
+
+        {/* Count */}
+        {total > 0 && !loading && (
+          <div className="px-6 pt-4 pb-1">
+            <p className="text-xs text-slate-500">
+              Mostrando <span className="text-amber-400 font-semibold">{data.length}</span> de{' '}
+              <span className="text-amber-400 font-semibold">{total}</span> {activeTab === 'heroes' ? 'héroes' : 'alianzas'}
+            </p>
+          </div>
+        )}
+
+        {/* Body */}
+        <div className="px-6 py-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-amber-600/50 border-t-amber-400 rounded-full animate-spin" />
+            </div>
+          ) : fetchError ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+              <AlertTriangle size={36} className="mb-3 text-red-400/60" />
+              <p className="text-sm text-red-300/80">{fetchError}</p>
+              <button
+                onClick={fetchData}
+                className="mt-4 px-4 py-2 bg-slate-800/60 border border-amber-900/30 rounded-lg text-xs text-slate-300 hover:bg-slate-700/60 transition-all"
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : data.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+              <Search size={32} className="mb-3 opacity-30" />
+              <p className="text-sm text-slate-400">No se encontraron resultados.</p>
+              {search && (
+                <>
+                  <p className="text-xs text-slate-600 mt-1">Prueba con otro nombre o limpia la búsqueda.</p>
+                  <button
+                    onClick={clearSearch}
+                    className="mt-4 px-4 py-2 bg-slate-800/60 border border-amber-900/30 rounded-lg text-xs text-slate-300 hover:bg-slate-700/60 transition-all"
+                  >
+                    Limpiar búsqueda
+                  </button>
+                </>
+              )}
+            </div>
+          ) : activeTab === 'heroes' ? (
+            <div className="space-y-2">
+              {data.map((hero, index) => (
+                <button
+                  key={hero.id}
+                  onClick={() => setProfilePlayerId(hero.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left group ${
+                    index < 3
+                      ? TOP_CLASSES[index]
+                      : 'bg-slate-900/40 border-amber-900/20 hover:bg-slate-800/60 hover:border-amber-700/40'
                   }`}
                 >
-                  {pageNum}
-                </button>
-              );
-            })}
-          </div>
+                  <div className="flex items-center justify-center w-10 h-10 shrink-0">
+                    {getRankBadge(index)}
+                  </div>
 
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="flex items-center gap-1 px-3 py-2 bg-slate-900/60 border border-amber-900/30 rounded-lg text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          >
-            Siguiente
-            <ChevronRight size={14} />
-          </button>
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-900/40 to-slate-800 border border-amber-900/30 flex items-center justify-center text-lg font-bold text-amber-400/80 shrink-0">
+                    {getInitials(hero.username)}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-slate-100 truncate group-hover:text-amber-200 transition-colors">
+                        {hero.username}
+                      </span>
+                      <span className="text-[10px] uppercase text-emerald-400/80 bg-emerald-900/30 px-1.5 py-0.5 rounded">
+                        {hero.race}
+                      </span>
+                      <span className="text-[10px] uppercase text-sky-400/80 bg-sky-900/30 px-1.5 py-0.5 rounded">
+                        {hero.class_name}
+                      </span>
+                    </div>
+                    {hero.alliance_name && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Shield size={10} className="text-amber-600/60 shrink-0" />
+                        <span className="text-[11px] text-amber-500/70 truncate">{hero.alliance_name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col items-end gap-0.5 shrink-0">
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <Star size={11} className="text-amber-500/60" />
+                      Nv.{hero.level}
+                    </span>
+                    <span className="font-bold text-sm text-amber-300 font-mono tabular-nums">
+                      {formatPower(hero.power)}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {data.map((alliance, index) => (
+                <Link
+                  key={alliance.id}
+                  to={`/alliance/${alliance.id}`}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all group ${
+                    index < 3
+                      ? TOP_CLASSES[index]
+                      : 'bg-slate-900/40 border-amber-900/20 hover:bg-slate-800/60 hover:border-amber-700/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-center w-10 h-10 shrink-0">
+                    {getRankBadge(index)}
+                  </div>
+
+                  <div className="w-10 h-10 rounded-lg bg-slate-800 border border-amber-900/30 flex items-center justify-center overflow-hidden shrink-0">
+                    {alliance.logo_url ? (
+                      <img src={alliance.logo_url} alt="" className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none' }} />
+                    ) : (
+                      <Shield size={18} className="text-amber-600/50" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-slate-100 truncate group-hover:text-amber-200 transition-colors">
+                        {alliance.name}
+                      </span>
+                      {alliance.tag && (
+                        <span className="text-[10px] font-mono text-amber-500/70 bg-amber-900/20 px-1.5 py-0.5 rounded">
+                          [{alliance.tag}]
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                        <Users size={11} />
+                        {alliance.members_count} miembros
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                        <Building2 size={11} />
+                        {alliance.buildings_score} edificios
+                      </span>
+                      {alliance.leader_name && (
+                        <span className="text-[11px] text-amber-600/60 truncate">
+                          Líder: {alliance.leader_name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-sm text-amber-300 font-mono tabular-nums">
+                      {formatPower(alliance.total_power)}
+                    </span>
+                    <div className="text-[10px] text-slate-600 mt-0.5">poder total</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Pagination */}
+        {totalPages > 1 && !loading && (
+          <div className="flex items-center justify-center gap-2 px-6 pb-6">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="flex items-center gap-1 px-3 py-2 bg-slate-900/60 border border-amber-900/30 rounded-lg text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft size={14} />
+              Anterior
+            </button>
+
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 7) {
+                  pageNum = i + 1;
+                } else if (page <= 4) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 3) {
+                  pageNum = totalPages - 6 + i;
+                } else {
+                  pageNum = page - 3 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                      page === pageNum
+                        ? 'bg-amber-900/60 text-amber-100 border border-amber-600/40'
+                        : 'bg-slate-900/40 text-slate-400 border border-transparent hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="flex items-center gap-1 px-3 py-2 bg-slate-900/60 border border-amber-900/30 rounded-lg text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              Siguiente
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+      </div>
 
       <PlayerProfileModal
         playerId={profilePlayerId}

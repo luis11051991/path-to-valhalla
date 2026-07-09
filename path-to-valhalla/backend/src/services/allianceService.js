@@ -1516,6 +1516,11 @@ async function disbandAlliance(playerId) {
         const membership = await requireActiveMembership(playerId, client);
         assertRole(membership.role, [ROLES.leader]);
 
+        const activeMembersCount = await countActiveMembers(membership.alliance_id, client);
+        if (activeMembersCount > 1) {
+            throw httpError(400, 'No puedes disolver la alianza mientras tenga otros miembros activos.');
+        }
+
         await client.query(`
             UPDATE alliances
             SET is_active = false,
