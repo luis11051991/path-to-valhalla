@@ -184,9 +184,9 @@ exports.getMySkills = async (req, res) => {
             }
         }
 
-        // QUERY ACTUALIZADA: Trae precio base, chance, scaling, etc.
+        // QUERY ACTUALIZADA: Trae slot_index real y ordena por slot para equipadas
         const mySkillsQuery = `
-            SELECT ps.id as player_skill_id, ps.is_equipped, ps.skill_level,
+            SELECT ps.id as player_skill_id, ps.is_equipped, ps.skill_level, ps.slot_index,
                    s.name, s.description, s.icon, s.image_url, 
                    s.energy_cost, s.cooldown_seconds, 
                    s.damage_min, s.damage_max, s.heal_amount, 
@@ -197,7 +197,9 @@ exports.getMySkills = async (req, res) => {
             FROM player_skills ps
             JOIN skills s ON ps.skill_id = s.id
             WHERE ps.player_id = $1
-            ORDER BY ps.is_equipped DESC, s.name ASC
+            ORDER BY ps.is_equipped DESC,
+              CASE WHEN ps.is_equipped THEN ps.slot_index ELSE 999 END ASC,
+              s.name ASC
         `;
 
         const result = await pool.query(mySkillsQuery, [userId]);
@@ -209,13 +211,19 @@ exports.getMySkills = async (req, res) => {
     }
 };
 
-// --- EQUIPAR HABILIDAD ---
+// --- EQUIPAR HABILIDAD (CON TRANSACCIÓN Y PRIMER SLOT LIBRE) ---
 exports.equipSkill = async (req, res) => {
     const userId = req.user.id;
     const { skillId } = req.body;
+    const client = await pool.connect();
     try {
-        const playerRes = await pool.query('SELECT level FROM players WHERE id = $1', [userId]);
-        if (playerRes.rows.length === 0) return res.status(404).json({ message: 'Jugador no encontrado' });
+        await client.query('BEGIN');
+
+        const playerRes = await client.query('SELECT level FROM players WHERE id = $1', [userId]);
+        if (playerRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Jugador no encontrado' });
+        }
         const level = playerRes.rows[0].level;
 
         let maxSlots = 2;
@@ -223,31 +231,58 @@ exports.equipSkill = async (req, res) => {
         else if (level >= 50) maxSlots = 4;
         else if (level >= 10) maxSlots = 3;
 
-        // Comprobar estado actual
-        const skillCheck = await pool.query('SELECT is_equipped FROM player_skills WHERE id = $1 AND player_id = $2', [skillId, userId]);
-        if (skillCheck.rows.length === 0) return res.status(400).json({ message: 'Habilidad no encontrada.' });
+        const skillCheck = await client.query('SELECT is_equipped, slot_index FROM player_skills WHERE id = $1 AND player_id = $2', [skillId, userId]);
+        if (skillCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Habilidad no encontrada.' });
+        }
 
-        const isCurrentlyEquipped = skillCheck.rows[0].is_equipped;
+        const { is_equipped: isCurrentlyEquipped } = skillCheck.rows[0];
 
         if (isCurrentlyEquipped) {
-            // Desequipar
-            await pool.query('UPDATE player_skills SET is_equipped = false, slot_index = 0 WHERE id = $1', [skillId]);
-            res.json({ success: true, message: 'Habilidad desequipada.' });
-        } else {
-            // Equipar: Verificar espacio
-            const equippedCountRes = await pool.query('SELECT COUNT(*) FROM player_skills WHERE player_id = $1 AND is_equipped = true', [userId]);
-            const equippedCount = parseInt(equippedCountRes.rows[0].count);
-
-            if (equippedCount >= maxSlots) {
-                return res.status(400).json({ message: `¡Ranuras llenas! Tienes ${maxSlots} espacios disponibles (Nivel ${level}).` });
-            }
-
-            // Asignar slot
-            const nextSlot = equippedCount + 1;
-            await pool.query('UPDATE player_skills SET is_equipped = true, slot_index = $1 WHERE id = $2', [nextSlot, skillId]);
-            res.json({ success: true, message: 'Habilidad equipada.' });
+            // Desequipar: limpiar slot
+            await client.query('UPDATE player_skills SET is_equipped = false, slot_index = 0 WHERE id = $1', [skillId]);
+            await client.query('COMMIT');
+            return res.json({ success: true, message: 'Habilidad desequipada.', skillId, is_equipped: false, slot_index: 0 });
         }
-    } catch (err) { console.error("Error al equipar skill:", err); res.status(500).json({ message: 'Error del servidor.' }); }
+
+        // Equipar: buscar primer slot libre entre 1..maxSlots
+        const occupiedRes = await client.query(
+            `SELECT slot_index FROM player_skills
+             WHERE player_id = $1 AND is_equipped = true AND slot_index BETWEEN 1 AND $2
+             ORDER BY slot_index ASC`,
+            [userId, maxSlots]
+        );
+        const occupied = occupiedRes.rows.map(r => r.slot_index);
+
+        let freeSlot = null;
+        for (let i = 1; i <= maxSlots; i++) {
+            if (!occupied.includes(i)) {
+                freeSlot = i;
+                break;
+            }
+        }
+
+        if (freeSlot === null) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: `¡Ranuras llenas! Tienes ${maxSlots} espacios disponibles (Nivel ${level}).` });
+        }
+
+        await client.query(
+            'UPDATE player_skills SET is_equipped = true, slot_index = $1 WHERE id = $2',
+            [freeSlot, skillId]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: 'Habilidad equipada.', skillId, is_equipped: true, slot_index: freeSlot });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("Error al equipar skill:", err);
+        res.status(500).json({ message: 'Error del servidor.' });
+    } finally {
+        client.release();
+    }
 };
 
 // --- BUSCAR JUGADORES (AUTOCOMPLETE) ---

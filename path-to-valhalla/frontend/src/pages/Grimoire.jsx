@@ -76,7 +76,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
 
     const getSkillType = (skill) => {
         if (skill.damage_min > 0) return { label: 'Daño', icon: Sword, color: 'text-red-400', bg: 'bg-red-900/30 border-red-500/30' };
-        if (skill.heal_min > 0) return { label: 'Curación', icon: Heart, color: 'text-green-400', bg: 'bg-green-900/30 border-green-500/30' };
+        if ((skill.heal_amount ?? 0) > 0) return { label: 'Curación', icon: Heart, color: 'text-green-400', bg: 'bg-green-900/30 border-green-500/30' };
         return { label: 'Utilidad', icon: Sparkles, color: 'text-blue-400', bg: 'bg-blue-900/30 border-blue-500/30' };
     };
 
@@ -85,7 +85,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
     };
 
     const computeHeal = (skill) => {
-        return Math.floor(skill.heal_min * (1 + (skill.skill_level - 1) * 0.1));
+        return Math.floor((skill.heal_amount ?? 0) * (1 + (skill.skill_level - 1) * 0.1));
     };
 
     const handleToggleEquip = async (skillId) => {
@@ -138,7 +138,11 @@ const Grimoire = ({ user, onUpdateUser }) => {
 
     const unlockedSlots = getMaxSlots();
     const equippedSkills = mySkills.filter(s => s.is_equipped).sort((a, b) => (a.slot_index || 0) - (b.slot_index || 0));
-    const slotsDisplay = [...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => equippedSkills[i] || null);
+    const equippedBySlot = new Map();
+    equippedSkills.forEach(skill => {
+        if (skill.slot_index > 0) equippedBySlot.set(skill.slot_index, skill);
+    });
+    const slotsDisplay = [...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => equippedBySlot.get(i + 1) || null);
 
     const filteredSkills = mySkills.filter(skill => {
         if (filter === 'equipped' && !skill.is_equipped) return false;
@@ -293,7 +297,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                     <p>{mySkills.length === 0 ? "No has aprendido ninguna habilidad aún." : "No hay habilidades con ese filtro."}</p>
                 </div>
             ) : (
-                <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+                <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 lg:items-start">
                     {/* GRILLA DE HABILIDADES */}
                     <div className={`grid gap-4 ${selectedSkill ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 lg:w-3/5' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full'} content-start pb-20`}>
                         {filteredSkills.map((skill) => {
@@ -307,12 +311,12 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                 <div
                                     key={skill.player_skill_id}
                                     onClick={() => handleCardClick(skill)}
-                                    className={`relative group bg-slate-900 border rounded-xl cursor-pointer flex flex-col min-h-[165px]
+                                    className={`relative group bg-slate-900 border rounded-xl cursor-pointer flex flex-col h-[160px]
                                     ${isSelected
-                                        ? 'border-purple-400/80 bg-purple-900/10 shadow-[0_0_20px_rgba(168,85,247,0.25)]'
+                                        ? 'border-purple-400/80 bg-purple-950/20 ring-1 ring-inset ring-purple-500/40'
                                         : skill.is_equipped
                                             ? 'border-purple-500/60 bg-purple-900/5'
-                                            : 'border-slate-700/70 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]'}`}
+                                            : 'border-slate-700/70 hover:border-purple-400/50'}`}
                                 >
                                     {/* Cabecera Card */}
                                     <div className="flex p-3 gap-3 items-start">
@@ -347,7 +351,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                         {skill.damage_min > 0 && (
                                             <span className="text-red-400">DMG {computeDamage(skill)}</span>
                                         )}
-                                        {skill.heal_min > 0 && (
+                                        {(skill.heal_amount ?? 0) > 0 && (
                                             <span className="text-green-400">CURA {computeHeal(skill)}</span>
                                         )}
                                         <span className="text-blue-400 ml-auto">MP {skill.energy_cost}</span>
@@ -387,158 +391,158 @@ const Grimoire = ({ user, onUpdateUser }) => {
                     </div>
 
                     {/* PANEL DE DETALLE LATERAL */}
-                    {selectedSkill ? (
-                        <div className="lg:w-2/5 shrink-0">
-                            <div className="sticky top-4 bg-slate-900/90 border border-purple-500/30 rounded-xl overflow-hidden shadow-[0_0_40px_rgba(168,85,247,0.1)]">
-                                {/* Mobile close */}
-                                <div className="flex justify-between items-center p-4 border-b border-purple-500/20 lg:hidden">
-                                    <h4 className="text-sm font-bold text-purple-300 uppercase tracking-wider">Detalle</h4>
-                                    <button onClick={() => setSelectedSkill(null)} className="text-slate-400 hover:text-white">
-                                        <X size={16} />
-                                    </button>
-                                </div>
+                    <div className="lg:w-2/5 shrink-0 self-start">
+                        <aside className="sticky top-4 lg:h-[430px] bg-slate-900/90 border border-purple-500/30 rounded-xl shadow-[0_0_40px_rgba(168,85,247,0.1)] overflow-hidden">
+                            {selectedSkill ? (
+                                <div className="h-full overflow-y-auto custom-scrollbar">
+                                    {/* Mobile close */}
+                                    <div className="flex justify-between items-center p-4 border-b border-purple-500/20 lg:hidden">
+                                        <h4 className="text-sm font-bold text-purple-300 uppercase tracking-wider">Detalle</h4>
+                                        <button onClick={() => setSelectedSkill(null)} className="text-slate-400 hover:text-white">
+                                            <X size={16} />
+                                        </button>
+                                    </div>
 
-                                {(() => {
-                                    const skill = selectedSkill;
-                                    const maxLevel = skill.max_level || 10;
-                                    const isMax = (skill.skill_level || 1) >= maxLevel;
-                                    const upgradeCost = isMax ? null : calculateUpgradeCost(skill);
-                                    const typeInfo = getSkillType(skill);
-                                    const TypeIcon = typeInfo.icon;
+                                    {(() => {
+                                        const skill = selectedSkill;
+                                        const maxLevel = skill.max_level || 10;
+                                        const isMax = (skill.skill_level || 1) >= maxLevel;
+                                        const upgradeCost = isMax ? null : calculateUpgradeCost(skill);
+                                        const typeInfo = getSkillType(skill);
+                                        const TypeIcon = typeInfo.icon;
 
-                                    return (
-                                        <>
-                                            {/* Hero */}
-                                            <div className="p-4 md:p-6 flex gap-4 items-center">
-                                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-black border-2 border-purple-500 overflow-hidden shadow-[0_0_20px_rgba(168,85,247,0.3)] shrink-0">
-                                                    {skill.image_url ? (
-                                                        <img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-purple-700"><Zap size={32} /></div>
+                                        return (
+                                            <>
+                                                {/* Hero */}
+                                                <div className="p-4 md:p-6 flex gap-4 items-center">
+                                                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-black border-2 border-purple-500 overflow-hidden shadow-[0_0_20px_rgba(168,85,247,0.3)] shrink-0">
+                                                        {skill.image_url ? (
+                                                            <img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-purple-700"><Zap size={32} /></div>
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h2 className="text-lg md:text-xl font-bold text-white truncate">{skill.name}</h2>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${typeInfo.bg} ${typeInfo.color} font-bold`}>
+                                                                <TypeIcon size={12} /> {typeInfo.label}
+                                                            </span>
+                                                            <span className="text-xs text-yellow-500/80">Prob. activación automática: {(skill.trigger_chance || 15)}%</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-2">
+                                                            <div className="bg-purple-900/40 text-purple-300 text-xs font-bold px-2 py-0.5 rounded border border-purple-500/30">
+                                                                Nivel {skill.skill_level} / {maxLevel}
+                                                            </div>
+                                                            {skill.is_equipped && (
+                                                                <div className="bg-green-900/40 text-green-300 text-xs font-bold px-2 py-0.5 rounded border border-green-500/30 flex items-center gap-1">
+                                                                    <Zap size={10} /> Equipada
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Descripción */}
+                                                <div className="px-4 md:px-6 pb-4">
+                                                    <p className="text-sm text-slate-300 italic leading-relaxed">"{skill.description}"</p>
+                                                </div>
+
+                                                {/* Botones de acción */}
+                                                <div className="px-4 md:px-6 pb-4 flex gap-2">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleToggleEquip(skill.player_skill_id); }}
+                                                        className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-1.5
+                                                        ${skill.is_equipped
+                                                            ? 'bg-red-900/40 text-red-300 border border-red-500/30 hover:bg-red-900/60'
+                                                            : 'bg-purple-900/40 text-purple-300 border border-purple-500/30 hover:bg-purple-900/60'}`}
+                                                    >
+                                                        {skill.is_equipped ? <Ban size={12} /> : <Zap size={12} />}
+                                                        {skill.is_equipped ? 'Desequipar' : 'Equipar'}
+                                                    </button>
+                                                </div>
+
+                                                {/* Stats */}
+                                                <div className="flex flex-wrap gap-px bg-slate-800/50 mx-4 md:mx-6 rounded-lg overflow-hidden border border-slate-700/50 mb-4">
+                                                    {skill.damage_min > 0 && (
+                                                        <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                            <div className="text-[10px] text-red-400 uppercase font-bold mb-1">Daño</div>
+                                                            <div className="text-lg font-bold text-red-300">{computeDamage(skill)}</div>
+                                                        </div>
+                                                    )}
+                                                    {(skill.heal_amount ?? 0) > 0 && (
+                                                        <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                            <div className="text-[10px] text-green-400 uppercase font-bold mb-1">Curación</div>
+                                                            <div className="text-lg font-bold text-green-300">{computeHeal(skill)}</div>
+                                                        </div>
+                                                    )}
+                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                        <div className="text-[10px] text-blue-400 uppercase font-bold mb-1">Coste MP</div>
+                                                        <div className="text-lg font-bold text-blue-300">{skill.energy_cost}</div>
+                                                    </div>
+                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                        <div className="text-[10px] text-yellow-500 uppercase font-bold mb-1">Prob. Auto.</div>
+                                                        <div className="text-lg font-bold text-yellow-400">{skill.trigger_chance || 15}%</div>
+                                                    </div>
+                                                    {skill.cooldown_turns > 0 && (
+                                                        <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                            <div className="text-[10px] text-purple-400 uppercase font-bold mb-1">Cooldown</div>
+                                                            <div className="text-lg font-bold text-purple-300">{skill.cooldown_turns} turnos</div>
+                                                        </div>
+                                                    )}
+                                                    {skill.scaling_stat && (
+                                                        <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                            <div className="text-[10px] text-cyan-400 uppercase font-bold mb-1">Escala con</div>
+                                                            <div className="text-lg font-bold text-cyan-300">{skill.scaling_stat}{skill.scaling_factor != null ? ` (x${skill.scaling_factor})` : ''}</div>
+                                                        </div>
                                                     )}
                                                 </div>
-                                                <div className="min-w-0">
-                                                    <h2 className="text-lg md:text-xl font-bold text-white truncate">{skill.name}</h2>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${typeInfo.bg} ${typeInfo.color} font-bold`}>
-                                                            <TypeIcon size={12} /> {typeInfo.label}
-                                                        </span>
-                                                        <span className="text-xs text-yellow-500/80">Prob. activación automática: {(skill.trigger_chance || 15)}%</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-2">
-                                                        <div className="bg-purple-900/40 text-purple-300 text-xs font-bold px-2 py-0.5 rounded border border-purple-500/30">
-                                                            Nivel {skill.skill_level} / {maxLevel}
-                                                        </div>
-                                                        {skill.is_equipped && (
-                                                            <div className="bg-green-900/40 text-green-300 text-xs font-bold px-2 py-0.5 rounded border border-green-500/30 flex items-center gap-1">
-                                                                <Zap size={10} /> Equipada
+
+                                                {/* Próximo nivel */}
+                                                <div className="px-4 md:px-6 pb-6">
+                                                    <div className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-3 md:p-4">
+                                                        <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                                            {isMax ? 'Nivel Máximo Alcanzado' : 'Siguiente Nivel'}
+                                                        </h5>
+                                                        {!isMax && (
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="text-sm text-slate-300">
+                                                                    <span className="font-bold text-white">Nv. {(skill.skill_level || 1) + 1}</span>
+                                                                    <span className="text-slate-500 mx-2">→</span>
+                                                                    {skill.damage_min > 0 && (
+                                                                        <span className="text-red-400 font-mono">DMG {computeDamage({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
+                                                                    )}
+                                                                    {(skill.heal_amount ?? 0) > 0 && (
+                                                                        <span className="text-green-400 font-mono ml-2">CURA {computeHeal({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
+                                                                    )}
+                                                                </div>
+                                                                <button
+                                                                    onClick={(e) => handleUpgradeSkill(e, skill)}
+                                                                    className="px-3 py-1.5 bg-amber-700/60 hover:bg-amber-700/80 border border-amber-500/50 text-amber-200 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 transition-all"
+                                                                >
+                                                                    <ArrowUpCircle size={12} />
+                                                                    {formatCurrency(upgradeCost)}
+                                                                </button>
                                                             </div>
+                                                        )}
+                                                        {isMax && (
+                                                            <div className="text-sm text-slate-500 italic">Esta habilidad ha alcanzado su potencial máximo.</div>
                                                         )}
                                                     </div>
                                                 </div>
-                                            </div>
-
-                                            {/* Descripción */}
-                                            <div className="px-4 md:px-6 pb-4">
-                                                <p className="text-sm text-slate-300 italic leading-relaxed">"{skill.description}"</p>
-                                            </div>
-
-                                            {/* Botones de acción */}
-                                            <div className="px-4 md:px-6 pb-4 flex gap-2">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleToggleEquip(skill.player_skill_id); }}
-                                                    className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-1.5
-                                                    ${skill.is_equipped
-                                                        ? 'bg-red-900/40 text-red-300 border border-red-500/30 hover:bg-red-900/60'
-                                                        : 'bg-purple-900/40 text-purple-300 border border-purple-500/30 hover:bg-purple-900/60'}`}
-                                                >
-                                                    {skill.is_equipped ? <Ban size={12} /> : <Zap size={12} />}
-                                                    {skill.is_equipped ? 'Desequipar' : 'Equipar'}
-                                                </button>
-                                            </div>
-
-                                            {/* Stats */}
-                                            <div className="flex flex-wrap gap-px bg-slate-800/50 mx-4 md:mx-6 rounded-lg overflow-hidden border border-slate-700/50 mb-4">
-                                                {skill.damage_min > 0 && (
-                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
-                                                        <div className="text-[10px] text-red-400 uppercase font-bold mb-1">Daño</div>
-                                                        <div className="text-lg font-bold text-red-300">{computeDamage(skill)}</div>
-                                                    </div>
-                                                )}
-                                                {skill.heal_min > 0 && (
-                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
-                                                        <div className="text-[10px] text-green-400 uppercase font-bold mb-1">Curación</div>
-                                                        <div className="text-lg font-bold text-green-300">{computeHeal(skill)}</div>
-                                                    </div>
-                                                )}
-                                                <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
-                                                    <div className="text-[10px] text-blue-400 uppercase font-bold mb-1">Coste MP</div>
-                                                    <div className="text-lg font-bold text-blue-300">{skill.energy_cost}</div>
-                                                </div>
-                                                <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
-                                                    <div className="text-[10px] text-yellow-500 uppercase font-bold mb-1">Prob. Auto.</div>
-                                                    <div className="text-lg font-bold text-yellow-400">{skill.trigger_chance || 15}%</div>
-                                                </div>
-                                                {skill.cooldown_turns > 0 && (
-                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
-                                                        <div className="text-[10px] text-purple-400 uppercase font-bold mb-1">Cooldown</div>
-                                                        <div className="text-lg font-bold text-purple-300">{skill.cooldown_turns} turnos</div>
-                                                    </div>
-                                                )}
-                                                {skill.scaling_stat && (
-                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
-                                                        <div className="text-[10px] text-cyan-400 uppercase font-bold mb-1">Escala con</div>
-                                                        <div className="text-lg font-bold text-cyan-300">{skill.scaling_stat}{skill.scaling_factor != null ? ` (x${skill.scaling_factor})` : ''}</div>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Próximo nivel */}
-                                            <div className="px-4 md:px-6 pb-6">
-                                                <div className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-3 md:p-4">
-                                                    <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                                                        {isMax ? 'Nivel Máximo Alcanzado' : 'Siguiente Nivel'}
-                                                    </h5>
-                                                    {!isMax && (
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="text-sm text-slate-300">
-                                                                <span className="font-bold text-white">Nv. {(skill.skill_level || 1) + 1}</span>
-                                                                <span className="text-slate-500 mx-2">→</span>
-                                                                {skill.damage_min > 0 && (
-                                                                    <span className="text-red-400 font-mono">DMG {computeDamage({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
-                                                                )}
-                                                                {skill.heal_min > 0 && (
-                                                                    <span className="text-green-400 font-mono ml-2">CURA {computeHeal({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
-                                                                )}
-                                                            </div>
-                                                            <button
-                                                                onClick={(e) => handleUpgradeSkill(e, skill)}
-                                                                className="px-3 py-1.5 bg-amber-700/60 hover:bg-amber-700/80 border border-amber-500/50 text-amber-200 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 transition-all"
-                                                            >
-                                                                <ArrowUpCircle size={12} />
-                                                                {formatCurrency(upgradeCost)}
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                    {isMax && (
-                                                        <div className="text-sm text-slate-500 italic">Esta habilidad ha alcanzado su potencial máximo.</div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="lg:w-2/5 shrink-0">
-                            <div className="sticky top-4 bg-slate-900/60 border border-dashed border-slate-700/50 rounded-xl p-8 flex flex-col items-center justify-center text-center min-h-[300px]">
-                                <Sparkles size={40} className="text-slate-600 mb-4" />
-                                <h4 className="text-sm font-bold text-slate-400 mb-1">Selecciona un poder</h4>
-                                <p className="text-xs text-slate-500 max-w-[200px]">Elige una habilidad del Grimorio para ver sus efectos, coste y evolución.</p>
-                            </div>
-                        </div>
-                    )}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                                    <Sparkles size={40} className="text-slate-600 mb-4" />
+                                    <h4 className="text-sm font-bold text-slate-400 mb-1">Selecciona un poder</h4>
+                                    <p className="text-xs text-slate-500 max-w-[200px]">Elige una habilidad del Grimorio para ver sus efectos, coste y evolución.</p>
+                                </div>
+                            )}
+                        </aside>
+                    </div>
                 </div>
             )}
 
