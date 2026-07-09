@@ -768,6 +768,29 @@ const BattleModal = ({ result, onClose, user, playerImage, playerBg, baseEnemy, 
                                     ))}
                                 </div>
                             )}
+                            {result.isWin && result.pet_result?.hadActivePet && (
+                                <div className="flex flex-wrap gap-2 justify-center mb-4">
+                                    {result.pet_result.skipped ? (
+                                        <RewardBadge label={`${result.pet_result.petName}: sin saciedad`} color="text-red-400" />
+                                    ) : (
+                                        <>
+                                            {result.pet_result.expGained > 0 && (
+                                                <RewardBadge label={`${result.pet_result.petName} +${result.pet_result.expGained} EXP`} color="text-green-400" />
+                                            )}
+                                            {result.pet_result.hungerLost > 0 && (
+                                                <RewardBadge label={`Saciedad -${result.pet_result.hungerLost}`} color="text-amber-400" />
+                                            )}
+                                        </>
+                                    )}
+                                    {result.pet_result.leveledUp && (
+                                        <RewardBadge label={`Subió a Nivel ${result.pet_result.newLevel}!`} color="text-amber-300" />
+                                    )}
+                                    {result.pet_result.gainedStats?.map((stat, i) => {
+                                        const labels = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
+                                        return <RewardBadge key={i} label={`+1 ${labels[stat] || stat}`} color="text-green-400" />;
+                                    })}
+                                </div>
+                            )}
                             <button onClick={onClose} className="w-full max-w-md py-4 bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-bold uppercase rounded shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all transform hover:scale-105">
                                 {result.isWin ? 'Recoger Botín' : 'Volver al Mapa'}
                             </button>

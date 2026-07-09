@@ -42,7 +42,7 @@ async function applyPetExperience(playerId, expGain, client, hungerCost) {
     const db = client || require('../config/db');
 
     const res = await db.query(`
-        SELECT pp.id, pp.level, pp.experience, pp.current_hunger, pp.bonus_growth, p.bonus_stats, p.tier
+        SELECT pp.id, pp.level, pp.experience, pp.current_hunger, pp.bonus_growth, p.bonus_stats, p.tier, p.name
         FROM player_pets pp
         JOIN pets p ON pp.pet_id = p.id
         WHERE pp.player_id = $1 AND pp.is_active = true
@@ -50,19 +50,43 @@ async function applyPetExperience(playerId, expGain, client, hungerCost) {
         FOR UPDATE
     `, [playerId]);
 
-    if (res.rows.length === 0) return null;
+    if (res.rows.length === 0) return { hadActivePet: false };
 
     const pet = res.rows[0];
 
     const hungerCostVal = Number(hungerCost) || 0;
-    if (hungerCostVal > 0 && (pet.current_hunger <= 0)) return null;
+    if (hungerCostVal > 0 && (pet.current_hunger <= 0)) {
+        return {
+            hadActivePet: true,
+            petName: pet.name,
+            expGained: 0,
+            hungerLost: 0,
+            newHunger: pet.current_hunger,
+            skipped: true,
+            skipReason: 'no_hunger',
+            leveledUp: false,
+            newLevel: pet.level,
+            gainedStats: []
+        };
+    }
+
+    const oldLevel = pet.level;
 
     if (pet.level >= MAX_PET_LEVEL) {
         if (hungerCostVal > 0) {
             const newHunger = Math.max(0, pet.current_hunger - hungerCostVal);
             await db.query('UPDATE player_pets SET current_hunger = $1 WHERE id = $2', [newHunger, pet.id]);
         }
-        return { leveledUp: false, newLevel: pet.level, gainedStats: [], hungerLost: 0 };
+        return {
+            hadActivePet: true,
+            petName: pet.name,
+            expGained: 0,
+            hungerLost: 0,
+            newHunger: pet.current_hunger,
+            leveledUp: false,
+            newLevel: pet.level,
+            gainedStats: []
+        };
     }
 
     let { level, experience } = pet;
@@ -113,10 +137,16 @@ async function applyPetExperience(playerId, expGain, client, hungerCost) {
     `, [newLevel, experience, JSON.stringify(bonusGrowth), newHunger, pet.id]);
 
     return {
+        hadActivePet: true,
+        petName: pet.name,
+        expGained: expGain,
+        hungerLost,
+        newHunger,
+        skipped: false,
         leveledUp,
+        oldLevel,
         newLevel,
-        gainedStats,
-        hungerLost
+        gainedStats
     };
 }
 

@@ -318,6 +318,7 @@ exports.startBattle = async (req, res) => {
         let currentLevel = parseInt(player.level || 1);
         let currentStatPoints = parseInt(player.stat_points || 0);
         let leveledUp = false;
+        let petXpResult = null;
 
         if (isWin) {
             const baseXp = baseEnemy.xp_reward ?? computeEnemyXp({ enemy: { ...baseEnemy, is_elite_minor: enemyInstance.is_elite_minor }, playerLevel: currentLevel, enemyLevel: enemyInstance.level });
@@ -403,7 +404,7 @@ exports.startBattle = async (req, res) => {
 
             const petExpGain = getPetExpGainFromEnemy(baseEnemy);
             const petHungerCost = getPetHungerCostFromEnemy(baseEnemy);
-            const petXpResult = await applyPetExperience(userId, petExpGain, client, petHungerCost);
+            petXpResult = await applyPetExperience(userId, petExpGain, client, petHungerCost);
             if (petXpResult?.leveledUp) {
                 log.push({ type: 'info', msg: `¡Tu mascota subió a nivel ${petXpResult.newLevel}!` });
             }
@@ -449,7 +450,8 @@ exports.startBattle = async (req, res) => {
                 isWin, log, rewards, leveledUp,
                 initialPlayerHp, initialEnemyHp, finalPlayerHp: player.current_hp,
                 enemyName: baseEnemy.name, enemyImage: baseEnemy.image_url,
-                enemy_stats: enemyStatsResult
+                enemy_stats: enemyStatsResult,
+                pet_result: petXpResult
             }
         });
 

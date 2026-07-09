@@ -1363,13 +1363,15 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                     )}
 
                                     {equippedPet.current_hunger < equippedPet.max_hunger && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleFeedPet(equippedPet.player_pet_id); }}
-                                            title={`Alimentar: ${getFeedCostText(equippedPet.tier)}`}
-                                            className="w-full py-1 mt-0.5 bg-amber-700/80 hover:bg-amber-600 text-white text-[9px] font-bold uppercase rounded border border-amber-500/60 transition-all flex items-center justify-center gap-1"
-                                        >
-                                            <Heart size={10} /> Alimentar
-                                        </button>
+                                        <div className="pt-0.5">
+                                            <div className="text-[8px] text-amber-500/70 text-center leading-tight mb-0.5">Costo: {getFeedCostText(equippedPet.tier)}</div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleFeedPet(equippedPet.player_pet_id); }}
+                                                className="w-full py-1 bg-amber-700/80 hover:bg-amber-600 text-white text-[9px] font-bold uppercase rounded border border-amber-500/60 transition-all flex items-center justify-center gap-1"
+                                            >
+                                                <Heart size={10} /> Alimentar
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             ) : (
