@@ -34,6 +34,18 @@ const Grimoire = ({ user, onUpdateUser }) => {
         fetchSkills();
     }, []);
 
+    useEffect(() => {
+        if (!selectedSkill) return;
+        const fresh = mySkills.find(s => s.player_skill_id === selectedSkill.player_skill_id);
+        if (!fresh) {
+            setSelectedSkill(null);
+            return;
+        }
+        if (fresh !== selectedSkill) {
+            setSelectedSkill(fresh);
+        }
+    }, [mySkills, selectedSkill?.player_skill_id]);
+
     const getMaxSlots = () => {
         if (user.level >= 100) return 5;
         if (user.level >= 50) return 4;
