@@ -11,6 +11,14 @@ import EvolutionModal from '../components/EvolutionModal';
 import PetStableModal from '../components/pets/PetStableModal';
 import { getRequiredXp } from '../shared/level_xp';
 
+const PET_RARITY_LABELS = { 1: 'Común', 2: 'Raro', 3: 'Legendario' };
+const PET_RARITY_CLASSES = {
+    1: 'text-slate-300 bg-slate-800/70 border-slate-600/50',
+    2: 'text-blue-300 bg-blue-900/40 border-blue-500/50',
+    3: 'text-amber-300 bg-amber-900/40 border-amber-500/60'
+};
+const STAT_LABELS = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
+
 const STAT_IMAGES = {
     strength: '/icons/stats/strength.png',
     dexterity: '/icons/stats/dexterity.png',
@@ -1297,27 +1305,72 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                         {/* PET INFO — integrado como footer del panel */}
                         <div onClick={() => setShowPetModal(true)} className="cursor-pointer border-t border-amber-900/40 w-full group">
                             {equippedPet ? (
-                                <div className="flex items-center gap-2.5 p-2.5">
-                                    <div className="relative w-10 h-10 rounded-full border-2 border-amber-400/70 flex items-center justify-center bg-black/60 shrink-0 overflow-hidden">
-                                        <img src={equippedPet.image_url} className="w-full h-full object-cover" />
-                                        {equippedPet.current_hunger < 20 && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full animate-ping" />}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-xs font-bold text-slate-200 truncate group-hover:text-amber-300 transition-colors">{equippedPet.name}</span>
-                                            <span className="text-[8px] px-1 py-0.5 rounded bg-green-900/60 text-green-400 font-bold uppercase leading-none">Activa</span>
+                                <div className="p-2.5 pb-2 space-y-1">
+                                    <div className="flex items-start gap-2.5">
+                                        <div className="relative w-10 h-10 rounded-full border-2 border-amber-400/70 flex items-center justify-center bg-black/60 shrink-0 overflow-hidden">
+                                            <img src={equippedPet.image_url} className="w-full h-full object-cover" />
+                                            {equippedPet.current_hunger < 20 && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full animate-ping" />}
                                         </div>
-                                        <div className="flex flex-wrap gap-x-2.5 text-[10px] text-green-400 font-mono mt-0.5">
-                                            {equippedPet.bonus_stats && Object.keys(equippedPet.bonus_stats).length > 0 ? (
-                                                Object.entries(equippedPet.bonus_stats).map(([k, v]) => {
-                                                    const labels = { strength: 'Fuerza', dexterity: 'Destreza', constitution: 'Constitución', intelligence: 'Inteligencia', charisma: 'Carisma', luck: 'Suerte' };
-                                                    return <span key={k}>{labels[k] || k} +{v}</span>;
-                                                })
-                                            ) : (
-                                                <span className="text-slate-500 italic font-sans">Sin bonos activos.</span>
+                                        <div className="flex-1 min-w-0 space-y-0.5">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-bold text-slate-200 truncate group-hover:text-amber-300 transition-colors">{equippedPet.name}</span>
+                                                <span className="text-[8px] px-1 py-0.5 rounded bg-green-900/60 text-green-400 font-bold uppercase leading-none">Activa</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[9px] px-1 py-0.5 rounded border font-bold leading-none ${PET_RARITY_CLASSES[equippedPet.tier] || PET_RARITY_CLASSES[1]}`}>{PET_RARITY_LABELS[equippedPet.tier] || 'Común'}</span>
+                                                <span className="text-[9px] text-slate-500">Nivel {equippedPet.level || 1}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {equippedPet.experience_to_next_level > 0 && (
+                                        <div>
+                                            <div className="flex justify-between text-[8px] text-slate-500 leading-tight">
+                                                <span>EXP</span>
+                                                <span>{equippedPet.experience || 0}/{equippedPet.experience_to_next_level}</span>
+                                            </div>
+                                            <div className="h-1 bg-black/50 rounded-full overflow-hidden border border-slate-700/50 mt-0.5">
+                                                <div className="h-full bg-amber-600" style={{ width: `${Math.min(100, ((equippedPet.experience || 0) / equippedPet.experience_to_next_level) * 100)}%` }}></div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <div className="flex justify-between text-[9px] text-slate-400 leading-tight">
+                                            <span>Saciedad</span>
+                                            <span className={equippedPet.current_hunger / equippedPet.max_hunger < 0.3 ? 'text-red-400' : equippedPet.current_hunger / equippedPet.max_hunger < 0.6 ? 'text-yellow-400' : 'text-green-400'}>{equippedPet.current_hunger}/{equippedPet.max_hunger}</span>
+                                        </div>
+                                        <div className="h-1.5 bg-black/60 rounded-full overflow-hidden border border-slate-700 mt-0.5">
+                                            {(() => {
+                                                const pct = Math.min(100, (equippedPet.current_hunger / equippedPet.max_hunger) * 100);
+                                                const barColor = pct < 30 ? 'bg-red-600' : pct < 60 ? 'bg-yellow-600' : 'bg-green-600';
+                                                return <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }}></div>;
+                                            })()}
+                                        </div>
+                                    </div>
+
+                                    {equippedPet.current_hunger <= 0 ? (
+                                        <div className="text-[9px] text-red-400/80">Sin saciedad: no otorga bonos</div>
+                                    ) : equippedPet.bonus_stats && Object.keys(equippedPet.bonus_stats).length > 0 && (
+                                        <div className="flex flex-wrap gap-x-2 text-[9px] text-green-400/90 font-mono">
+                                            {Object.entries(equippedPet.bonus_stats).slice(0, 4).map(([k, v]) => (
+                                                <span key={k}>{STAT_LABELS[k] || k} +{v}</span>
+                                            ))}
+                                            {Object.keys(equippedPet.bonus_stats).length > 4 && (
+                                                <span className="text-slate-500">+{Object.keys(equippedPet.bonus_stats).length - 4} más</span>
                                             )}
                                         </div>
-                                    </div>
+                                    )}
+
+                                    {equippedPet.current_hunger < equippedPet.max_hunger && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleFeedPet(equippedPet.player_pet_id); }}
+                                            title={`Alimentar: ${getFeedCostText(equippedPet.tier)}`}
+                                            className="w-full py-1 mt-0.5 bg-amber-700/80 hover:bg-amber-600 text-white text-[9px] font-bold uppercase rounded border border-amber-500/60 transition-all flex items-center justify-center gap-1"
+                                        >
+                                            <Heart size={10} /> Alimentar
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2 p-2.5 opacity-60 hover:opacity-100 transition-opacity">
