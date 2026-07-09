@@ -187,12 +187,15 @@ const Grimoire = ({ user, onUpdateUser }) => {
         <div className="h-full flex flex-col p-4 md:p-6 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar">
             {/* BARRA DE BATALLA */}
             <div className="mb-6 p-4 md:p-6 bg-slate-900/80 border border-purple-500/30 rounded-xl shadow-[0_0_50px_rgba(168,85,247,0.1)]">
-                <div className="flex justify-between items-center mb-4 border-b border-purple-500/20 pb-3">
-                    <h3 className="text-base md:text-lg font-serif font-bold text-purple-300 uppercase tracking-widest flex items-center gap-2">
-                        <img src="/icons/tabs/tab_grimoire.png" className="w-5 h-5 md:w-6 md:h-6" alt="" /> Barra de Batalla
-                    </h3>
-                    <span className="text-xs font-bold bg-purple-900/40 text-purple-200 px-3 py-1 rounded-full border border-purple-500/30">
-                        {equippedSkills.length} / {unlockedSlots} Ranuras
+                <div className="flex justify-between items-start mb-2 border-b border-purple-500/20 pb-3">
+                    <div>
+                        <h3 className="text-base md:text-lg font-serif font-bold text-purple-300 uppercase tracking-widest flex items-center gap-2">
+                            <img src="/icons/tabs/tab_grimoire.png" className="w-5 h-5 md:w-6 md:h-6" alt="" /> Barra de Batalla
+                        </h3>
+                        <p className="text-[10px] md:text-xs text-slate-400 mt-0.5">Los poderes equipados se activan automáticamente durante las expediciones.</p>
+                    </div>
+                    <span className="text-xs font-bold bg-purple-900/40 text-purple-200 px-3 py-1 rounded-full border border-purple-500/30 shrink-0 whitespace-nowrap" title={unlockedSlots < 5 ? `Siguiente ranura en Nv.${UNLOCK_LEVELS[unlockedSlots + 1]}` : "Todas las ranuras desbloqueadas"}>
+                        Usadas: {equippedSkills.length} / Disp: {unlockedSlots}
                     </span>
                 </div>
 
@@ -211,7 +214,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                         ? 'border-slate-800 bg-slate-950 cursor-default'
                                         : skill
                                             ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105 bg-purple-900/20'
-                                            : 'border-slate-700 bg-slate-900/50'}`}
+                                            : 'border-dashed border-slate-600 bg-slate-900/30'}`}
                                     title={skill ? "Click para desequipar" : isUnlocked ? "Ranura vacía" : `Se desbloquea en nivel ${unlockLvl}`}
                                 >
                                     {!isUnlocked ? (
@@ -224,12 +227,20 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                     ) : skill ? (
                                         <>
                                             <img src={skill.image_url} className="w-full h-full object-cover" alt={skill.name} />
+                                            <span className="absolute top-1 left-1 bg-black/80 text-[8px] text-white px-1 font-bold rounded border border-white/10 leading-tight">
+                                                Nv.{skill.skill_level}
+                                            </span>
                                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                                                 <Ban className="text-red-400" />
                                             </div>
                                         </>
                                     ) : (
-                                        <img src="/icons/ui/slot_empty.png" className="w-full h-full object-cover opacity-40" alt="Vacío" />
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <div className="text-center">
+                                                <div className="text-lg md:text-2xl text-slate-600 font-bold leading-none">—</div>
+                                                <div className="text-[8px] md:text-[9px] text-slate-600 mt-0.5">Vacío</div>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                                 <span className="text-[10px] font-mono text-slate-500 font-bold">{i + 1}</span>
@@ -237,6 +248,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                         );
                     })}
                 </div>
+                <p className="text-[10px] text-slate-600 text-center mt-2">Uso manual y atajos 1-5 estarán disponibles en una fase futura.</p>
             </div>
 
             {/* FILTROS + BÚSQUEDA */}
@@ -295,12 +307,12 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                 <div
                                     key={skill.player_skill_id}
                                     onClick={() => handleCardClick(skill)}
-                                    className={`relative group bg-slate-900 border rounded-xl overflow-hidden transition-all cursor-pointer flex flex-col
+                                    className={`relative group bg-slate-900 border rounded-xl cursor-pointer flex flex-col min-h-[165px]
                                     ${isSelected
-                                        ? 'border-purple-400 ring-2 ring-purple-500/50 bg-purple-900/10 shadow-[0_0_25px_rgba(168,85,247,0.2)]'
+                                        ? 'border-purple-400/80 bg-purple-900/10 shadow-[0_0_20px_rgba(168,85,247,0.25)]'
                                         : skill.is_equipped
-                                            ? 'border-purple-500/60 ring-1 ring-purple-500/30 bg-purple-900/5'
-                                            : 'border-slate-700 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]'}`}
+                                            ? 'border-purple-500/60 bg-purple-900/5'
+                                            : 'border-slate-700/70 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]'}`}
                                 >
                                     {/* Cabecera Card */}
                                     <div className="flex p-3 gap-3 items-start">
@@ -325,7 +337,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeInfo.bg} ${typeInfo.color} font-bold`}>
                                                     {typeInfo.label}
                                                 </span>
-                                                <span className="text-[10px] text-yellow-500/80">{(skill.trigger_chance || 15)}%</span>
+                                                <span className="text-[10px] text-yellow-500/80">Auto: {(skill.trigger_chance || 15)}%</span>
                                             </div>
                                         </div>
                                     </div>
@@ -342,7 +354,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                     </div>
 
                                     {/* Acciones */}
-                                    <div className="mt-auto bg-black/40 px-3 py-2 flex justify-between items-center border-t border-white/5 gap-2">
+                                    <div className="mt-auto bg-black/40 px-3 py-2.5 flex justify-between items-center border-t border-white/5 gap-2 rounded-b-xl">
                                         <button
                                             onClick={(e) => handleEquipFromCard(e, skill)}
                                             className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1
@@ -375,7 +387,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                     </div>
 
                     {/* PANEL DE DETALLE LATERAL */}
-                    {selectedSkill && (
+                    {selectedSkill ? (
                         <div className="lg:w-2/5 shrink-0">
                             <div className="sticky top-4 bg-slate-900/90 border border-purple-500/30 rounded-xl overflow-hidden shadow-[0_0_40px_rgba(168,85,247,0.1)]">
                                 {/* Mobile close */}
@@ -411,7 +423,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                                         <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${typeInfo.bg} ${typeInfo.color} font-bold`}>
                                                             <TypeIcon size={12} /> {typeInfo.label}
                                                         </span>
-                                                        <span className="text-xs text-yellow-500/80">{(skill.trigger_chance || 15)}% de activación</span>
+                                                        <span className="text-xs text-yellow-500/80">Prob. activación automática: {(skill.trigger_chance || 15)}%</span>
                                                     </div>
                                                     <div className="flex items-center gap-2 mt-2">
                                                         <div className="bg-purple-900/40 text-purple-300 text-xs font-bold px-2 py-0.5 rounded border border-purple-500/30">
@@ -431,28 +443,54 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                                 <p className="text-sm text-slate-300 italic leading-relaxed">"{skill.description}"</p>
                                             </div>
 
+                                            {/* Botones de acción */}
+                                            <div className="px-4 md:px-6 pb-4 flex gap-2">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleToggleEquip(skill.player_skill_id); }}
+                                                    className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-1.5
+                                                    ${skill.is_equipped
+                                                        ? 'bg-red-900/40 text-red-300 border border-red-500/30 hover:bg-red-900/60'
+                                                        : 'bg-purple-900/40 text-purple-300 border border-purple-500/30 hover:bg-purple-900/60'}`}
+                                                >
+                                                    {skill.is_equipped ? <Ban size={12} /> : <Zap size={12} />}
+                                                    {skill.is_equipped ? 'Desequipar' : 'Equipar'}
+                                                </button>
+                                            </div>
+
                                             {/* Stats */}
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-800/50 mx-4 md:mx-6 rounded-lg overflow-hidden border border-slate-700/50 mb-4">
+                                            <div className="flex flex-wrap gap-px bg-slate-800/50 mx-4 md:mx-6 rounded-lg overflow-hidden border border-slate-700/50 mb-4">
                                                 {skill.damage_min > 0 && (
-                                                    <div className="bg-slate-900/60 p-3 text-center">
+                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
                                                         <div className="text-[10px] text-red-400 uppercase font-bold mb-1">Daño</div>
                                                         <div className="text-lg font-bold text-red-300">{computeDamage(skill)}</div>
                                                     </div>
                                                 )}
                                                 {skill.heal_min > 0 && (
-                                                    <div className="bg-slate-900/60 p-3 text-center">
+                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
                                                         <div className="text-[10px] text-green-400 uppercase font-bold mb-1">Curación</div>
                                                         <div className="text-lg font-bold text-green-300">{computeHeal(skill)}</div>
                                                     </div>
                                                 )}
-                                                <div className="bg-slate-900/60 p-3 text-center">
+                                                <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
                                                     <div className="text-[10px] text-blue-400 uppercase font-bold mb-1">Coste MP</div>
                                                     <div className="text-lg font-bold text-blue-300">{skill.energy_cost}</div>
                                                 </div>
-                                                <div className="bg-slate-900/60 p-3 text-center">
-                                                    <div className="text-[10px] text-yellow-500 uppercase font-bold mb-1">Probabilidad</div>
+                                                <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                    <div className="text-[10px] text-yellow-500 uppercase font-bold mb-1">Prob. Auto.</div>
                                                     <div className="text-lg font-bold text-yellow-400">{skill.trigger_chance || 15}%</div>
                                                 </div>
+                                                {skill.cooldown_turns > 0 && (
+                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                        <div className="text-[10px] text-purple-400 uppercase font-bold mb-1">Cooldown</div>
+                                                        <div className="text-lg font-bold text-purple-300">{skill.cooldown_turns} turnos</div>
+                                                    </div>
+                                                )}
+                                                {skill.scaling_stat && (
+                                                    <div className="bg-slate-900/60 p-3 text-center flex-1 min-w-[80px]">
+                                                        <div className="text-[10px] text-cyan-400 uppercase font-bold mb-1">Escala con</div>
+                                                        <div className="text-lg font-bold text-cyan-300">{skill.scaling_stat}{skill.scaling_factor != null ? ` (x${skill.scaling_factor})` : ''}</div>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* Próximo nivel */}
@@ -490,6 +528,14 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                         </>
                                     );
                                 })()}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="lg:w-2/5 shrink-0">
+                            <div className="sticky top-4 bg-slate-900/60 border border-dashed border-slate-700/50 rounded-xl p-8 flex flex-col items-center justify-center text-center min-h-[300px]">
+                                <Sparkles size={40} className="text-slate-600 mb-4" />
+                                <h4 className="text-sm font-bold text-slate-400 mb-1">Selecciona un poder</h4>
+                                <p className="text-xs text-slate-500 max-w-[200px]">Elige una habilidad del Grimorio para ver sus efectos, coste y evolución.</p>
                             </div>
                         </div>
                     )}
