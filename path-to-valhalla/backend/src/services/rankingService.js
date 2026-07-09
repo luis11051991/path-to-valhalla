@@ -9,43 +9,32 @@ const POWER_SQL = `FLOOR(
   GREATEST(COALESCE((p.stats->>'charisma')::int, 0), 0) * 1.5
 )::int + p.level * 25`;
 
-async function getHeroRankings({ page = 1, limit = 20, search = '' }) {
+async function getHeroRankings({ page = 1, limit = 20, search = '', race = '' }) {
   const offset = (page - 1) * limit;
 
+  const wheres = [];
+  const params = [];
+
   if (search) {
-    const searchPattern = `%${search}%`;
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM players p WHERE p.username ILIKE $1`,
-      [searchPattern]
-    );
-    const total = parseInt(countResult.rows[0].count, 10);
-
-    const result = await pool.query(
-      `SELECT p.id, p.username, p.level, c.name AS class_name, p.race,
-              a.name AS alliance_name, a.id AS alliance_id,
-              ${POWER_SQL} AS power
-       FROM players p
-       LEFT JOIN classes c ON c.id = p.class_id
-       LEFT JOIN LATERAL (
-         SELECT alliance_id FROM alliance_members WHERE player_id = p.id AND is_active = true LIMIT 1
-       ) amm ON true
-       LEFT JOIN alliances a ON a.id = amm.alliance_id AND a.is_active = true
-       WHERE p.username ILIKE $3
-       ORDER BY power DESC, p.level DESC, p.id ASC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset, searchPattern]
-    );
-
-    return {
-      data: result.rows,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit)
-    };
+    params.push(`%${search}%`);
+    wheres.push(`p.username ILIKE $${params.length}`);
+  }
+  if (race) {
+    params.push(race);
+    wheres.push(`p.race = $${params.length}`);
   }
 
-  const countResult = await pool.query('SELECT COUNT(*) FROM players p');
+  const whereClause = wheres.length ? 'WHERE ' + wheres.join(' AND ') : '';
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*) FROM players p ${whereClause}`,
+    params
+  );
   const total = parseInt(countResult.rows[0].count, 10);
+
+  const mainWhere = wheres.length
+    ? 'WHERE ' + wheres.map(w => w.replace(/\$(\d+)/g, (_, n) => `$${parseInt(n) + 2}`)).join(' AND ')
+    : '';
 
   const result = await pool.query(
     `SELECT p.id, p.username, p.level, c.name AS class_name, p.race,
@@ -57,9 +46,10 @@ async function getHeroRankings({ page = 1, limit = 20, search = '' }) {
        SELECT alliance_id FROM alliance_members WHERE player_id = p.id AND is_active = true LIMIT 1
      ) amm ON true
      LEFT JOIN alliances a ON a.id = amm.alliance_id AND a.is_active = true
+     ${mainWhere}
      ORDER BY power DESC, p.level DESC, p.id ASC
      LIMIT $1 OFFSET $2`,
-    [limit, offset]
+    [limit, offset, ...params]
   );
 
   return {

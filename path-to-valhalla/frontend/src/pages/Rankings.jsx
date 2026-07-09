@@ -9,6 +9,25 @@ const TABS = [
   { id: 'alliances', label: 'Alianzas', icon: Shield },
 ];
 
+const RACE_FILTERS = [
+  { value: '', label: 'General' },
+  { value: 'human', label: 'Humanos' },
+  { value: 'elf', label: 'Elfos' },
+  { value: 'dwarf', label: 'Enanos' },
+  { value: 'goblin', label: 'Goblins' },
+  { value: 'orc', label: 'Orcos' },
+  { value: 'feline', label: 'Felinos' },
+];
+
+const RACE_TRANSLATION = {
+  human: 'Humano',
+  elf: 'Elfo',
+  dwarf: 'Enano',
+  goblin: 'Goblin',
+  orc: 'Orco',
+  feline: 'Felino',
+};
+
 const PAGE_SIZE = 20;
 
 const TOP_CLASSES = [
@@ -24,6 +43,12 @@ function getInitials(name) {
 
 const formatPower = (value) => Number(value || 0).toLocaleString('es-ES');
 
+function formatRace(race) {
+  if (!race) return '';
+  const lower = race.toLowerCase();
+  return RACE_TRANSLATION[lower] || race;
+}
+
 function Rankings({ user }) {
   const [activeTab, setActiveTab] = useState('heroes');
   const [data, setData] = useState([]);
@@ -34,15 +59,17 @@ function Rankings({ user }) {
   const [fetchError, setFetchError] = useState(null);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [heroRaceFilter, setHeroRaceFilter] = useState('');
   const [profilePlayerId, setProfilePlayerId] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     try {
+      const opts = { page, limit: PAGE_SIZE, search };
       const result = activeTab === 'heroes'
-        ? await rankingService.getHeroes(page, PAGE_SIZE, search)
-        : await rankingService.getAlliances(page, PAGE_SIZE, search);
+        ? await rankingService.getHeroes({ ...opts, race: heroRaceFilter })
+        : await rankingService.getAlliances(opts);
 
       if (result.success) {
         setData(result.data);
@@ -59,11 +86,11 @@ function Rankings({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, search]);
+  }, [activeTab, page, search, heroRaceFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, search]);
+  }, [activeTab, search, heroRaceFilter]);
 
   useEffect(() => {
     fetchData();
@@ -81,6 +108,11 @@ function Rankings({ user }) {
     setPage(1);
   };
 
+  const handleRaceFilter = (race) => {
+    setHeroRaceFilter(race);
+    setPage(1);
+  };
+
   const getRankBadge = (index) => {
     if (index === 0) return <Crown size={20} className="text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.7)]" />;
     if (index === 1) return <Medal size={18} className="text-slate-300 drop-shadow-[0_0_4px_rgba(148,163,184,0.4)]" />;
@@ -95,8 +127,17 @@ function Rankings({ user }) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6">
-      <div className="bg-gradient-to-b from-slate-900/60 to-slate-950/40 border border-amber-900/30 rounded-xl overflow-hidden">
+    <div className="max-w-5xl mx-auto p-4 md:p-6 relative">
+      {/* Background */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-900/5 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-amber-800/5 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(120,53,15,0.06),transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(15,23,42,0.4),transparent_60%)]" />
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-700/20 to-transparent" />
+      </div>
+
+      <div className="relative bg-gradient-to-b from-slate-900/60 to-slate-950/40 border border-amber-900/30 rounded-xl overflow-hidden backdrop-blur-[1px]">
         {/* Header */}
         <div className="relative border-b border-amber-900/30 bg-gradient-to-r from-amber-900/10 via-transparent to-amber-900/5 px-6 py-5">
           <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
@@ -162,6 +203,27 @@ function Rankings({ user }) {
           </form>
         </div>
 
+        {/* Race filters (heroes only) */}
+        {activeTab === 'heroes' && (
+          <div className="px-6 pt-4 pb-1 border-b border-amber-900/20">
+            <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-amber-900/30 scrollbar-track-transparent">
+              {RACE_FILTERS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => handleRaceFilter(value)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all border ${
+                    heroRaceFilter === value
+                      ? 'bg-amber-900/60 text-amber-100 border-amber-600/40 shadow-[inset_0_1px_0_rgba(245,158,11,0.15)]'
+                      : 'bg-slate-900/60 text-slate-400 border-amber-900/20 hover:text-amber-100 hover:border-amber-700/30 hover:bg-slate-800/60'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Count */}
         {total > 0 && !loading && (
           <div className="px-6 pt-4 pb-1">
@@ -192,15 +254,21 @@ function Rankings({ user }) {
           ) : data.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-500">
               <Search size={32} className="mb-3 opacity-30" />
-              <p className="text-sm text-slate-400">No se encontraron resultados.</p>
-              {search && (
+              <p className="text-sm text-slate-400">
+                {activeTab === 'heroes'
+                  ? heroRaceFilter
+                    ? `No hay héroes ${RACE_FILTERS.find(r => r.value === heroRaceFilter)?.label?.toLowerCase() || ''} en este ranking todavía.`
+                    : 'No se encontraron héroes.'
+                  : 'No se encontraron alianzas.'}
+              </p>
+              {(search || heroRaceFilter) && (
                 <>
-                  <p className="text-xs text-slate-600 mt-1">Prueba con otro nombre o limpia la búsqueda.</p>
+                  <p className="text-xs text-slate-600 mt-1">Prueba con otro filtro o limpia la búsqueda.</p>
                   <button
-                    onClick={clearSearch}
+                    onClick={() => { clearSearch(); setHeroRaceFilter(''); }}
                     className="mt-4 px-4 py-2 bg-slate-800/60 border border-amber-900/30 rounded-lg text-xs text-slate-300 hover:bg-slate-700/60 transition-all"
                   >
-                    Limpiar búsqueda
+                    Limpiar filtros
                   </button>
                 </>
               )}
@@ -230,19 +298,23 @@ function Rankings({ user }) {
                       <span className="text-sm font-bold text-slate-100 truncate group-hover:text-amber-200 transition-colors">
                         {hero.username}
                       </span>
-                      <span className="text-[10px] uppercase text-emerald-400/80 bg-emerald-900/30 px-1.5 py-0.5 rounded">
-                        {hero.race}
-                      </span>
-                      <span className="text-[10px] uppercase text-sky-400/80 bg-sky-900/30 px-1.5 py-0.5 rounded">
-                        {hero.class_name}
-                      </span>
                     </div>
-                    {hero.alliance_name && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Shield size={10} className="text-amber-600/60 shrink-0" />
-                        <span className="text-[11px] text-amber-500/70 truncate">{hero.alliance_name}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-[10px] uppercase text-emerald-400/80 bg-emerald-900/30 px-1.5 py-0.5 rounded">
+                        {formatRace(hero.race)}
+                      </span>
+                      {hero.class_name && (
+                        <span className="text-[10px] uppercase text-sky-400/80 bg-sky-900/30 px-1.5 py-0.5 rounded">
+                          {hero.class_name}
+                        </span>
+                      )}
+                      {hero.alliance_name && (
+                        <span className="flex items-center gap-1 text-[10px] text-amber-500/70">
+                          <Shield size={9} className="shrink-0" />
+                          {hero.alliance_name}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-col items-end gap-0.5 shrink-0">

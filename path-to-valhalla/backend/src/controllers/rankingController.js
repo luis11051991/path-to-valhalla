@@ -9,11 +9,17 @@ function parsePagination(query) {
   return { page, limit };
 }
 
+const VALID_RACES = new Set(['human', 'elf', 'dwarf', 'goblin', 'orc', 'feline']);
+
 exports.getHeroes = async (req, res) => {
   try {
     const { page, limit } = parsePagination(req.query);
     const search = (req.query.search || '').trim();
-    const result = await rankingService.getHeroRankings({ page, limit, search });
+    const race = (req.query.race || '').trim().toLowerCase();
+    const result = await rankingService.getHeroRankings({
+      page, limit, search,
+      race: race && VALID_RACES.has(race) ? race : ''
+    });
     return res.json({ success: true, ...result });
   } catch (error) {
     console.error('Error al obtener ranking de héroes:', error);

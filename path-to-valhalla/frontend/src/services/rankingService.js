@@ -9,15 +9,16 @@ const getAuthHeaders = () => {
 };
 
 export const rankingService = {
-  getHeroes: (page = 1, limit = 20, search = '') => {
+  getHeroes: ({ page = 1, limit = 20, search = '', race = '' } = {}) => {
     const params = new URLSearchParams({ page, limit });
     if (search) params.set('search', search);
+    if (race) params.set('race', race);
     return fetch(apiUrl(`/api/rankings/heroes?${params}`), {
       headers: getAuthHeaders()
     }).then(r => r.json());
   },
 
-  getAlliances: (page = 1, limit = 20, search = '') => {
+  getAlliances: ({ page = 1, limit = 20, search = '' } = {}) => {
     const params = new URLSearchParams({ page, limit });
     if (search) params.set('search', search);
     return fetch(apiUrl(`/api/rankings/alliances?${params}`), {
