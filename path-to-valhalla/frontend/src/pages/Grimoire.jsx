@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Ban, ArrowUpCircle } from 'lucide-react'; // Quitamos Lock porque usaremos imagen
+import { Zap, Ban, ArrowUpCircle, Sword, Heart, Sparkles, Search, X, ArrowLeft } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 
-// Configuración
 const MAX_POSSIBLE_SLOTS = 5;
+const UNLOCK_LEVELS = { 1: 1, 2: 1, 3: 10, 4: 50, 5: 100 };
 
 const Grimoire = ({ user, onUpdateUser }) => {
     const [mySkills, setMySkills] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState(null);
+    const [selectedSkill, setSelectedSkill] = useState(null);
+    const [filter, setFilter] = useState('all');
+    const [search, setSearch] = useState('');
 
-    // --- CARGAR HABILIDADES ---
     const fetchSkills = () => {
         fetch(apiUrl('/api/my-skills'), { 
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } 
@@ -32,7 +34,6 @@ const Grimoire = ({ user, onUpdateUser }) => {
         fetchSkills();
     }, []);
 
-    // --- HELPERS ---
     const getMaxSlots = () => {
         if (user.level >= 100) return 5;
         if (user.level >= 50) return 4;
@@ -43,7 +44,6 @@ const Grimoire = ({ user, onUpdateUser }) => {
     const calculateUpgradeCost = (skill) => {
         const base = skill.base_price || 100;
         const lvl = skill.skill_level || 1;
-        // Fórmula Exponencial: Base * 1.3^(Nivel-1)
         return Math.floor(base * Math.pow(1.3, lvl - 1));
     };
 
@@ -62,7 +62,20 @@ const Grimoire = ({ user, onUpdateUser }) => {
         );
     };
 
-    // --- ACCIONES ---
+    const getSkillType = (skill) => {
+        if (skill.damage_min > 0) return { label: 'Daño', icon: Sword, color: 'text-red-400', bg: 'bg-red-900/30 border-red-500/30' };
+        if (skill.heal_min > 0) return { label: 'Curación', icon: Heart, color: 'text-green-400', bg: 'bg-green-900/30 border-green-500/30' };
+        return { label: 'Utilidad', icon: Sparkles, color: 'text-blue-400', bg: 'bg-blue-900/30 border-blue-500/30' };
+    };
+
+    const computeDamage = (skill) => {
+        return Math.floor(skill.damage_min * (1 + (skill.skill_level - 1) * 0.1));
+    };
+
+    const computeHeal = (skill) => {
+        return Math.floor(skill.heal_min * (1 + (skill.skill_level - 1) * 0.1));
+    };
+
     const handleToggleEquip = async (skillId) => {
         try {
             const res = await fetch(apiUrl('/api/equip-skill'), {
@@ -79,7 +92,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
     };
 
     const handleUpgradeSkill = async (e, skill) => {
-        e.stopPropagation(); 
+        e.stopPropagation();
 
         const maxLevel = skill.max_level || 10;
         if ((skill.skill_level || 1) >= maxLevel) return;
@@ -99,7 +112,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                 body: JSON.stringify({ playerSkillId: skill.player_skill_id })
             });
             const data = await res.json();
-            
+
             if (data.success) {
                 onUpdateUser({ ...user, ...data.newFunds });
                 fetchSkills();
@@ -111,148 +124,375 @@ const Grimoire = ({ user, onUpdateUser }) => {
         }
     };
 
-    // --- RENDER ---
     const unlockedSlots = getMaxSlots();
-    const equippedSkills = mySkills.filter(s => s.is_equipped).sort((a,b) => (a.slot_index || 0) - (b.slot_index || 0));
-    // Crear array fijo de slots para mostrar huecos vacíos
-    const slotsDisplay = [...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => {
-        return equippedSkills[i] || null;
+    const equippedSkills = mySkills.filter(s => s.is_equipped).sort((a, b) => (a.slot_index || 0) - (b.slot_index || 0));
+    const slotsDisplay = [...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => equippedSkills[i] || null);
+
+    const filteredSkills = mySkills.filter(skill => {
+        if (filter === 'equipped' && !skill.is_equipped) return false;
+        if (filter === 'upgradable') {
+            const maxLevel = skill.max_level || 10;
+            if ((skill.skill_level || 1) >= maxLevel) return false;
+        }
+        if (filter === 'maxed') {
+            const maxLevel = skill.max_level || 10;
+            if ((skill.skill_level || 1) < maxLevel) return false;
+        }
+        if (search) {
+            const q = search.toLowerCase();
+            const nameMatch = skill.name?.toLowerCase().includes(q);
+            const descMatch = skill.description?.toLowerCase().includes(q);
+            if (!nameMatch && !descMatch) return false;
+        }
+        return true;
     });
 
+    const handleCardClick = (skill) => {
+        setSelectedSkill(prev => prev?.player_skill_id === skill.player_skill_id ? null : skill);
+    };
+
+    const handleSlotClick = (idx) => {
+        const skill = slotsDisplay[idx];
+        if (skill) {
+            setSelectedSkill(prev => prev?.player_skill_id === skill.player_skill_id ? null : skill);
+            handleToggleEquip(skill.player_skill_id);
+        }
+    };
+
+    const handleEquipFromCard = (e, skill) => {
+        e.stopPropagation();
+        handleToggleEquip(skill.player_skill_id);
+    };
+
+    const filters = [
+        { key: 'all', label: 'Todos' },
+        { key: 'equipped', label: 'Equipados' },
+        { key: 'upgradable', label: 'Mejorables' },
+        { key: 'maxed', label: 'Máximo' },
+    ];
+
     return (
-        <div className="h-full flex flex-col p-6 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar">
-            
-            {/* CABECERA: SLOTS EQUIPADOS */}
-            <div className="mb-8 p-6 bg-slate-900/80 border border-purple-500/30 rounded-xl shadow-[0_0_50px_rgba(168,85,247,0.1)]">
-                <div className="flex justify-between items-center mb-6 border-b border-purple-500/20 pb-4">
-                    <h3 className="text-lg font-serif font-bold text-purple-300 uppercase tracking-widest flex items-center gap-2">
-                        <img src="/icons/tabs/tab_grimoire.png" className="w-6 h-6" alt=""/> Barra de Batalla
+        <div className="h-full flex flex-col p-4 md:p-6 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar">
+            {/* BARRA DE BATALLA */}
+            <div className="mb-6 p-4 md:p-6 bg-slate-900/80 border border-purple-500/30 rounded-xl shadow-[0_0_50px_rgba(168,85,247,0.1)]">
+                <div className="flex justify-between items-center mb-4 border-b border-purple-500/20 pb-3">
+                    <h3 className="text-base md:text-lg font-serif font-bold text-purple-300 uppercase tracking-widest flex items-center gap-2">
+                        <img src="/icons/tabs/tab_grimoire.png" className="w-5 h-5 md:w-6 md:h-6" alt="" /> Barra de Batalla
                     </h3>
                     <span className="text-xs font-bold bg-purple-900/40 text-purple-200 px-3 py-1 rounded-full border border-purple-500/30">
-                        {equippedSkills.length} / {unlockedSlots} Ranuras Usadas
+                        {equippedSkills.length} / {unlockedSlots} Ranuras
                     </span>
                 </div>
-                
-                <div className="flex gap-4 justify-center flex-wrap">
-                    {[...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => { 
-                        const isUnlocked = i < unlockedSlots; 
-                        const skill = slotsDisplay[i]; 
-                        
+
+                <div className="flex gap-2 md:gap-4 justify-center flex-wrap">
+                    {[...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => {
+                        const isUnlocked = i < unlockedSlots;
+                        const skill = slotsDisplay[i];
+                        const unlockLvl = UNLOCK_LEVELS[i + 1];
+
                         return (
-                            <div 
-                                key={i} 
-                                className={`w-20 h-20 rounded-xl border-2 flex items-center justify-center relative transition-all overflow-hidden group
-                                ${!isUnlocked 
-                                    ? 'border-slate-800 bg-slate-950' 
-                                    : skill 
-                                        ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105 bg-purple-900/20' 
-                                        : 'border-slate-700 bg-slate-900/50'}`} 
-                                onClick={() => skill && handleToggleEquip(skill.player_skill_id)}
-                                title={skill ? "Click para desequipar" : isUnlocked ? "Ranura vacía" : "Bloqueado"}
-                            >
-                                {!isUnlocked ? (
-                                    // SLOT BLOQUEADO (Imagen + Texto)
-                                    <>
-                                        <img src="/icons/ui/slot_locked.png" className="w-full h-full object-cover opacity-60" alt="Bloqueado" />
-                                        <span className="absolute bottom-1 text-[9px] text-white font-bold bg-black/60 px-1 rounded border border-white/10">
-                                            LVL {i === 2 ? 10 : i === 3 ? 50 : 100}
-                                        </span>
-                                    </>
-                                ) : skill ? (
-                                    // SKILL EQUIPADA
-                                    <>
-                                        <img src={skill.image_url} className="w-full h-full object-cover" alt={skill.name} />
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                            <Ban className="text-red-400" />
-                                        </div>
-                                    </>
-                                ) : (
-                                    // SLOT VACÍO (Imagen)
-                                    <img src="/icons/ui/slot_empty.png" className="w-full h-full object-cover opacity-40" alt="Vacío" />
-                                )}
+                            <div key={i} className="flex flex-col items-center gap-1">
+                                <div
+                                    onClick={() => isUnlocked && skill && handleSlotClick(i)}
+                                    className={`w-16 h-16 md:w-20 md:h-20 rounded-xl border-2 flex items-center justify-center relative transition-all overflow-hidden group shrink-0
+                                    ${!isUnlocked
+                                        ? 'border-slate-800 bg-slate-950 cursor-default'
+                                        : skill
+                                            ? 'border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)] cursor-pointer hover:scale-105 bg-purple-900/20'
+                                            : 'border-slate-700 bg-slate-900/50'}`}
+                                    title={skill ? "Click para desequipar" : isUnlocked ? "Ranura vacía" : `Se desbloquea en nivel ${unlockLvl}`}
+                                >
+                                    {!isUnlocked ? (
+                                        <>
+                                            <img src="/icons/ui/slot_locked.png" className="w-full h-full object-cover opacity-60" alt="Bloqueado" />
+                                            <span className="absolute bottom-1 text-[9px] text-white font-bold bg-black/60 px-1 rounded border border-white/10">
+                                                Nv.{unlockLvl}
+                                            </span>
+                                        </>
+                                    ) : skill ? (
+                                        <>
+                                            <img src={skill.image_url} className="w-full h-full object-cover" alt={skill.name} />
+                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                <Ban className="text-red-400" />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <img src="/icons/ui/slot_empty.png" className="w-full h-full object-cover opacity-40" alt="Vacío" />
+                                    )}
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-500 font-bold">{i + 1}</span>
                             </div>
                         );
                     })}
                 </div>
             </div>
 
-            {/* LISTA DE HABILIDADES */}
-            <h2 className="text-2xl font-serif text-slate-200 mb-6 pl-2 border-l-4 border-purple-500">Grimorio de Poderes</h2>
-            
+            {/* FILTROS + BÚSQUEDA */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-4 items-start sm:items-center justify-between">
+                <div className="flex gap-1 flex-wrap">
+                    {filters.map(f => (
+                        <button
+                            key={f.key}
+                            onClick={() => { setFilter(f.key); setSelectedSkill(null); }}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all uppercase tracking-wider
+                            ${filter === f.key
+                                ? 'bg-purple-700 text-white shadow-md'
+                                : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-purple-500/50'}`}
+                        >
+                            {f.label}
+                        </button>
+                    ))}
+                </div>
+                <div className="relative w-full sm:w-56">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                        type="text"
+                        placeholder="Buscar habilidad..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="w-full pl-9 pr-8 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    />
+                    {search && (
+                        <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* CONTENIDO PRINCIPAL */}
             {loading ? (
                 <div className="text-center text-slate-500 mt-10">Leyendo pergaminos antiguos...</div>
-            ) : mySkills.length === 0 ? (
+            ) : filteredSkills.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">
                     <img src="/icons/tabs/tab_grimoire.png" className="w-16 h-16 opacity-30 mb-4 grayscale" alt="Empty" />
-                    <p>No has aprendido ninguna habilidad aún.</p>
+                    <p>{mySkills.length === 0 ? "No has aprendido ninguna habilidad aún." : "No hay habilidades con ese filtro."}</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-20">
-                    {mySkills.map((skill) => {
-                        const maxLevel = skill.max_level || 10;
-                        const isMax = (skill.skill_level || 1) >= maxLevel;
-                        const upgradeCost = isMax ? null : calculateUpgradeCost(skill);
-                        
-                        return (
-                            <div 
-                                key={skill.player_skill_id} 
-                                onClick={() => handleToggleEquip(skill.player_skill_id)} 
-                                className={`relative group bg-slate-900 border rounded-xl overflow-hidden transition-all cursor-pointer hover:shadow-[0_0_25px_rgba(168,85,247,0.15)] flex flex-col
-                                ${skill.is_equipped ? 'border-purple-500 ring-1 ring-purple-500/50 bg-purple-900/5' : 'border-slate-700 hover:border-purple-400/50'}`}
-                            >
-                                {/* Cabecera Card */}
-                                <div className="flex p-4 gap-4 items-start">
-                                    <div className={`w-14 h-14 rounded-lg bg-black border shrink-0 overflow-hidden relative shadow-inner ${skill.is_equipped ? 'border-purple-400' : 'border-slate-700'}`}>
-                                        {skill.image_url ? (
-                                            <img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-purple-900"><Zap /></div>
-                                        )}
-                                        <div className="absolute bottom-0 right-0 bg-black/80 text-[10px] text-white px-1.5 font-bold border-tl border-slate-700 rounded-tl">
-                                            Nv.{skill.skill_level}
-                                        </div>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <h3 className={`text-sm font-bold truncate pr-2 ${skill.is_equipped ? 'text-purple-300' : 'text-slate-200 group-hover:text-white'}`}>
-                                                {skill.name}
-                                            </h3>
-                                            {skill.is_equipped && <Zap size={12} className="text-purple-400 shrink-0 mt-1" />}
-                                        </div>
-                                        <div className="text-[10px] text-yellow-500/80 mb-1">Probabilidad: {(skill.trigger_chance || 15)}%</div>
-                                        <p className="text-[10px] text-slate-400 line-clamp-2 leading-tight min-h-[2.5em]">{skill.description}</p>
-                                    </div>
-                                </div>
-                                
-                                {/* Barra Inferior (Costos y Botón) */}
-                                <div className="mt-auto bg-black/40 px-4 py-2 flex justify-between items-center text-xs border-t border-white/5">
-                                    <div className="flex flex-col gap-0.5">
-                                        <div className="text-blue-400 font-mono text-[10px]">MP: {skill.energy_cost}</div>
-                                        {skill.damage_min > 0 && (
-                                            <div className="text-red-400 font-bold text-[10px]">
-                                                DMG: {Math.floor(skill.damage_min * (1 + (skill.skill_level-1)*0.1))}
+                <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+                    {/* GRILLA DE HABILIDADES */}
+                    <div className={`grid gap-4 ${selectedSkill ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 lg:w-3/5' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full'} content-start pb-20`}>
+                        {filteredSkills.map((skill) => {
+                            const maxLevel = skill.max_level || 10;
+                            const isMax = (skill.skill_level || 1) >= maxLevel;
+                            const upgradeCost = isMax ? null : calculateUpgradeCost(skill);
+                            const isSelected = selectedSkill?.player_skill_id === skill.player_skill_id;
+                            const typeInfo = getSkillType(skill);
+
+                            return (
+                                <div
+                                    key={skill.player_skill_id}
+                                    onClick={() => handleCardClick(skill)}
+                                    className={`relative group bg-slate-900 border rounded-xl overflow-hidden transition-all cursor-pointer flex flex-col
+                                    ${isSelected
+                                        ? 'border-purple-400 ring-2 ring-purple-500/50 bg-purple-900/10 shadow-[0_0_25px_rgba(168,85,247,0.2)]'
+                                        : skill.is_equipped
+                                            ? 'border-purple-500/60 ring-1 ring-purple-500/30 bg-purple-900/5'
+                                            : 'border-slate-700 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]'}`}
+                                >
+                                    {/* Cabecera Card */}
+                                    <div className="flex p-3 gap-3 items-start">
+                                        <div className={`w-12 h-12 rounded-lg bg-black border shrink-0 overflow-hidden relative shadow-inner ${skill.is_equipped ? 'border-purple-400' : 'border-slate-700'}`}>
+                                            {skill.image_url ? (
+                                                <img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-purple-900"><Zap /></div>
+                                            )}
+                                            <div className="absolute bottom-0 right-0 bg-black/80 text-[10px] text-white px-1.5 font-bold border-tl border-slate-700 rounded-tl">
+                                                Nv.{skill.skill_level}
                                             </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-start gap-1">
+                                                <h3 className={`text-sm font-bold truncate ${skill.is_equipped ? 'text-purple-300' : 'text-slate-200 group-hover:text-white'}`}>
+                                                    {skill.name}
+                                                </h3>
+                                                {skill.is_equipped && <Zap size={12} className="text-purple-400 shrink-0 mt-0.5" />}
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeInfo.bg} ${typeInfo.color} font-bold`}>
+                                                    {typeInfo.label}
+                                                </span>
+                                                <span className="text-[10px] text-yellow-500/80">{(skill.trigger_chance || 15)}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Stats Mini */}
+                                    <div className="px-3 pb-2 flex gap-3 text-[10px] font-mono">
+                                        {skill.damage_min > 0 && (
+                                            <span className="text-red-400">DMG {computeDamage(skill)}</span>
+                                        )}
+                                        {skill.heal_min > 0 && (
+                                            <span className="text-green-400">CURA {computeHeal(skill)}</span>
+                                        )}
+                                        <span className="text-blue-400 ml-auto">MP {skill.energy_cost}</span>
+                                    </div>
+
+                                    {/* Acciones */}
+                                    <div className="mt-auto bg-black/40 px-3 py-2 flex justify-between items-center border-t border-white/5 gap-2">
+                                        <button
+                                            onClick={(e) => handleEquipFromCard(e, skill)}
+                                            className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1
+                                            ${skill.is_equipped
+                                                ? 'bg-red-900/40 text-red-300 border border-red-500/30 hover:bg-red-900/60'
+                                                : 'bg-purple-900/40 text-purple-300 border border-purple-500/30 hover:bg-purple-900/60'}`}
+                                        >
+                                            {skill.is_equipped ? <Ban size={10} /> : <Zap size={10} />}
+                                            {skill.is_equipped ? 'Desequipar' : 'Equipar'}
+                                        </button>
+
+                                        {isMax ? (
+                                            <div className="px-2.5 py-1 bg-slate-800 text-slate-500 rounded text-[10px] font-bold uppercase border border-slate-700 cursor-default">
+                                                MAX
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => handleUpgradeSkill(e, skill)}
+                                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-amber-500 text-slate-300 hover:text-white rounded text-[10px] font-bold uppercase flex items-center gap-1.5 transition-all group/btn"
+                                                title="Mejorar Habilidad"
+                                            >
+                                                <ArrowUpCircle size={10} className="text-green-500 group-hover/btn:animate-bounce" />
+                                                {formatCurrency(upgradeCost)}
+                                            </button>
                                         )}
                                     </div>
-                                    
-                                    {isMax ? (
-                                        <div className="px-3 py-1 bg-slate-800 text-slate-500 rounded text-[10px] font-bold uppercase flex items-center gap-1 border border-slate-700 cursor-default">
-                                            MAX
-                                        </div>
-                                    ) : (
-                                        <button 
-                                            onClick={(e) => handleUpgradeSkill(e, skill)}
-                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-amber-500 text-slate-300 hover:text-white rounded text-[10px] font-bold uppercase flex items-center gap-2 transition-all shadow-sm group/btn"
-                                            title="Mejorar Habilidad"
-                                        >
-                                            <ArrowUpCircle size={12} className="text-green-500 group-hover/btn:animate-bounce" /> 
-                                            {formatCurrency(upgradeCost)}
-                                        </button>
-                                    )}
                                 </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* PANEL DE DETALLE LATERAL */}
+                    {selectedSkill && (
+                        <div className="lg:w-2/5 shrink-0">
+                            <div className="sticky top-4 bg-slate-900/90 border border-purple-500/30 rounded-xl overflow-hidden shadow-[0_0_40px_rgba(168,85,247,0.1)]">
+                                {/* Mobile close */}
+                                <div className="flex justify-between items-center p-4 border-b border-purple-500/20 lg:hidden">
+                                    <h4 className="text-sm font-bold text-purple-300 uppercase tracking-wider">Detalle</h4>
+                                    <button onClick={() => setSelectedSkill(null)} className="text-slate-400 hover:text-white">
+                                        <X size={16} />
+                                    </button>
+                                </div>
+
+                                {(() => {
+                                    const skill = selectedSkill;
+                                    const maxLevel = skill.max_level || 10;
+                                    const isMax = (skill.skill_level || 1) >= maxLevel;
+                                    const upgradeCost = isMax ? null : calculateUpgradeCost(skill);
+                                    const typeInfo = getSkillType(skill);
+                                    const TypeIcon = typeInfo.icon;
+
+                                    return (
+                                        <>
+                                            {/* Hero */}
+                                            <div className="p-4 md:p-6 flex gap-4 items-center">
+                                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-black border-2 border-purple-500 overflow-hidden shadow-[0_0_20px_rgba(168,85,247,0.3)] shrink-0">
+                                                    {skill.image_url ? (
+                                                        <img src={skill.image_url} alt={skill.name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-purple-700"><Zap size={32} /></div>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h2 className="text-lg md:text-xl font-bold text-white truncate">{skill.name}</h2>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${typeInfo.bg} ${typeInfo.color} font-bold`}>
+                                                            <TypeIcon size={12} /> {typeInfo.label}
+                                                        </span>
+                                                        <span className="text-xs text-yellow-500/80">{(skill.trigger_chance || 15)}% de activación</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <div className="bg-purple-900/40 text-purple-300 text-xs font-bold px-2 py-0.5 rounded border border-purple-500/30">
+                                                            Nivel {skill.skill_level} / {maxLevel}
+                                                        </div>
+                                                        {skill.is_equipped && (
+                                                            <div className="bg-green-900/40 text-green-300 text-xs font-bold px-2 py-0.5 rounded border border-green-500/30 flex items-center gap-1">
+                                                                <Zap size={10} /> Equipada
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Descripción */}
+                                            <div className="px-4 md:px-6 pb-4">
+                                                <p className="text-sm text-slate-300 italic leading-relaxed">"{skill.description}"</p>
+                                            </div>
+
+                                            {/* Stats */}
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-800/50 mx-4 md:mx-6 rounded-lg overflow-hidden border border-slate-700/50 mb-4">
+                                                {skill.damage_min > 0 && (
+                                                    <div className="bg-slate-900/60 p-3 text-center">
+                                                        <div className="text-[10px] text-red-400 uppercase font-bold mb-1">Daño</div>
+                                                        <div className="text-lg font-bold text-red-300">{computeDamage(skill)}</div>
+                                                    </div>
+                                                )}
+                                                {skill.heal_min > 0 && (
+                                                    <div className="bg-slate-900/60 p-3 text-center">
+                                                        <div className="text-[10px] text-green-400 uppercase font-bold mb-1">Curación</div>
+                                                        <div className="text-lg font-bold text-green-300">{computeHeal(skill)}</div>
+                                                    </div>
+                                                )}
+                                                <div className="bg-slate-900/60 p-3 text-center">
+                                                    <div className="text-[10px] text-blue-400 uppercase font-bold mb-1">Coste MP</div>
+                                                    <div className="text-lg font-bold text-blue-300">{skill.energy_cost}</div>
+                                                </div>
+                                                <div className="bg-slate-900/60 p-3 text-center">
+                                                    <div className="text-[10px] text-yellow-500 uppercase font-bold mb-1">Probabilidad</div>
+                                                    <div className="text-lg font-bold text-yellow-400">{skill.trigger_chance || 15}%</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Próximo nivel */}
+                                            <div className="px-4 md:px-6 pb-6">
+                                                <div className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-3 md:p-4">
+                                                    <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                                        {isMax ? 'Nivel Máximo Alcanzado' : 'Siguiente Nivel'}
+                                                    </h5>
+                                                    {!isMax && (
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="text-sm text-slate-300">
+                                                                <span className="font-bold text-white">Nv. {(skill.skill_level || 1) + 1}</span>
+                                                                <span className="text-slate-500 mx-2">→</span>
+                                                                {skill.damage_min > 0 && (
+                                                                    <span className="text-red-400 font-mono">DMG {computeDamage({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
+                                                                )}
+                                                                {skill.heal_min > 0 && (
+                                                                    <span className="text-green-400 font-mono ml-2">CURA {computeHeal({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => handleUpgradeSkill(e, skill)}
+                                                                className="px-3 py-1.5 bg-amber-700/60 hover:bg-amber-700/80 border border-amber-500/50 text-amber-200 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 transition-all"
+                                                            >
+                                                                <ArrowUpCircle size={12} />
+                                                                {formatCurrency(upgradeCost)}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    {isMax && (
+                                                        <div className="text-sm text-slate-500 italic">Esta habilidad ha alcanzado su potencial máximo.</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
-                        );
-                    })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Mobile: back to list when detail is open */}
+            {selectedSkill && (
+                <div className="fixed bottom-4 left-4 z-40 lg:hidden">
+                    <button
+                        onClick={() => setSelectedSkill(null)}
+                        className="bg-slate-800 border border-slate-600 text-slate-300 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-700 transition-all shadow-lg"
+                    >
+                        <ArrowLeft size={14} /> Volver a lista
+                    </button>
                 </div>
             )}
 
