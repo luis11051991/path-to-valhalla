@@ -25,6 +25,7 @@ import StatisticsPage from './pages/Statistics';
 import AlliancePage from './pages/Alliance';
 import AllianceCreate from './pages/AllianceCreate';
 import AlliancePublicProfile from './pages/AlliancePublicProfile';
+import Rankings from './pages/Rankings';
 import { apiUrl } from './constants/api';
 
 import { io } from 'socket.io-client';
@@ -195,6 +196,11 @@ function App() {
               <Route
                 path="/alliance/:allianceId"
                 element={<AlliancePublicProfile user={user} />}
+              />
+
+              <Route
+                path="/rankings"
+                element={<Rankings user={user} />}
               />
 
               {/* Aventura */}

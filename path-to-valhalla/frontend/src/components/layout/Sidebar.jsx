@@ -48,6 +48,7 @@ const links = [
         section: 'Social',
         items: [
             { to: '/alliance', label: 'Alianza', icon: '/icons/sidebar/social_alliance.png' },
+            { to: '/rankings', label: 'Rankings', icon: '/icons/sidebar/social_alliance.png' },
             { to: '/calendar', label: 'Agenda', icon: '/icons/sidebar/social_calendar.png', disabled: true },
         ]
     },
