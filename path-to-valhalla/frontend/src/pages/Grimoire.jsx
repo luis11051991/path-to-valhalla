@@ -96,8 +96,14 @@ const Grimoire = ({ user, onUpdateUser }) => {
                 body: JSON.stringify({ skillId })
             });
             const data = await res.json();
-            if (data.success) fetchSkills();
-            else setErrorMsg(data.message);
+            if (data.success) {
+                fetchSkills();
+                setErrorMsg(data.is_equipped
+                    ? `Habilidad equipada en Slot ${data.slot_index}.`
+                    : 'Habilidad desequipada.');
+            } else {
+                setErrorMsg(data.message);
+            }
         } catch (error) {
             setErrorMsg("Error de conexión.");
         }
@@ -113,7 +119,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
         const playerTotalCopper = (user.gold * 10000) + (user.silver * 100) + user.copper;
 
         if (playerTotalCopper < cost) {
-            setErrorMsg("No tienes suficiente dinero.");
+            setErrorMsg(`Fondos insuficientes para mejorar ${skill.name}.`);
             return;
         }
 
@@ -128,6 +134,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
             if (data.success) {
                 onUpdateUser({ ...user, ...data.newFunds });
                 fetchSkills();
+                setErrorMsg(`${skill.name} subió a nivel ${data.newLevel || ((skill.skill_level || 1) + 1)}!`);
             } else {
                 setErrorMsg(data.message);
             }
@@ -143,6 +150,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
         if (skill.slot_index > 0) equippedBySlot.set(skill.slot_index, skill);
     });
     const slotsDisplay = [...Array(MAX_POSSIBLE_SLOTS)].map((_, i) => equippedBySlot.get(i + 1) || null);
+    const hasFreeSlot = equippedSkills.length < unlockedSlots;
 
     const filteredSkills = mySkills.filter(skill => {
         if (filter === 'equipped' && !skill.is_equipped) return false;
@@ -252,6 +260,12 @@ const Grimoire = ({ user, onUpdateUser }) => {
                         );
                     })}
                 </div>
+                {unlockedSlots < 5 && (
+                    <p className="text-[10px] text-slate-500 text-center mt-1">Siguiente ranura desbloqueable en Nv.{UNLOCK_LEVELS[unlockedSlots + 1]}</p>
+                )}
+                {unlockedSlots >= 5 && (
+                    <p className="text-[10px] text-amber-500/60 text-center mt-1">Todas las ranuras desbloqueadas.</p>
+                )}
                 <p className="text-[10px] text-slate-600 text-center mt-2">Uso manual y atajos 1-5 estarán disponibles en una fase futura.</p>
             </div>
 
@@ -335,7 +349,12 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                                 <h3 className={`text-sm font-bold truncate ${skill.is_equipped ? 'text-purple-300' : 'text-slate-200 group-hover:text-white'}`}>
                                                     {skill.name}
                                                 </h3>
-                                                {skill.is_equipped && <Zap size={12} className="text-purple-400 shrink-0 mt-0.5" />}
+                                                {skill.is_equipped && (
+                                                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                                                        <Zap size={12} className="text-purple-400" />
+                                                        <span className="text-[9px] font-mono text-purple-300">S{skill.slot_index || '?'}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeInfo.bg} ${typeInfo.color} font-bold`}>
@@ -359,16 +378,25 @@ const Grimoire = ({ user, onUpdateUser }) => {
 
                                     {/* Acciones */}
                                     <div className="mt-auto bg-black/40 px-3 py-2.5 flex justify-between items-center border-t border-white/5 gap-2 rounded-b-xl">
-                                        <button
-                                            onClick={(e) => handleEquipFromCard(e, skill)}
-                                            className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1
-                                            ${skill.is_equipped
-                                                ? 'bg-red-900/40 text-red-300 border border-red-500/30 hover:bg-red-900/60'
-                                                : 'bg-purple-900/40 text-purple-300 border border-purple-500/30 hover:bg-purple-900/60'}`}
-                                        >
-                                            {skill.is_equipped ? <Ban size={10} /> : <Zap size={10} />}
-                                            {skill.is_equipped ? 'Desequipar' : 'Equipar'}
-                                        </button>
+                                        {skill.is_equipped ? (
+                                            <button
+                                                onClick={(e) => handleEquipFromCard(e, skill)}
+                                                className="px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 bg-red-900/40 text-red-300 border border-red-500/30 hover:bg-red-900/60"
+                                            >
+                                                <Ban size={10} /> Desequipar
+                                            </button>
+                                        ) : hasFreeSlot ? (
+                                            <button
+                                                onClick={(e) => handleEquipFromCard(e, skill)}
+                                                className="px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 bg-purple-900/40 text-purple-300 border border-purple-500/30 hover:bg-purple-900/60"
+                                            >
+                                                <Zap size={10} /> Equipar
+                                            </button>
+                                        ) : (
+                                            <div className="px-2.5 py-1 bg-slate-800/50 text-slate-600 rounded text-[10px] font-bold uppercase border border-slate-700/50 cursor-default flex items-center gap-1">
+                                                <Ban size={10} /> Sin ranura
+                                            </div>
+                                        )}
 
                                         {isMax ? (
                                             <div className="px-2.5 py-1 bg-slate-800 text-slate-500 rounded text-[10px] font-bold uppercase border border-slate-700 cursor-default">
@@ -436,7 +464,7 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                                             </div>
                                                             {skill.is_equipped && (
                                                                 <div className="bg-green-900/40 text-green-300 text-xs font-bold px-2 py-0.5 rounded border border-green-500/30 flex items-center gap-1">
-                                                                    <Zap size={10} /> Equipada
+                                                                    <Zap size={10} /> Equipada{skill.slot_index > 0 ? ` en Slot ${skill.slot_index}` : ''}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -505,25 +533,44 @@ const Grimoire = ({ user, onUpdateUser }) => {
                                                             {isMax ? 'Nivel Máximo Alcanzado' : 'Siguiente Nivel'}
                                                         </h5>
                                                         {!isMax && (
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="text-sm text-slate-300">
-                                                                    <span className="font-bold text-white">Nv. {(skill.skill_level || 1) + 1}</span>
+                                                            <>
+                                                                <div className="text-sm text-slate-300 mb-2">
+                                                                    <span className="font-bold text-white">Nv. {skill.skill_level || 1}</span>
                                                                     <span className="text-slate-500 mx-2">→</span>
-                                                                    {skill.damage_min > 0 && (
-                                                                        <span className="text-red-400 font-mono">DMG {computeDamage({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
-                                                                    )}
-                                                                    {(skill.heal_amount ?? 0) > 0 && (
-                                                                        <span className="text-green-400 font-mono ml-2">CURA {computeHeal({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
-                                                                    )}
+                                                                    <span className="font-bold text-amber-300">Nv. {(skill.skill_level || 1) + 1}</span>
                                                                 </div>
-                                                                <button
-                                                                    onClick={(e) => handleUpgradeSkill(e, skill)}
-                                                                    className="px-3 py-1.5 bg-amber-700/60 hover:bg-amber-700/80 border border-amber-500/50 text-amber-200 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 transition-all"
-                                                                >
-                                                                    <ArrowUpCircle size={12} />
-                                                                    {formatCurrency(upgradeCost)}
-                                                                </button>
-                                                            </div>
+                                                                {(skill.damage_min > 0 || (skill.heal_amount ?? 0) > 0) && (
+                                                                    <div className="text-xs text-slate-400 mb-3 space-y-1">
+                                                                        {skill.damage_min > 0 && (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-red-400 font-mono">DMG</span>
+                                                                                <span className="text-white">{computeDamage(skill)}</span>
+                                                                                <span className="text-slate-600">→</span>
+                                                                                <span className="text-red-300 font-bold">{computeDamage({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        {(skill.heal_amount ?? 0) > 0 && (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-green-400 font-mono">CURA</span>
+                                                                                <span className="text-white">{computeHeal(skill)}</span>
+                                                                                <span className="text-slate-600">→</span>
+                                                                                <span className="text-green-300 font-bold">{computeHeal({ ...skill, skill_level: (skill.skill_level || 1) + 1 })}</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex items-center justify-between pt-2 border-t border-slate-700/40">
+                                                                    <div className="text-xs text-slate-400">
+                                                                        <span className="text-slate-500">Costo:</span> {formatCurrency(upgradeCost)}
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={(e) => handleUpgradeSkill(e, skill)}
+                                                                        className="px-3 py-1.5 bg-amber-700/60 hover:bg-amber-700/80 border border-amber-500/50 text-amber-200 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 transition-all"
+                                                                    >
+                                                                        <ArrowUpCircle size={12} /> Mejorar
+                                                                    </button>
+                                                                </div>
+                                                            </>
                                                         )}
                                                         {isMax && (
                                                             <div className="text-sm text-slate-500 italic">Esta habilidad ha alcanzado su potencial máximo.</div>
