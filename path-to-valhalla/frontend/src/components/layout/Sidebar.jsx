@@ -22,7 +22,7 @@ const links = [
         section: 'Aventura',
         items: [
             { to: '/expeditions', label: 'Expediciones', icon: '/icons/sidebar/adv_expeditions.png' },
-            { to: '/dungeons', label: 'Mazmorras', icon: '/icons/sidebar/adv_dungeons.png', disabled: true },
+            { to: '/dungeons', label: 'Mazmorras', icon: '/icons/sidebar/adv_dungeons.png' },
             { to: '/tower', label: 'Torre Infinita', icon: '/icons/sidebar/adv_tower.png', disabled: true },
             { to: '/valhalla', label: 'Salon de Valhallus', icon: '/icons/sidebar/adv_valhalla.png' },
         ]

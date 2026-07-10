@@ -26,6 +26,8 @@ import AlliancePage from './pages/Alliance';
 import AllianceCreate from './pages/AllianceCreate';
 import AlliancePublicProfile from './pages/AlliancePublicProfile';
 import Rankings from './pages/Rankings';
+import DungeonsLobby from './pages/DungeonsLobby';
+import DungeonRoom from './pages/DungeonRoom';
 import { apiUrl } from './constants/api';
 
 import { io } from 'socket.io-client';
@@ -207,6 +209,15 @@ function App() {
               <Route
                 path="/expeditions"
                 element={<Expeditions user={user} onUpdateUser={handleUserUpdate} />}
+              />
+
+              <Route
+                path="/dungeons"
+                element={<DungeonsLobby user={user} onUpdateUser={handleUserUpdate} />}
+              />
+              <Route
+                path="/dungeons/:code"
+                element={<DungeonRoom user={user} />}
               />
 
               <Route

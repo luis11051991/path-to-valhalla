@@ -16,7 +16,15 @@ const seededRandom = (seedString) => {
 };
 
 const randomInt = (min, max, rng) => {
-    const r = rng ? rng() : Math.random();
+    let r;
+    if (typeof rng === 'function') {
+        r = rng();
+    } else if (typeof rng === 'string') {
+        const seeded = seededRandom(rng);
+        r = seeded();
+    } else {
+        r = Math.random();
+    }
     return Math.floor(r * (max - min + 1)) + min;
 };
 

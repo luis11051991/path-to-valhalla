@@ -33,6 +33,7 @@ const playerService = require('./src/services/playerService');
 const bestiaryRoutes = require('./src/routes/bestiaryRoutes');
 const messageRoutes = require('./src/routes/messageRoutes');
 const rankingRoutes = require('./src/routes/rankingRoutes');
+const dungeonRoutes = require('./src/routes/dungeonRoutes');
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use('/api/alliances', allianceRoutes);
 app.use('/api/bestiary', bestiaryRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/rankings', rankingRoutes);
+app.use('/api/dungeons', dungeonRoutes);
 
 // --- 2. RUTAS DE COMPATIBILIDAD (Legacy) ---
 app.post('/api/register', authController.register);
