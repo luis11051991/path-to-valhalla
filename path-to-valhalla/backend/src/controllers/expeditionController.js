@@ -28,7 +28,6 @@ const generateRandomStats = (templateStats, rng) => {
 exports.getBestiary = async (req, res) => {
     const userId = req.user?.id;
     try {
-        console.log("-> Solicitando Bestiario...");
         const query = `
             SELECT 
                 e.*,
@@ -47,6 +46,8 @@ exports.getBestiary = async (req, res) => {
                 ) as drops
             FROM enemies e
             LEFT JOIN player_bestiary pb ON e.id = pb.enemy_id AND pb.player_id = $1
+            WHERE pb.enemy_id IS NOT NULL
+               OR COALESCE(e.spawn_context, 'expedition') IN ('expedition', 'all')
             ORDER BY e.min_level ASC, e.difficulty_tier ASC
         `;
         
@@ -110,7 +111,12 @@ exports.getZoneEnemies = async (req, res) => {
         }
 
         const enemiesRes = await pool.query(
-            `SELECT * FROM enemies WHERE zone_id = $1 AND (is_hidden = false OR id = ANY($2)) ORDER BY difficulty_tier ASC, min_level ASC`,
+            `SELECT *
+             FROM enemies
+             WHERE zone_id = $1
+               AND COALESCE(spawn_context, 'expedition') IN ('expedition', 'all')
+               AND (is_hidden = false OR id = ANY($2))
+             ORDER BY difficulty_tier ASC, min_level ASC, id ASC`,
             [zoneId, visibleHiddenIds]
         );
 
@@ -131,7 +137,14 @@ exports.startBattle = async (req, res) => {
         await client.query('BEGIN');
 
         const playerRes = await client.query('SELECT * FROM players WHERE id = $1', [userId]);
-        const enemyRes = await client.query('SELECT * FROM enemies WHERE id = $1', [enemyId]);
+        const enemyRes = await client.query(
+            `SELECT *
+             FROM enemies
+             WHERE id = $1
+               AND zone_id = $2
+               AND COALESCE(spawn_context, 'expedition') IN ('expedition', 'all')`,
+            [enemyId, zoneId]
+        );
         const zoneRes = await client.query('SELECT * FROM expeditions WHERE id = $1', [zoneId]);
 
         if (!playerRes.rows[0] || !enemyRes.rows[0]) throw new Error("Datos inválidos");

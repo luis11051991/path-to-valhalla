@@ -19,22 +19,26 @@ const isGreedItem = (rarity) => {
 
 const computeStageRewards = async (enemies, partySize, difficulty, stageSeed, client) => {
     const diffMult = {
-        easy: 0.5,
+        easy: 0.8,
         normal: 1.0,
-        hard: 1.5,
-        inferno: 2.0
+        hard: 1.2,
+        inferno: 1.5
     }[difficulty] || 1.0;
 
     const rng = seededRandom(stageSeed);
     const rewards = { xp_total: 0, copper_total: 0, items: [], greedRolls: [] };
 
+    // V1: per-enemy XP generous but safe
+    // mob: ~30-80 XP, elite: ~100-180, boss: ~200-350 (before diff mult)
     for (const enemy of enemies) {
-        const baseXp = enemy.level * 8;
-        const xpMult = enemy.is_boss ? 3 : enemy.is_elite ? 1.5 : 1;
-        rewards.xp_total += Math.floor(baseXp * xpMult * diffMult);
-
-        const baseCopper = Math.max(1, randomInt(2, 8, `${stageSeed}-copper-${enemy.id}`));
-        rewards.copper_total += Math.floor(baseCopper * xpMult * diffMult);
+        const isBoss = !!enemy.is_boss;
+        const isElite = !!enemy.is_elite;
+        const baseXp = isBoss ? 250 : isElite ? 140 : 50;
+        const baseCopper = isBoss ? randomInt(30, 60, `${stageSeed}-copper-${enemy.id}`)
+                        : isElite ? randomInt(15, 35, `${stageSeed}-copper-${enemy.id}`)
+                        : randomInt(5, 15, `${stageSeed}-copper-${enemy.id}`);
+        rewards.xp_total += Math.floor(baseXp * diffMult);
+        rewards.copper_total += Math.floor(baseCopper * diffMult);
 
         const dropRoll = rng() * 100;
         let cumulative = 0;

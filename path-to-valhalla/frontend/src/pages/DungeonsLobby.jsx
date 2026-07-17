@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Shield, Clock, Plus, Search, DoorOpen, Lock, Unlock, Swords, Info, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Users, Shield, Clock, Plus, Search, DoorOpen, Lock, Unlock, Swords, Info, AlertTriangle, ArrowRight, Gem } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 
 const DIFFICULTY_COLORS = {
@@ -18,6 +18,96 @@ const DIFFICULTY_LABELS = {
 };
 
 const PARTY_LABELS = { 3: '4 Salas', 4: '6 Salas', 5: '8 Salas' };
+
+const DailyEntriesPanel = ({ user }) => {
+    const [localExtra, setLocalExtra] = useState(user?.dungeon_extra_entries ?? 0);
+    const [localOnix, setLocalOnix] = useState(user?.onix ?? 0);
+    const [remainingDaily, setRemainingDaily] = useState(3);
+    const [buying, setBuying] = useState(false);
+    const [buyMsg, setBuyMsg] = useState(null);
+    const [buyError, setBuyError] = useState(null);
+
+    const fetchEntries = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(apiUrl('/api/dungeons/my-entries'), {
+                headers: { 'x-auth-token': token }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setRemainingDaily(data.remainingDaily);
+                setLocalExtra(data.extraEntries);
+                setLocalOnix(data.onix);
+            }
+        } catch {}
+    }, []);
+
+    useEffect(() => {
+        fetchEntries();
+    }, [fetchEntries]);
+
+    useEffect(() => {
+        if (user) {
+            setLocalExtra(user.dungeon_extra_entries ?? 0);
+            setLocalOnix(user.onix ?? 0);
+        }
+    }, [user]);
+
+    const handleBuyEntry = async () => {
+        setBuying(true);
+        setBuyMsg(null);
+        setBuyError(null);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(apiUrl('/api/dungeons/buy-entry'), {
+                method: 'POST',
+                headers: { 'x-auth-token': token }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setLocalOnix(data.onix);
+                setLocalExtra(data.dungeon_extra_entries);
+                setBuyMsg('¡Entrada comprada!');
+                fetchEntries();
+            } else {
+                setBuyError(data.message || 'Error al comprar.');
+            }
+        } catch {
+            setBuyError('Error de conexión.');
+        } finally {
+            setBuying(false);
+        }
+    };
+
+    const canBuy = localOnix >= 50 && !buying && remainingDaily <= 0;
+    const totalEntries = remainingDaily + localExtra;
+
+    return (
+        <div className="bg-slate-900/60 border border-slate-700/50 rounded-xl p-4">
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Entradas</h2>
+            <p className="text-xs text-slate-500">
+                Disponibles: <span className="text-amber-400 font-bold">{totalEntries}</span>
+            </p>
+            <p className="text-[10px] text-slate-600 mt-1">
+                Diarias restantes: {remainingDaily} | Extra: {localExtra}
+            </p>
+            <p className="text-[10px] text-slate-600 mt-0.5">💎 {localOnix} Onix</p>
+            {canBuy && (
+                <div className="mt-3">
+                    <button
+                        onClick={handleBuyEntry}
+                        disabled={buying}
+                        className="w-full px-3 py-1.5 bg-amber-700/30 hover:bg-amber-700/50 disabled:opacity-40 text-amber-300 text-[11px] font-semibold rounded-lg border border-amber-700/40 transition-colors"
+                    >
+                        {buying ? 'Comprando...' : 'Comprar entrada extra (50 💎)'}
+                    </button>
+                </div>
+            )}
+            {buyMsg && <p className="text-[10px] text-emerald-400 mt-2">{buyMsg}</p>}
+            {buyError && <p className="text-[10px] text-red-400 mt-2">{buyError}</p>}
+        </div>
+    );
+};
 
 const DungeonsLobby = ({ user, onUpdateUser }) => {
     const navigate = useNavigate();
@@ -285,6 +375,8 @@ const DungeonsLobby = ({ user, onUpdateUser }) => {
                             </div>
                             <p className="text-[10px] text-slate-600 mt-1">Las salas privadas pedirán clave al unirse.</p>
                         </div>
+
+                        <DailyEntriesPanel user={user} />
                     </div>
                 </div>
 
