@@ -31,9 +31,11 @@ const addStats = (target, source) => {
     });
 };
 
-const computeTotalStats = ({ baseStats = {}, equippedItems = [], petBonuses = {}, alliancePercent = 0 }) => {
+const computeTotalStats = ({ baseStats = {}, classBonuses = {}, equippedItems = [], petBonuses = {}, alliancePercent = 0 }) => {
     const base = normalizeStats(baseStats);
+    const cls = normalizeStats(classBonuses);
     const total = { ...base };
+    addStats(total, cls);
     equippedItems.forEach((item) => addStats(total, item.stats || item || {}));
     addStats(total, petBonuses || {});
     const pct = Number(alliancePercent) || 0;
@@ -84,8 +86,9 @@ const getAllianceStatsPercent = async (playerId, client) => {
 // ===== STAT BREAKDOWN =====
 const CORE_STATS = ['strength', 'dexterity', 'constitution', 'intelligence', 'charisma', 'luck'];
 
-const computeStatBreakdown = ({ baseStats, equippedItems, petBonuses, alliancePercent }) => {
+const computeStatBreakdown = ({ baseStats, classBonuses, equippedItems, petBonuses, alliancePercent }) => {
     const base = normalizeStats(baseStats);
+    const cls = normalizeStats(classBonuses);
     const pct = Number(alliancePercent) || 0;
 
     const equipmentSum = {};
@@ -96,17 +99,19 @@ const computeStatBreakdown = ({ baseStats, equippedItems, petBonuses, alliancePe
     const breakdown = {};
     for (const stat of CORE_STATS) {
         const baseVal = base[stat] || 0;
+        const classVal = cls[stat] || 0;
         const equipVal = equipmentSum[stat] || 0;
         const petVal = pet[stat] || 0;
         const allianceVal = Math.round(baseVal * pct / 100);
 
         breakdown[stat] = {
             base: baseVal,
+            class: classVal,
             equipment: equipVal,
             pet: petVal,
             alliancePercent: pct,
             alliance: allianceVal,
-            total: baseVal + equipVal + petVal + allianceVal
+            total: baseVal + classVal + equipVal + petVal + allianceVal
         };
     }
 
@@ -306,8 +311,18 @@ const hydratePlayer = async (userOrId, client) => {
 
     const alliancePercent = await getAllianceStatsPercent(basePlayer.id, db);
 
+    // Obtener bonus de clase/evolución desde classes.base_stats
+    let classBonuses = {};
+    if (basePlayer.class_id) {
+        const clsRes = await db.query("SELECT base_stats FROM classes WHERE id = $1", [basePlayer.class_id]);
+        if (clsRes.rows.length > 0) {
+            classBonuses = normalizeStats(clsRes.rows[0].base_stats);
+        }
+    }
+
     const totalStats = computeTotalStats({
         baseStats: basePlayer.stats,
+        classBonuses,
         equippedItems: equippedStats,
         petBonuses,
         alliancePercent
@@ -315,6 +330,7 @@ const hydratePlayer = async (userOrId, client) => {
 
     const statBreakdown = computeStatBreakdown({
         baseStats: basePlayer.stats,
+        classBonuses,
         equippedItems: equippedStats,
         petBonuses,
         alliancePercent

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
     Maximize2, ScrollText, Image as ImageIcon, AlertTriangle, Ban,
@@ -76,40 +76,64 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [contextMenu, setContextMenu] = useState(null);
 
     // --- LÓGICA DE EVOLUCIÓN ---
-    const [evolutionStatus, setEvolutionStatus] = useState(() => {
-        if (user?.evolution_quest_status === 'completed') return 'completed';
-        if (user?.level >= 10) return 'available';
-        return 'locked';
-    });
+    const [evolutionStatus, setEvolutionStatus] = useState(
+        user?.evolution_quest_status || 'locked'
+    );
     const [evolutionQuestData, setEvolutionQuestData] = useState(null);
+    const [evolutionError, setEvolutionError] = useState(null);
+    const hasAutoShown = useRef(false);
 
     const raceData = useMemo(
         () => RACES.find((race) => race.id === user?.race) || RACES[0],
         [user?.race]
     );
 
+    // --- REFRESCAR ESTADO DE EVOLUCIÓN ---
+    const refreshEvolutionStatus = React.useCallback(() => {
+        if (!user || user.level < 10) {
+            setEvolutionStatus('locked');
+            setEvolutionQuestData(null);
+            setEvolutionError(null);
+            return;
+        }
+        fetch(apiUrl(`/api/quests/status?context=evolution&t=${Date.now()}`), {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        })
+            .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
+            .then(data => {
+                setEvolutionError(null);
+                const status = data.status || 'locked';
+                setEvolutionStatus(status);
+                if (data.quest) {
+                    setEvolutionQuestData(data);
+                } else if (status !== 'in_progress') {
+                    setEvolutionQuestData(null);
+                }
+                // Auto-abrir SOLO si status available y no se ha mostrado antes
+                if (status === 'available' && !hasAutoShown.current) {
+                    hasAutoShown.current = true;
+                    console.debug('[HeroOverview auto-open] available -> opening modal');
+                    setShowEvolutionModal(true);
+                }
+                console.debug('[EvolutionStatus]', status, data);
+            })
+            .catch(err => {
+                console.error('[EvolutionStatus] Error:', err);
+                setEvolutionError(err.message);
+                setEvolutionStatus('locked');
+                setEvolutionQuestData(null);
+            });
+    }, [user?.id, user?.level]);
+
     // --- EFECTOS DE CARGA ---
     useEffect(() => {
         if (!user) return;
-        if (user.level >= 10 && user.evolution_quest_status !== 'completed') {
-            fetch(apiUrl(`/api/quests/status?context=evolution&t=${Date.now()}`), {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-            })
-                .then(r => r.json())
-                .then(data => {
-                    setEvolutionStatus(data.status);
-                    if (data.quest) setEvolutionQuestData(data);
-                })
-                .catch(err => console.error('Error cargando estado evolución:', err));
-        } else if (user.evolution_quest_status === 'completed') {
-            setEvolutionStatus('completed');
-        } else {
-            setEvolutionStatus('locked');
-        }
-        
-        // Refrescar inventario al cargar para asegurar consistencia
+        refreshEvolutionStatus();
         refreshUser();
-    }, [user?.level, user?.evolution_quest_status]);
+    }, [user?.level, user?.evolution_quest_status, refreshEvolutionStatus]);
 
     // Cerrar menú contextual al hacer click en cualquier lado
     useEffect(() => {
@@ -1119,9 +1143,14 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
 
                     {/* Botones y Stats (Mismo código que subiste) */}
-                    {evolutionStatus !== 'locked' && evolutionStatus !== 'completed' && (
-                        <button onClick={() => setShowEvolutionModal(true)} className={`w-full mb-4 font-bold py-3 px-4 rounded border flex items-center justify-center gap-2 uppercase tracking-widest text-xs hover:scale-105 transition-transform shadow-lg ${evolutionStatus === 'in_progress' ? 'bg-slate-800 border-amber-500 text-amber-400 animate-pulse' : 'bg-gradient-to-r from-purple-700 via-pink-700 to-purple-700 bg-[length:200%_auto] animate-gradient text-white border-purple-400'}`}>
-                            {evolutionStatus === 'in_progress' ? <><ScrollText size={16} /> Misión en Progreso</> : <><Zap size={16} className="animate-spin-slow" /> ¡Evolución Disponible!</>}
+                    {evolutionError && (
+                        <div className="w-full mb-4 px-3 py-2 rounded bg-red-900/30 border border-red-800 text-red-300 text-[10px] text-center">
+                            Error de evolución: {evolutionError}
+                        </div>
+                    )}
+                    {evolutionStatus !== 'locked' && evolutionStatus !== 'completed' && evolutionStatus !== 'error' && (
+                        <button onClick={() => { refreshEvolutionStatus(); setShowEvolutionModal(true); }} className={`w-full mb-4 font-bold py-3 px-4 rounded border flex items-center justify-center gap-2 uppercase tracking-widest text-xs hover:scale-105 transition-transform shadow-lg ${evolutionStatus === 'in_progress' ? 'bg-slate-800 border-amber-500 text-amber-400 animate-pulse' : 'bg-gradient-to-r from-purple-700 via-pink-700 to-purple-700 bg-[length:200%_auto] animate-gradient text-white border-purple-400'}`}>
+                            {evolutionStatus === 'in_progress' ? <><ScrollText size={16} /> Misión de Evolución</> : <><Zap size={16} /> ¡Evolución Disponible!</>}
                         </button>
                     )}
 
@@ -1659,8 +1688,21 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 </div>
             )}
 
-            {showEvolutionModal && (
-                <EvolutionModal user={user} status={evolutionStatus} activeQuestData={evolutionQuestData} onClose={() => setShowEvolutionModal(false)} onEvolveSuccess={(updatedUser) => { onUpdateUser(updatedUser); setShowEvolutionModal(false); setEvolutionStatus('completed'); }} />
+            {showEvolutionModal && evolutionStatus !== 'error' && (
+                <EvolutionModal
+                    user={user}
+                    status={evolutionStatus}
+                    activeQuestData={evolutionQuestData}
+                    onClose={() => setShowEvolutionModal(false)}
+                    onEvolveSuccess={(updatedUser) => {
+                        if (updatedUser) {
+                            onUpdateUser(updatedUser);
+                        }
+                        setShowEvolutionModal(false);
+                        setEvolutionStatus('completed');
+                    }}
+                    onRefresh={refreshEvolutionStatus}
+                />
             )}
 
             <PetStableModal

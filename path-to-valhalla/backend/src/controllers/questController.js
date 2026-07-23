@@ -43,22 +43,103 @@ exports.getQuestStatus = async (req, res) => {
         if (playerRes.rows.length === 0) return res.status(404).json({ message: "Jugador no encontrado" });
         const player = playerRes.rows[0];
 
-        // --- CONTEXTO: EVOLUCIÓN (Sin cambios) ---
+        // --- CONTEXTO: EVOLUCIÓN ---
         if (context === 'evolution') {
-            const evoQuestRes = await client.query(`SELECT pq.*, q.title, q.description, q.requirements, p.pending_class_id FROM player_quests pq JOIN quests q ON pq.quest_id = q.id JOIN players p ON pq.player_id = p.id WHERE pq.player_id = $1 AND q.type = 'evolution' AND pq.status = 'active'`, [userId]);
-            if (evoQuestRes.rows.length > 0) {
-                const pendingClassId = evoQuestRes.rows[0].pending_class_id;
-                let classInfo = null;
-                if (pendingClassId) {
-                    const cRes = await client.query("SELECT name, image_url FROM classes WHERE id = $1", [pendingClassId]);
-                    if (cRes.rows.length > 0) classInfo = cRes.rows[0];
-                }
+            // Obtener datos completos del jugador (incluye tier actual)
+            const playerFullRes = await client.query(`
+                SELECT p.level, p.race, p.class_id, p.evolution_quest_status,
+                       c.tier as current_tier
+                FROM players p
+                LEFT JOIN classes c ON p.class_id = c.id
+                WHERE p.id = $1
+            `, [userId]);
+            const pf = playerFullRes.rows[0];
+            if (!pf) {
                 await client.query('COMMIT');
-                return res.json({ status: 'in_progress', quest: evoQuestRes.rows[0], targetClass: classInfo });
+                return res.status(404).json({ message: "Jugador no encontrado" });
             }
-            await client.query('COMMIT');
-            if (player.level >= 10 && player.evolution_quest_status !== 'completed') return res.json({ status: 'available' });
-            return res.json({ status: player.evolution_quest_status === 'completed' ? 'completed' : 'locked' });
+            const currentTier = pf.current_tier || 0;
+
+            // Buscar quest evolution activa
+            const evoQuestRes = await client.query(`
+                SELECT pq.*, q.title, q.description, q.requirements, q.min_level as quest_min_level,
+                       p.pending_class_id, p.class_id as player_class_id
+                FROM player_quests pq
+                JOIN quests q ON pq.quest_id = q.id
+                JOIN players p ON pq.player_id = p.id
+                WHERE pq.player_id = $1 AND q.type = 'evolution' AND pq.status = 'active'
+            `, [userId]);
+
+            if (evoQuestRes.rows.length > 0) {
+                const row = evoQuestRes.rows[0];
+
+                // --- VALIDAR: la quest activa sigue siendo válida para el tier actual ---
+                const validNextRes = await client.query(`
+                    SELECT id FROM classes
+                    WHERE parent_id = $1 AND min_level <= $2
+                      AND (race_restriction IS NULL OR race_restriction = $3)
+                `, [row.player_class_id || 0, pf.level, pf.race]);
+                const validIds = validNextRes.rows.map(r => r.id);
+
+                const isStale = row.pending_class_id && validIds.length > 0
+                    && !validIds.includes(row.pending_class_id);
+
+                if (isStale) {
+                    if (process.env.NODE_ENV !== 'production') {
+                        console.log(`[Evolution] Stale quest detected for player ${userId}: pending_class_id ${row.pending_class_id} not in [${validIds.join(',')}]. Auto-cancelling.`);
+                    }
+                    await client.query("UPDATE player_quests SET status = 'cancelled' WHERE id = $1", [row.id]);
+                    await client.query("UPDATE players SET pending_class_id = NULL, evolution_quest_status = 'completed' WHERE id = $1", [userId]);
+                    await client.query('COMMIT');
+                    // Fall through to check next evolution
+                } else {
+                    // Quest válida — devolver progreso
+                    const pendingClassId = row.pending_class_id;
+                    let classInfo = null;
+                    if (pendingClassId) {
+                        const cRes = await client.query("SELECT name, image_url FROM classes WHERE id = $1", [pendingClassId]);
+                        if (cRes.rows.length > 0) classInfo = cRes.rows[0];
+                    }
+                    const progressData = row.progress || {};
+                    const reqs = row.requirements || [];
+                    const progressSummary = reqs.map(r => ({
+                        current: Number(progressData[r.target_id || r.type]) || 0,
+                        required: Number(r.count) || 0,
+                        type: r.type,
+                        label: r.name || null
+                    }));
+                    await client.query('COMMIT');
+                    if (process.env.NODE_ENV !== 'production') {
+                        console.log(`[Evolution] Active quest for player ${userId}: pending=${pendingClassId}, progress=${JSON.stringify(progressData)}`);
+                    }
+                    return res.json({ status: 'in_progress', quest: row, targetClass: classInfo, progressSummary });
+                }
+            } else {
+                await client.query('COMMIT');
+            }
+
+            // Verificar siguiente evolución disponible
+            const hasEvolutionReady = await pool.query(
+                `SELECT 1 FROM classes
+                 WHERE parent_id = (SELECT class_id FROM players WHERE id = $1)
+                   AND min_level <= $2
+                   AND (race_restriction IS NULL OR race_restriction = (SELECT race FROM players WHERE id = $1))
+                 LIMIT 1`,
+                [userId, pf.level]
+            );
+
+            const isCompleted = pf.evolution_quest_status === 'completed';
+            if (hasEvolutionReady.rows.length > 0) {
+                if (process.env.NODE_ENV !== 'production') {
+                    console.log(`[Evolution] Next tier available for player ${userId} (level ${pf.level}, status=${pf.evolution_quest_status})`);
+                }
+                return res.json({ status: 'available' });
+            }
+            const finalStatus = isCompleted ? 'completed' : 'locked';
+            if (process.env.NODE_ENV !== 'production') {
+                console.log(`[Evolution] No next tier for player ${userId}: returning '${finalStatus}'`);
+            }
+            return res.json({ status: finalStatus });
         }
 
         // --- CONTEXTO: SALÓN DE VALHALLUS ---
@@ -322,9 +403,11 @@ exports.completeQuest = async (req, res) => {
         if (userQuest.type === 'evolution') {
              const pData = await client.query("SELECT pending_class_id, level FROM players WHERE id = $1", [userId]);
              if (pData.rows[0].pending_class_id) {
-                 const cls = (await client.query("SELECT base_stats, name FROM classes WHERE id = $1", [pData.rows[0].pending_class_id])).rows[0];
-                 const refund = (pData.rows[0].level - 1) * 5;
-                 await client.query("UPDATE players SET class_id = $1, pending_class_id = NULL, stats = $2, stat_points = $3, evolution_quest_status = 'completed' WHERE id = $4", [pData.rows[0].pending_class_id, cls.base_stats, refund, userId]);
+                 const cls = (await client.query("SELECT name FROM classes WHERE id = $1", [pData.rows[0].pending_class_id])).rows[0];
+                 // Actualizar class_id, limpiar pending, marcar evolución completada
+                 // NO reemplazar players.stats — los stats entrenados se conservan
+                 // NO hacer refund de stat_points — no se resetea la build
+                 await client.query("UPDATE players SET class_id = $1, pending_class_id = NULL, evolution_quest_status = 'completed' WHERE id = $2", [pData.rows[0].pending_class_id, userId]);
                  extraMsg = ` ¡Has ascendido a ${cls.name}!`;
              }
         }

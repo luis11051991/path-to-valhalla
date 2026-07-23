@@ -309,13 +309,26 @@ exports.startBattle = async (req, res) => {
                 let updated = false;
                 const requirements = quest.requirements || [];
                 for (const req of requirements) {
-                    if (req.type === 'kill' && parseInt(req.target_id) === parseInt(baseEnemy.id)) {
-                        const currentCount = parseInt(progress[req.target_id] || 0);
-                        const targetCount = parseInt(req.count);
-                        if (currentCount < targetCount) {
-                            progress[req.target_id] = currentCount + 1;
-                            updated = true;
-                            questLogs.push(`📜 ${quest.title}: ${req.name} (${progress[req.target_id]}/${targetCount})`);
+                    if (req.type === 'kill') {
+                        if (req.target_id) {
+                            if (parseInt(req.target_id) === parseInt(baseEnemy.id)) {
+                                const currentCount = parseInt(progress[req.target_id] || 0);
+                                const targetCount = parseInt(req.count);
+                                if (currentCount < targetCount) {
+                                    progress[req.target_id] = currentCount + 1;
+                                    updated = true;
+                                    questLogs.push(`📜 ${quest.title}: ${req.name} (${progress[req.target_id]}/${targetCount})`);
+                                }
+                            }
+                        } else {
+                            const key = 'kill';
+                            const currentCount = parseInt(progress[key] || 0);
+                            const targetCount = parseInt(req.count);
+                            if (currentCount < targetCount) {
+                                progress[key] = currentCount + 1;
+                                updated = true;
+                                questLogs.push(`📜 ${quest.title}: Enemigos derrotados (${progress[key]}/${targetCount})`);
+                            }
                         }
                     }
                 }

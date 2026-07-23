@@ -1,7 +1,6 @@
 const pool = require('../config/db');
 
 // --- 1. OBTENER OPCIONES DE EVOLUCIÓN ---
-// --- 1. OBTENER OPCIONES DE EVOLUCIÓN ---
 exports.getEvolutionOptions = async (req, res) => {
     const userId = req.user.id; 
 
@@ -24,28 +23,38 @@ exports.getEvolutionOptions = async (req, res) => {
             if (baseClassRes.rows.length > 0) currentClassId = baseClassRes.rows[0].id;
         }
 
-        const optionsQuery = `SELECT * FROM classes WHERE parent_id = $1`;
+        // Filtrar: solo clases con parent_id válido, min_level accesible y raza compatible
+        // NO devolver clases base (parent_id IS NOT NULL)
         const parentToSearch = currentClassId || 99999;
-        const optionsRes = await pool.query(optionsQuery, [parentToSearch]);
+        const optionsRes = await pool.query(
+            `SELECT * FROM classes 
+             WHERE parent_id = $1 
+               AND min_level <= $2 
+               AND (race_restriction IS NULL OR race_restriction = $3)
+               AND parent_id IS NOT NULL`,
+            [parentToSearch, player.level, player.race]
+        );
 
-        // --- NUEVO: BUSCAR LA QUEST DE EVOLUCIÓN CORRESPONDIENTE ---
-        // Busca la quest de tipo evolución más alta que el usuario pueda hacer por su nivel
+        // Buscar la quest de evolución correspondiente al min_level de la opción más baja
         const questRes = await pool.query(
             "SELECT * FROM quests WHERE type = 'evolution' AND min_level <= $1 ORDER BY min_level DESC LIMIT 1", 
             [player.level]
         );
         const questPreview = questRes.rows.length > 0 ? questRes.rows[0] : null;
-        // -----------------------------------------------------------
+
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[getEvolutionOptions] player=${userId} class_id=${currentClassId} tier=${currentTier} level=${player.level} race=${player.race} options=${optionsRes.rows.length}`);
+        }
 
         res.json({
             available: true,
             currentTier: currentTier,
-            options: optionsRes.rows,
-            questData: questPreview // <--- Enviamos esto al frontend
+            options: optionsRes.rows || [],
+            questData: questPreview
         });
 
     } catch (err) {
-        console.error(err);
+        console.error('[getEvolutionOptions]', err);
         res.status(500).json({ message: 'Error al buscar evoluciones' });
     }
 };
@@ -58,6 +67,58 @@ exports.startEvolutionPath = async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+
+        // 1. Validar que targetClassId existe
+        if (!targetClassId) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Debes elegir una clase destino." });
+        }
+
+        // 2. Validar que la clase destino existe y cumple requisitos
+        const classRes = await client.query(
+            "SELECT id, name, parent_id, min_level, race_restriction FROM classes WHERE id = $1",
+            [targetClassId]
+        );
+        if (classRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "La clase destino no existe." });
+        }
+        const targetClass = classRes.rows[0];
+
+        // 3. Validar datos del jugador
+        const playerRes = await client.query(
+            "SELECT id, level, race, class_id, pending_class_id, evolution_quest_status FROM players WHERE id = $1",
+            [userId]
+        );
+        if (playerRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Jugador no encontrado' });
+        }
+        const player = playerRes.rows[0];
+
+        // 4. Validar que no haya una evolución ya en curso
+        if (player.pending_class_id || player.evolution_quest_status === 'in_progress') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Ya tienes una evolución en curso." });
+        }
+
+        // 5. Validar parent_id — la clase destino debe heredar de la clase actual
+        if (targetClass.parent_id !== player.class_id) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Esta clase no es una evolución válida de tu clase actual." });
+        }
+
+        // 6. Validar min_level
+        if (targetClass.min_level > player.level) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: `Necesitas nivel ${targetClass.min_level} para esta evolución.` });
+        }
+
+        // 7. Validar raza
+        if (targetClass.race_restriction && targetClass.race_restriction !== player.race) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Esta evolución no está disponible para tu raza." });
+        }
 
         // Buscar quest adecuada
         const questRes = await client.query("SELECT * FROM quests WHERE type = 'evolution' AND min_level <= (SELECT level FROM players WHERE id = $1) ORDER BY min_level DESC LIMIT 1", [userId]);
