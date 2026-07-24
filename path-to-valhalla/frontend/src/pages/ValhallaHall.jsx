@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom'; // <--- IMPORTACIÓN CLAVE
+import { useOutletContext } from 'react-router-dom';
 import { Clock, CheckCircle, X, AlertTriangle } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 import { getRequiredXp } from '../shared/level_xp';
+import ConfirmModal from '../components/common/ConfirmModal';
 
 const VALHALLA_ICONS = {
     gold: '/icons/valhalla/gold_coin.png',
@@ -43,6 +44,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [selectedQuest, setSelectedQuest] = useState(null); 
     const [alertData, setAlertData] = useState(null);
     const [activeTab, setActiveTab] = useState('daily'); 
+    const [cancelConfirm, setCancelConfirm] = useState({ open: false, playerQuestId: null });
 
     const loadData = async () => {
         setLoading(true);
@@ -113,8 +115,13 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         }
     };
 
-    const handleCancel = async (playerQuestId) => {
-        if (!window.confirm("¿Cancelar esta misión? Se perderá el progreso.")) return;
+    const handleCancelClick = (playerQuestId) => {
+        setCancelConfirm({ open: true, playerQuestId });
+    };
+
+    const executeCancel = async () => {
+        const playerQuestId = cancelConfirm.playerQuestId;
+        setCancelConfirm({ open: false, playerQuestId: null });
         try {
             const res = await fetch(apiUrl('/api/quests/cancel'), {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
@@ -193,7 +200,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                 <div className="text-slate-600 text-sm italic border border-dashed border-slate-800 rounded p-6 text-center">No tienes contratos diarios en curso.</div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {dailyActive.map(q => <QuestCard key={q.id} quest={q} onComplete={handleComplete} onCancel={handleCancel} isWeekly={false} />)}
+                                    {dailyActive.map(q => <QuestCard key={q.id} quest={q} onComplete={handleComplete} onCancel={handleCancelClick} isWeekly={false} />)}
                                 </div>
                             )}
                         </div>
@@ -326,6 +333,17 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                open={cancelConfirm.open}
+                title="Cancelar misión"
+                message="¿Cancelar esta misión? Se perderá el progreso."
+                confirmText="Cancelar"
+                cancelText="Volver"
+                variant="danger"
+                onConfirm={executeCancel}
+                onCancel={() => setCancelConfirm({ open: false, playerQuestId: null })}
+            />
         </div>
     );
 };

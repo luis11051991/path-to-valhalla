@@ -39,6 +39,7 @@ function App() {
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [socket, setSocket] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [authLoading, setAuthLoading] = useState(true);
 
   // --- LÓGICA DE SESIÓN ---
   useEffect(() => {
@@ -60,7 +61,10 @@ function App() {
         .then(res => res.ok ? res.json() : Promise.reject('Sesión expirada'))
         .then(data => data.user && handleUserUpdate(data.user))
         .catch(err => console.log("Error validando sesión:", err));
+    } else {
+      setView('auth');
     }
+    setAuthLoading(false);
   }, []);
 
   const initSocket = (token) => {
@@ -124,6 +128,17 @@ function App() {
   const closeShop = () => setIsShopOpen(false);
 
   // --- RENDERIZADO ---
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+        <div className="text-amber-500 font-serif text-2xl tracking-widest animate-pulse">Forjando destino...</div>
+        <div className="mt-4 w-32 h-1 bg-slate-800 rounded-full overflow-hidden">
+          <div className="h-full bg-amber-600 rounded-full animate-pulse" style={{ width: '60%' }} />
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'auth') return <Auth onLoginSuccess={handleAuthSuccess} />;
   if (view === 'race') return <RaceSelection onRaceSelect={handleRaceSelected} />;
