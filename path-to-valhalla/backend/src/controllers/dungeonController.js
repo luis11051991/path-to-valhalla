@@ -987,16 +987,18 @@ exports.advanceRoom = async (req, res) => {
         `, [runIdNum])).rows;
 
         const party = [];
-        for (const member of runMembers) {
+        const livingMembers = runMembers.filter(m => m.status !== 'dead' && (m.final_hp == null || m.final_hp > 0));
+        for (const member of livingMembers) {
             if (member.is_npc) {
                 const npcStats = computeNpcStats(member.npc_level || 1);
+                const currentHp = member.final_hp != null ? member.final_hp : npcStats.hp;
                 party.push({
                     id: member.id,
                     player_id: null,
                     name: `NPC Nv.${member.npc_level}`,
                     is_npc: true,
                     npc_level: member.npc_level,
-                    current_hp: normalizeRunHp(member.final_hp ?? npcStats.hp, npcStats.hp),
+                    current_hp: normalizeRunHp(currentHp, npcStats.hp),
                     max_hp: npcStats.hp,
                     level: member.npc_level,
                     stats: { strength: 5, dexterity: 5, constitution: 5, intelligence: 3, damage_min: npcStats.damage_min, damage_max: npcStats.damage_max, armor: npcStats.armor },
@@ -1014,13 +1016,15 @@ exports.advanceRoom = async (req, res) => {
                     ORDER BY ps.slot_index ASC
                 `;
                 const skills = (await client.query(skillsQuery, [member.player_id])).rows;
+                const maxHp = playerData.calculatedMaxHp || computeMaxHp((playerData.total_stats?.constitution || 0));
+                const currentHp = member.final_hp != null ? member.final_hp : maxHp;
                 party.push({
                     id: member.id,
                     player_id: member.player_id,
                     name: usernameRes.rows[0]?.username || `Jugador ${member.player_id}`,
                     is_npc: false,
-                    current_hp: normalizeRunHp(member.final_hp ?? playerData.current_hp, playerData.calculatedMaxHp || playerData.current_hp || 100),
-                    max_hp: playerData.calculatedMaxHp || playerData.current_hp || 100,
+                    current_hp: normalizeRunHp(currentHp, maxHp),
+                    max_hp: maxHp,
                     level: playerData.level || 1,
                     stats: playerData.total_stats || playerData.stats || {},
                     skills
@@ -1037,17 +1041,54 @@ exports.advanceRoom = async (req, res) => {
             `, [runIdNum, stage.id, entry.round || 0, entry.type, entry.message, JSON.stringify(entry)]);
         }
 
+        console.log('[DUNGEON party before combat]', JSON.stringify(party.map(m => ({
+            run_member_id: m.id,
+            player_id: m.player_id,
+            name: m.name,
+            is_npc: m.is_npc,
+            hp: m.current_hp,
+            maxHp: m.max_hp
+        }))));
+
         for (const pState of combatResult.partyState) {
-            const member = runMembers.find(m => m.id === pState.id);
+            const member = runMembers.find(m => String(m.id) === String(pState.run_member_id));
             if (member) {
                 const newHp = Math.max(0, Math.floor(pState.hp));
                 const newStatus = pState.alive ? 'alive' : 'dead';
-                await client.query(
+                const result = await client.query(
                     'UPDATE dungeon_run_members SET final_hp = $1, status = $2 WHERE id = $3',
                     [newHp, newStatus, member.id]
                 );
+                console.log('[Dungeon saving HP]', {
+                    run_member_id: member.id,
+                    player_id: member.player_id,
+                    is_npc: member.is_npc,
+                    final_hp: newHp,
+                    status: newStatus,
+                    updatedRows: result.rowCount
+                });
+                if (result.rowCount === 0) {
+                    console.error('[DUNGEON ERROR] HP update affected 0 rows', {
+                        run_member_id: member.id,
+                        player_id: member.player_id
+                    });
+                }
+            } else {
+                console.error('[DUNGEON ERROR] No matching run member for partyState', {
+                    run_member_id: pState.run_member_id,
+                    id: pState.id,
+                    alive: pState.alive,
+                    hp: pState.hp
+                });
             }
         }
+
+        console.log('[DUNGEON party after combat]', combatResult.partyState.map(ps => ({
+            run_member_id: ps.run_member_id,
+            hp: ps.hp,
+            maxHp: ps.maxHp,
+            alive: ps.alive
+        })));
 
         for (const eState of combatResult.enemyState) {
             await client.query(
@@ -1062,25 +1103,43 @@ exports.advanceRoom = async (req, res) => {
 
         if (combatResult.isWin) {
             const existingRewardRes = await client.query(
-                'SELECT id FROM dungeon_stage_rewards WHERE stage_id = $1 LIMIT 1',
+                'SELECT id, distributed FROM dungeon_stage_rewards WHERE stage_id = $1 LIMIT 1',
                 [stage.id]
             );
-            if (existingRewardRes.rows.length > 0) {
-                await client.query('COMMIT');
-                const contract = await loadRunContract(pool, runIdNum, userId);
-                return res.json({ success: true, ...contract });
+            const existingReward = existingRewardRes.rows[0];
+
+            let rewards;
+            if (existingReward) {
+                if (existingReward.distributed) {
+                    // Already distributed — skip re-application
+                    await client.query('COMMIT');
+                    const contract = await loadRunContract(pool, runIdNum, userId);
+                    return res.json({ success: true, ...contract });
+                }
+                // Exists but not distributed — load it to distribute
+                const loaded = await client.query(
+                    'SELECT xp_total, copper_total, items_json FROM dungeon_stage_rewards WHERE id = $1',
+                    [existingReward.id]
+                );
+                rewards = loaded.rows[0];
+            } else {
+                const rewardSeed = `${runId}-${stage.id}-reward`;
+                rewards = await computeStageRewards(enemies, runMembers.length, run.difficulty, rewardSeed, client);
+                await client.query(`
+                    INSERT INTO dungeon_stage_rewards (stage_id, xp_total, copper_total, items_json)
+                    VALUES ($1, $2, $3, $4)
+                `, [stage.id, rewards.xp_total, rewards.copper_total, JSON.stringify(rewards.items)]);
             }
 
-            const rewardSeed = `${runId}-${stage.id}-reward`;
-            const rewards = await computeStageRewards(enemies, runMembers.length, run.difficulty, rewardSeed, client);
-
-            await client.query(`
-                INSERT INTO dungeon_stage_rewards (stage_id, xp_total, copper_total, items_json)
-                VALUES ($1, $2, $3, $4)
-            `, [stage.id, rewards.xp_total, rewards.copper_total, JSON.stringify(rewards.items)]);
+            console.log('[Dungeon reward apply]', {
+                stage_id: stage.id,
+                xp_total: rewards.xp_total,
+                copper_total: rewards.copper_total,
+                distributed: !!existingReward?.distributed
+            });
 
             const aliveMemberIds = new Set(
-                combatResult.partyState.filter((memberState) => memberState.alive).map((memberState) => memberState.id)
+                combatResult.partyState.filter((memberState) => memberState.alive).map((memberState) => memberState.run_member_id)
             );
             const aliveMembers = runMembers.filter((member) => aliveMemberIds.has(member.id));
 
@@ -1113,7 +1172,15 @@ exports.advanceRoom = async (req, res) => {
 
             for (const member of aliveMembers) {
                 if (!member.is_npc && member.player_id) {
-                    await applyExperienceToPlayer(client, member.player_id, xpPerMember);
+                    const xpResult = await applyExperienceToPlayer(client, member.player_id, xpPerMember);
+                    console.log('[Dungeon XP apply]', {
+                        player_id: member.player_id,
+                        username: member.player_id,
+                        xpGain: xpPerMember,
+                        oldLevel: xpResult.oldLevel,
+                        newLevel: xpResult.newLevel,
+                        remainingExperience: xpResult.remainingExperience
+                    });
                 }
             }
 
@@ -1133,6 +1200,11 @@ exports.advanceRoom = async (req, res) => {
                     );
                 }
             }
+
+            await client.query(
+                'UPDATE dungeon_stage_rewards SET distributed = true, distributed_at = NOW() WHERE stage_id = $1',
+                [stage.id]
+            );
         }
 
         if (!combatResult.isWin) {

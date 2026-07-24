@@ -63,11 +63,12 @@ const simulateStageCombat = (party, enemies, difficulty) => {
     const log = [];
 
     const partyState = party.map(m => ({
+        run_member_id: m.id,
         id: m.player_id || m.id,
         name: m.name || (m.is_npc ? `NPC Nv.${m.npc_level}` : `Jugador ${m.player_id}`),
         isNpc: m.is_npc,
         level: m.is_npc ? (m.npc_level || 1) : m.level,
-        hp: m.current_hp || m.hp || 100,
+        hp: m.current_hp != null ? m.current_hp : (m.hp || 100),
         maxHp: m.max_hp || m.hp || 100,
         stats: m.stats || {},
         skills: m.skills || [],
@@ -224,7 +225,7 @@ const simulateStageCombat = (party, enemies, difficulty) => {
 
     return {
         isWin,
-        partyState: partyState.map(m => ({ id: m.id, hp: m.hp, maxHp: m.maxHp, alive: m.alive })),
+        partyState: partyState.map(m => ({ run_member_id: m.run_member_id, id: m.id, hp: m.hp, maxHp: m.maxHp, alive: m.alive })),
         enemyState: enemyState.map(e => ({ id: e.id, name: e.name, hp: Math.max(0, e.hp), maxHp: e.maxHp, alive: e.alive, is_boss: e.is_boss, is_elite: e.is_elite })),
         log,
         totalDamageDealt: partyTotalDmg,
