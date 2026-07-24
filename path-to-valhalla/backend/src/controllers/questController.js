@@ -22,12 +22,16 @@ const generateQuestItemStats = (templateStats) => {
 };
 
 // Configuración
-const getMaxQuestSlots = (level) => {
-    if (level >= 40) return 5;
-    if (level >= 21) return 4;
-    if (level >= 11) return 3;
-    return 2; 
+const getMaxSlotsByType = (type, level) => {
+    const limits = {
+        daily: level >= 40 ? 5 : level >= 21 ? 4 : level >= 11 ? 3 : 2,
+        side: 3,
+        zone: 2,
+    };
+    return limits[type] || limits.daily;
 };
+
+const getMaxQuestSlots = (level) => getMaxSlotsByType('daily', level);
 
 // 1. OBTENER ESTADO (Auto-asigna semanales y gestiona tabs)
 exports.getQuestStatus = async (req, res) => {
@@ -180,7 +184,9 @@ exports.getQuestStatus = async (req, res) => {
                 SELECT * FROM quests 
                 WHERE type = 'daily' 
                 AND min_level <= $1
+                AND (max_level IS NULL OR max_level >= $1)
                 AND id NOT IN (SELECT quest_id FROM player_quests WHERE player_id = $2 AND status = 'active')
+                AND id NOT IN (SELECT quest_id FROM player_quests WHERE player_id = $2 AND status = 'completed' AND completed_at > NOW() - INTERVAL '24 hours')
                 ORDER BY min_level DESC, RANDOM() 
                 LIMIT 6
             `, [player.level, userId]);
@@ -215,35 +221,104 @@ exports.getQuestStatus = async (req, res) => {
 // 2. ACEPTAR MISIÓN
 exports.acceptQuest = async (req, res) => {
     const userId = req.user.id;
-    const { questId } = req.body; 
+    const { questId } = req.body;
 
+    const client = await pool.connect();
     try {
-        const playerRes = await pool.query('SELECT level, last_hall_action_at FROM players WHERE id = $1', [userId]);
+        await client.query('BEGIN');
+
+        // Validar que la quest existe y es aceptable
+        const questRes = await client.query(
+            'SELECT id, type, min_level, max_level FROM quests WHERE id = $1',
+            [questId]
+        );
+        if (questRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "Misión no encontrada." });
+        }
+        const quest = questRes.rows[0];
+
+        if (!['daily', 'side', 'zone'].includes(quest.type)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Este tipo de misión no se puede aceptar." });
+        }
+
+        // Validar rango de nivel
+        const playerRes = await client.query(
+            'SELECT level, last_hall_action_at FROM players WHERE id = $1',
+            [userId]
+        );
         const player = playerRes.rows[0];
 
+        if (player.level < quest.min_level) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "No cumples el nivel mínimo para esta misión." });
+        }
+        if (quest.max_level && player.level > quest.max_level) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Has superado el nivel de esta misión." });
+        }
+
+        // Cooldown
         if (player.last_hall_action_at) {
             const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-            if (diff < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s para realizar otra acción.` });
+            if (diff < 300) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s para realizar otra acción.` });
+            }
         }
 
-        const maxSlots = getMaxQuestSlots(player.level);
-        const countRes = await pool.query(`
-            SELECT COUNT(*) FROM player_quests pq JOIN quests q ON pq.quest_id = q.id 
-            WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type = 'daily'
-        `, [userId]);
-        
+        // Límite de slots por tipo
+        const maxSlots = getMaxSlotsByType(quest.type, player.level);
+        const countRes = await client.query(`
+            SELECT COUNT(*) FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type = $2
+        `, [userId, quest.type]);
+
         if (parseInt(countRes.rows[0].count) >= maxSlots) {
-            return res.status(400).json({ message: `Límite de misiones diarias alcanzado (${maxSlots}).` });
+            const typeNames = { daily: 'diarias', side: 'secundarias', zone: 'de zona' };
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: `Límite de misiones ${typeNames[quest.type] || quest.type} alcanzado (${maxSlots}).` });
         }
 
-        await pool.query("INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')", [userId, questId]);
-        await pool.query("UPDATE players SET last_hall_action_at = NOW() WHERE id = $1", [userId]);
+        // Re-aceptar si ya existe registro cancelado/completado
+        const existingRes = await client.query(
+            `SELECT id, status FROM player_quests WHERE player_id = $1 AND quest_id = $2`,
+            [userId, questId]
+        );
 
+        if (existingRes.rows.length > 0) {
+            const existing = existingRes.rows[0];
+            if (existing.status === 'active') {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ message: "Ya tienes esta misión activa." });
+            }
+            await client.query(
+                `UPDATE player_quests SET status = 'active', progress = '{}', completed_at = NULL WHERE id = $1`,
+                [existing.id]
+            );
+        } else {
+            await client.query(
+                "INSERT INTO player_quests (player_id, quest_id, status, progress) VALUES ($1, $2, 'active', '{}')",
+                [userId, questId]
+            );
+        }
+
+        await client.query("UPDATE players SET last_hall_action_at = NOW() WHERE id = $1", [userId]);
+
+        await client.query('COMMIT');
         res.json({ success: true, message: "Contrato firmado. (Cooldown activado)" });
 
     } catch (err) {
-        if (err.code === '23505') return res.status(400).json({ message: "Misión ya activa." });
+        await client.query('ROLLBACK');
+        console.error(err);
+        if (err.code === '23505') {
+            return res.status(400).json({ message: "Ya tienes un registro de esta misión." });
+        }
         res.status(500).json({ message: "Error al aceptar." });
+    } finally {
+        client.release();
     }
 };
 
