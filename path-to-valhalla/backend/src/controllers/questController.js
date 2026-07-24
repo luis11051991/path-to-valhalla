@@ -268,6 +268,61 @@ exports.refreshBoard = async (req, res) => {
     }
 };
 
+// 5. CANCELAR MISIÓN
+exports.cancelQuest = async (req, res) => {
+    const userId = req.user.id;
+    const { playerQuestId } = req.body;
+
+    if (!playerQuestId) {
+        return res.status(400).json({ message: "playerQuestId es requerido." });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const pqRes = await client.query(`
+            SELECT pq.id, pq.status, q.type
+            FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.id = $1 AND pq.player_id = $2
+        `, [playerQuestId, userId]);
+
+        if (pqRes.rows.length === 0) {
+            await client.query('COMMIT');
+            return res.status(404).json({ message: "Misión no encontrada." });
+        }
+
+        const quest = pqRes.rows[0];
+
+        if (quest.status !== 'active') {
+            await client.query('COMMIT');
+            return res.status(400).json({ message: "Solo puedes cancelar misiones activas." });
+        }
+
+        const cancelableTypes = ['daily', 'side', 'zone'];
+        if (!cancelableTypes.includes(quest.type)) {
+            await client.query('COMMIT');
+            return res.status(400).json({ message: "Este tipo de misión no se puede cancelar." });
+        }
+
+        await client.query(
+            "UPDATE player_quests SET status = 'cancelled', completed_at = NULL WHERE id = $1",
+            [playerQuestId]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: "Misión cancelada." });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ message: "Error al cancelar misión." });
+    } finally {
+        client.release();
+    }
+};
+
 // 4. COMPLETAR (Reclamar Recompensa)
 exports.completeQuest = async (req, res) => {
     const userId = req.user.id;

@@ -113,6 +113,23 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         }
     };
 
+    const handleCancel = async (playerQuestId) => {
+        if (!window.confirm("¿Cancelar esta misión? Se perderá el progreso.")) return;
+        try {
+            const res = await fetch(apiUrl('/api/quests/cancel'), {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ playerQuestId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setAlertData({ type: 'success', msg: data.message });
+                loadData();
+            } else {
+                setAlertData({ type: 'error', msg: data.message });
+            }
+        } catch (e) { console.error(e); }
+    };
+
     const handleRefresh = async () => {
         if (globalCooldown > 0) return;
         try {
@@ -176,7 +193,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                 <div className="text-slate-600 text-sm italic border border-dashed border-slate-800 rounded p-6 text-center">No tienes contratos diarios en curso.</div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {dailyActive.map(q => <QuestCard key={q.id} quest={q} onComplete={handleComplete} isWeekly={false} />)}
+                                    {dailyActive.map(q => <QuestCard key={q.id} quest={q} onComplete={handleComplete} onCancel={handleCancel} isWeekly={false} />)}
                                 </div>
                             )}
                         </div>
@@ -313,7 +330,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     );
 };
 
-const QuestCard = ({ quest, onComplete, isWeekly }) => {
+const QuestCard = ({ quest, onComplete, onCancel, isWeekly }) => {
     let isComplete = true;
     quest.requirements.forEach(req => {
         if ((quest.progress?.[req.target_id || req.type] || 0) < req.count) isComplete = false;
@@ -369,21 +386,31 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
                     )}
                 </div>
                 
-                <button 
-                    onClick={() => onComplete(quest.id)}
-                    disabled={!isComplete}
-                    className={`px-4 py-1.5 text-[10px] font-bold uppercase rounded transition-all 
-                    ${isComplete 
-                        ? 'bg-green-700 hover:bg-green-600 text-white shadow-lg cursor-pointer' 
-                        : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'}`}
-                >
-                    {isComplete ? 'Reclamar' : isWeekly ? (
-                        <span className="flex items-center gap-1">
-                            <img src={VALHALLA_ICONS.inProgress} alt="En progreso" className="w-4 h-4 object-contain" />
-                            En Progreso
-                        </span>
-                    ) : 'Pendiente'}
-                </button>
+                <div className="flex items-center gap-2">
+                    {onCancel && ['daily', 'side', 'zone'].includes(quest.type) && quest.status === 'active' && (
+                        <button 
+                            onClick={() => onCancel(quest.id)}
+                            className="px-2 py-1.5 text-[10px] font-bold uppercase rounded bg-slate-800 text-slate-500 border border-slate-700 hover:bg-red-900 hover:text-red-300 hover:border-red-700 transition-all"
+                        >
+                            Cancelar
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => onComplete(quest.id)}
+                        disabled={!isComplete}
+                        className={`px-4 py-1.5 text-[10px] font-bold uppercase rounded transition-all 
+                        ${isComplete 
+                            ? 'bg-green-700 hover:bg-green-600 text-white shadow-lg cursor-pointer' 
+                            : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'}`}
+                    >
+                        {isComplete ? 'Reclamar' : isWeekly ? (
+                            <span className="flex items-center gap-1">
+                                <img src={VALHALLA_ICONS.inProgress} alt="En progreso" className="w-4 h-4 object-contain" />
+                                En Progreso
+                            </span>
+                        ) : 'Pendiente'}
+                    </button>
+                </div>
             </div>
         </div>
     );
