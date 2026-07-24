@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, ChevronRight, Award, Shield, Sword, Zap, CheckCircle, Scroll, Skull, AlertTriangle, ArrowUp, Loader } from 'lucide-react';
+import { X, ChevronRight, Award, Shield, Sword, Zap, CheckCircle, Scroll, Skull, AlertTriangle, ArrowUp, Loader, RotateCcw } from 'lucide-react';
 import { apiUrl } from '../constants/api';
 
 const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSuccess, onRefresh }) => {
@@ -91,6 +91,26 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                 setCustomAlert({ type: 'error', msg: data.message });
             }
         } catch (e) { setCustomAlert({ type: 'error', msg: "Error al evolucionar." }); }
+    };
+
+    const handleReconsider = async () => {
+        if (!window.confirm("¿Estás seguro de reconsiderar tu senda? Perderás el progreso de esta prueba, pero podrás escoger otra rama antes de completar tu primera evolución.")) return;
+        try {
+            const res = await fetch(apiUrl('/api/evolution/reconsider'), {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCustomAlert({ type: 'success', msg: "Los dioses te conceden una nueva oportunidad." });
+                setTimeout(() => {
+                    onClose();
+                    if (onRefresh) onRefresh();
+                }, 2000);
+            } else {
+                setCustomAlert({ type: 'error', msg: data.message });
+            }
+        } catch (e) { setCustomAlert({ type: 'error', msg: "Error de conexión." }); }
     };
 
     // --- DIÁLOGOS DE ODÍN POR NIVEL ---
@@ -426,7 +446,7 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                         </div>
 
                         {/* Botón Final */}
-                        <div className="mt-8 pt-6 border-t border-slate-800">
+                        <div className="mt-8 pt-6 border-t border-slate-800 space-y-3">
                             <button 
                                 onClick={handleFinishEvolution} 
                                 disabled={!isComplete} 
@@ -437,6 +457,14 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
                             >
                                 {isComplete ? '¡Reclamar Evolución!' : 'Objetivos Incompletos'}
                             </button>
+                            {targetClass && quest?.quest_min_level === 10 && (
+                                <button
+                                    onClick={handleReconsider}
+                                    className="w-full py-3 border border-slate-700 text-slate-400 font-bold uppercase text-xs rounded hover:bg-slate-800 hover:text-amber-400 transition-all tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    <RotateCcw size={14} /> Reconsiderar Senda
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

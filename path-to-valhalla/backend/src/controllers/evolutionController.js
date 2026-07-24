@@ -59,6 +59,97 @@ exports.getEvolutionOptions = async (req, res) => {
     }
 };
 
+// --- 3. RECONSIDERAR SENDA (Solo nivel 10) ---
+exports.reconsiderPath = async (req, res) => {
+    const userId = req.user.id;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const playerRes = await client.query(`
+            SELECT p.id, p.level, p.class_id, p.pending_class_id,
+                   p.evolution_quest_status, c.tier AS current_tier
+            FROM players p
+            LEFT JOIN classes c ON p.class_id = c.id
+            WHERE p.id = $1
+        `, [userId]);
+        if (playerRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "Jugador no encontrado." });
+        }
+        const player = playerRes.rows[0];
+
+        if (player.level < 10) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Debes alcanzar el nivel 10 para reconsiderar tu senda." });
+        }
+
+        if (player.evolution_quest_status !== 'in_progress') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "No hay una evolución en curso para reconsiderar." });
+        }
+
+        if (!player.pending_class_id) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "No hay una senda pendiente para reconsiderar." });
+        }
+
+        const currentTier = player.current_tier !== null ? player.current_tier : 0;
+        if (currentTier >= 1) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Ya completaste tu primera evolución. No puedes reconsiderar tu senda." });
+        }
+
+        const pendingClassRes = await client.query(
+            "SELECT id, tier, min_level, parent_id FROM classes WHERE id = $1",
+            [player.pending_class_id]
+        );
+        if (pendingClassRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "La clase pendiente ya no existe." });
+        }
+        const pendingClass = pendingClassRes.rows[0];
+        if (pendingClass.tier !== 1 || pendingClass.min_level !== 10) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Solo puedes reconsiderar tu primera evolución de nivel 10." });
+        }
+
+        const questCheck = await client.query(`
+            SELECT pq.id FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type = 'evolution'
+        `, [userId]);
+        if (questCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "No hay una misión de evolución activa para reconsiderar." });
+        }
+
+        await client.query(`
+            UPDATE player_quests
+            SET status = 'cancelled', completed_at = NULL
+            WHERE player_id = $1
+              AND status = 'active'
+              AND quest_id IN (SELECT id FROM quests WHERE type = 'evolution')
+        `, [userId]);
+
+        await client.query(`
+            UPDATE players
+            SET pending_class_id = NULL, evolution_quest_status = NULL
+            WHERE id = $1
+        `, [userId]);
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: "Los dioses te conceden una nueva oportunidad. Escoge tu senda otra vez." });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ message: "Error al reconsiderar." });
+    } finally {
+        client.release();
+    }
+};
+
 // --- 2. INICIAR EL CAMINO (Con protección anti-duplicados) ---
 exports.startEvolutionPath = async (req, res) => {
     const userId = req.user.id;
