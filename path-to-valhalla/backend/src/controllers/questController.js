@@ -1,6 +1,6 @@
 ﻿const pool = require('../config/db');
 const { normalizeCurrency } = require('../utils/currencyUtils');
-const { getRequiredXp } = require('../shared/level_xp');
+const { applyExperienceToPlayer } = require('../shared/player_progression');
 const achievementService = require('../services/achievementService');
 const statisticsService = require('../services/statisticsService');
 
@@ -298,33 +298,22 @@ exports.completeQuest = async (req, res) => {
         if (!isComplete) throw new Error("Objetivos incompletos.");
 
         // Datos jugador
-        const playerData = (await client.query("SELECT level, experience, stat_points, gold, silver, copper, onix FROM players WHERE id = $1", [userId])).rows[0];
-        let currentLevel = parseInt(playerData.level || 1);
-        let currentXp = parseInt(playerData.experience || 0);
-        let currentStatPoints = parseInt(playerData.stat_points || 0);
+        const playerData = (await client.query("SELECT gold, silver, copper, onix FROM players WHERE id = $1", [userId])).rows[0];
         const finalOnix = parseInt(playerData.onix || 0) + parseInt(userQuest.reward_onix || 0);
 
         // Economía
         const rewardTotal = ((userQuest.reward_gold || 0) * 10000) + ((userQuest.reward_silver || 0) * 100) + (userQuest.reward_copper || 0);
         const normalized = normalizeCurrency(playerData.gold || 0, playerData.silver || 0, playerData.copper || 0, rewardTotal);
 
-        // XP y Nivel
-        currentXp += (userQuest.reward_xp || 0);
-        while (true) {
-            const needed = getRequiredXp(currentLevel);
-            if (currentXp >= needed) {
-                currentXp -= needed;
-                currentLevel += 1;
-                currentStatPoints += 5;
-            } else break;
-        }
+        // XP y Nivel (usando helper compartido con level-up loop)
+        await applyExperienceToPlayer(client, userId, userQuest.reward_xp || 0);
 
-        // Guardar cambios en Jugador
+        // Guardar cambios en Jugador (monedas y onix; EXP/level/stat_points ya los actualizó applyExperienceToPlayer)
         await client.query(
             `UPDATE players 
-             SET experience = $1, level = $2, stat_points = $3, gold = $4, silver = $5, copper = $6, onix = $7
-             WHERE id = $8`,
-            [currentXp, currentLevel, currentStatPoints, normalized.newGold, normalized.newSilver, normalized.newCopper, finalOnix, userId]
+             SET gold = $1, silver = $2, copper = $3, onix = $4
+             WHERE id = $5`,
+            [normalized.newGold, normalized.newSilver, normalized.newCopper, finalOnix, userId]
         );
         
         // --- GUARDAR ITEMS (CORREGIDO CON GENERACIÓN DE STATS) ---
