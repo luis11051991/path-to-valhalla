@@ -53,6 +53,13 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             const data = await res.json();
             setHallData(data);
             if (data.globalCooldown > 0) setGlobalCooldown(data.globalCooldown);
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('[ValhallaHall quests loaded]', {
+                    dailyCount: data.dailyActive?.length,
+                    weeklyCount: data.weeklyActive?.length,
+                    activeCount: (data.dailyActive?.length || 0) + (data.weeklyActive?.length || 0)
+                });
+            }
         } catch (err) { console.error(err); } finally { setLoading(false); }
     };
 
@@ -309,7 +316,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
 const QuestCard = ({ quest, onComplete, isWeekly }) => {
     let isComplete = true;
     quest.requirements.forEach(req => {
-        if ((quest.progress?.[req.target_id] || 0) < req.count) isComplete = false;
+        if ((quest.progress?.[req.target_id || req.type] || 0) < req.count) isComplete = false;
     });
 
     return (
@@ -322,7 +329,7 @@ const QuestCard = ({ quest, onComplete, isWeekly }) => {
             
             <div className="space-y-2 mb-4">
                 {quest.requirements.map((req, i) => {
-                    const cur = quest.progress?.[req.target_id] || 0;
+                    const cur = quest.progress?.[req.target_id || req.type] || 0;
                     const pct = Math.min((cur / req.count) * 100, 100);
                     return (
                         <div key={i} className="text-xs">

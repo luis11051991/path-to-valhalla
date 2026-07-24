@@ -303,7 +303,7 @@ exports.startBattle = async (req, res) => {
             isNewBestiaryEntry = bestiaryBeforeRes.rows.length === 0;
 
             await client.query(`INSERT INTO player_bestiary (player_id, enemy_id, kills, first_kill_at) VALUES ($1, $2, 1, NOW()) ON CONFLICT (player_id, enemy_id) DO UPDATE SET kills = player_bestiary.kills + 1`, [userId, baseEnemy.id]);
-            const activeQuestsRes = await client.query(`SELECT pq.id, pq.progress, q.title, q.requirements FROM player_quests pq JOIN quests q ON pq.quest_id = q.id WHERE pq.player_id = $1 AND pq.status = 'active'`, [userId]);
+            const activeQuestsRes = await client.query(`SELECT pq.id, pq.progress, q.title, q.requirements, q.type FROM player_quests pq JOIN quests q ON pq.quest_id = q.id WHERE pq.player_id = $1 AND pq.status = 'active'`, [userId]);
             for (const quest of activeQuestsRes.rows) {
                 let progress = { ...quest.progress };
                 let updated = false;
@@ -332,7 +332,20 @@ exports.startBattle = async (req, res) => {
                         }
                     }
                 }
-                if (updated) await client.query("UPDATE player_quests SET progress = $1 WHERE id = $2", [JSON.stringify(progress), quest.id]);
+                if (updated) {
+                    if (process.env.NODE_ENV !== 'production') {
+                        console.log('[QuestProgress expedition]', {
+                            playerId: userId,
+                            questId: quest.id,
+                            questTitle: quest.title,
+                            questType: quest.type,
+                            before: quest.progress,
+                            after: progress,
+                            required: requirements
+                        });
+                    }
+                    await client.query("UPDATE player_quests SET progress = $1 WHERE id = $2", [JSON.stringify(progress), quest.id]);
+                }
             }
         }
 
