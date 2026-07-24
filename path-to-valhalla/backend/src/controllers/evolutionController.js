@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const DEBUG_EVOLUTION = process.env.DEBUG_EVOLUTION === 'true';
 
 // --- 1. OBTENER OPCIONES DE EVOLUCIÓN ---
 exports.getEvolutionOptions = async (req, res) => {
@@ -42,8 +43,8 @@ exports.getEvolutionOptions = async (req, res) => {
         );
         const questPreview = questRes.rows.length > 0 ? questRes.rows[0] : null;
 
-        if (process.env.NODE_ENV !== 'production') {
-            console.log(`[getEvolutionOptions] player=${userId} class_id=${currentClassId} tier=${currentTier} level=${player.level} race=${player.race} options=${optionsRes.rows.length}`);
+        if (DEBUG_EVOLUTION) {
+            console.log(`[getEvolutionOptions] player=${userId} tier=${currentTier} level=${player.level} race=${player.race} options=${optionsRes.rows.length}`);
         }
 
         res.json({

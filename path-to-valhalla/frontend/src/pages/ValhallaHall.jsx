@@ -55,13 +55,6 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             const data = await res.json();
             setHallData(data);
             if (data.globalCooldown > 0) setGlobalCooldown(data.globalCooldown);
-            if (process.env.NODE_ENV !== 'production') {
-                console.log('[ValhallaHall quests loaded]', {
-                    dailyCount: data.dailyActive?.length,
-                    weeklyCount: data.weeklyActive?.length,
-                    activeCount: (data.dailyActive?.length || 0) + (data.weeklyActive?.length || 0)
-                });
-            }
         } catch (err) { console.error(err); } finally { setLoading(false); }
     };
 

@@ -3,6 +3,8 @@ const { normalizeCurrency } = require('../utils/currencyUtils');
 const { applyExperienceToPlayer } = require('../shared/player_progression');
 const achievementService = require('../services/achievementService');
 const statisticsService = require('../services/statisticsService');
+const DEBUG_EVOLUTION = process.env.DEBUG_EVOLUTION === 'true';
+const DEBUG_QUESTS = process.env.DEBUG_QUESTS === 'true';
 
 // --- HELPER: Generar Stats Fijos (Resuelve bug de rangos) ---
 const generateQuestItemStats = (templateStats) => {
@@ -89,8 +91,8 @@ exports.getQuestStatus = async (req, res) => {
                     && !validIds.includes(row.pending_class_id);
 
                 if (isStale) {
-                    if (process.env.NODE_ENV !== 'production') {
-                        console.log(`[Evolution] Stale quest detected for player ${userId}: pending_class_id ${row.pending_class_id} not in [${validIds.join(',')}]. Auto-cancelling.`);
+                    if (DEBUG_EVOLUTION) {
+                        console.log(`[Evolution] Stale quest for player ${userId}: pending_class_id ${row.pending_class_id} not in [${validIds.join(',')}]. Auto-cancelling.`);
                     }
                     await client.query("UPDATE player_quests SET status = 'cancelled' WHERE id = $1", [row.id]);
                     await client.query("UPDATE players SET pending_class_id = NULL, evolution_quest_status = 'completed' WHERE id = $1", [userId]);
@@ -113,8 +115,8 @@ exports.getQuestStatus = async (req, res) => {
                         label: r.name || null
                     }));
                     await client.query('COMMIT');
-                    if (process.env.NODE_ENV !== 'production') {
-                        console.log(`[Evolution] Active quest for player ${userId}: pending=${pendingClassId}, progress=${JSON.stringify(progressData)}`);
+                    if (DEBUG_EVOLUTION) {
+                        console.log(`[Evolution] Active quest for player ${userId}: pending=${pendingClassId}`);
                     }
                     return res.json({ status: 'in_progress', quest: row, targetClass: classInfo, progressSummary });
                 }
@@ -134,14 +136,14 @@ exports.getQuestStatus = async (req, res) => {
 
             const isCompleted = pf.evolution_quest_status === 'completed';
             if (hasEvolutionReady.rows.length > 0) {
-                if (process.env.NODE_ENV !== 'production') {
-                    console.log(`[Evolution] Next tier available for player ${userId} (level ${pf.level}, status=${pf.evolution_quest_status})`);
+                if (DEBUG_EVOLUTION) {
+                    console.log(`[Evolution] Next tier for player ${userId} (level ${pf.level})`);
                 }
                 return res.json({ status: 'available' });
             }
             const finalStatus = isCompleted ? 'completed' : 'locked';
-            if (process.env.NODE_ENV !== 'production') {
-                console.log(`[Evolution] No next tier for player ${userId}: returning '${finalStatus}'`);
+            if (DEBUG_EVOLUTION) {
+                console.log(`[Evolution] No next tier for player ${userId}: ${finalStatus}`);
             }
             return res.json({ status: finalStatus });
         }

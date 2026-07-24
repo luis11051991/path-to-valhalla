@@ -3,6 +3,7 @@ const { normalizeCurrency } = require('../utils/currencyUtils');
 const { hydratePlayer, computeMaxHp } = require('../shared/player_stats');
 const achievementService = require('../services/achievementService');
 const statisticsService = require('../services/statisticsService');
+const DEBUG_QUESTS = process.env.DEBUG_QUESTS === 'true';
 
 // XP rules live in the shared module
 const { getRequiredXp } = require('../shared/level_xp');
@@ -333,16 +334,8 @@ exports.startBattle = async (req, res) => {
                     }
                 }
                 if (updated) {
-                    if (process.env.NODE_ENV !== 'production') {
-                        console.log('[QuestProgress expedition]', {
-                            playerId: userId,
-                            questId: quest.id,
-                            questTitle: quest.title,
-                            questType: quest.type,
-                            before: quest.progress,
-                            after: progress,
-                            required: requirements
-                        });
+                    if (DEBUG_QUESTS) {
+                        console.log(`[QuestProgress] player=${userId} quest=${quest.id} type=${quest.type}`);
                     }
                     await client.query("UPDATE player_quests SET progress = $1 WHERE id = $2", [JSON.stringify(progress), quest.id]);
                 }

@@ -13,16 +13,6 @@ const EvolutionModal = ({ user, status, activeQuestData, onClose, onEvolveSucces
     const [customAlert, setCustomAlert] = useState(null);
     const [showReconsiderConfirm, setShowReconsiderConfirm] = useState(false);
 
-    console.debug('[EvolutionModal props]', {
-        open: true,
-        status,
-        step,
-        hasQuest: !!activeQuestData?.quest,
-        hasProgress: !!activeQuestData?.progressSummary,
-        optionsCount: options.length,
-        error: error || null
-    });
-
     // Cargar opciones SOLO si estamos en modo selección
     useEffect(() => {
         if (status === 'available') {

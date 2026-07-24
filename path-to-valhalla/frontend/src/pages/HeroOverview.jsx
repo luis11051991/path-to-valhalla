@@ -115,10 +115,8 @@ const HeroOverview = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                 // Auto-abrir SOLO si status available y no se ha mostrado antes
                 if (status === 'available' && !hasAutoShown.current) {
                     hasAutoShown.current = true;
-                    console.debug('[HeroOverview auto-open] available -> opening modal');
                     setShowEvolutionModal(true);
                 }
-                console.debug('[EvolutionStatus]', status, data);
             })
             .catch(err => {
                 console.error('[EvolutionStatus] Error:', err);
