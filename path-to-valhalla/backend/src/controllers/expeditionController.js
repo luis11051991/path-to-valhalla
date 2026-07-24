@@ -364,6 +364,7 @@ exports.startBattle = async (req, res) => {
                 } else { break; }
             }
 
+            // B1: gold_reward_min/max is actually copper (DB column misnamed). No balance changes here.
             const minGold = baseEnemy.gold_reward_min || 1;
             const maxGold = baseEnemy.gold_reward_max || 5;
             let copperGain = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;

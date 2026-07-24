@@ -4,6 +4,7 @@ const { hydratePlayer, computeMaxHp } = require('../shared/player_stats');
 const { simulateStageCombat, generateEnemyForStage, computeNpcStats, DIFFICULTY_MULTIPLIERS } = require('../shared/dungeon_combat');
 const { computeStageRewards, createGreedRoll, isGreedItem } = require('../shared/dungeon_loot');
 const { normalizeCurrency } = require('../utils/currencyUtils');
+const { applyExperienceToPlayer } = require('../shared/player_progression');
 
 const PARTY_ROOM_MAP = { 3: 4, 4: 6, 5: 8 };
 const ROOM_EXPIRY_MINUTES = 30;
@@ -1083,7 +1084,13 @@ exports.advanceRoom = async (req, res) => {
             );
             const aliveMembers = runMembers.filter((member) => aliveMemberIds.has(member.id));
 
-            let xpPerMember = Math.floor(rewards.xp_total / Math.max(1, aliveMembers.length));
+            if (aliveMembers.length === 0) {
+                await client.query('COMMIT');
+                const contract = await loadRunContract(pool, runIdNum, userId);
+                return res.json({ success: true, ...contract });
+            }
+
+            let xpPerMember = Math.floor(rewards.xp_total / aliveMembers.length);
             if (!Number.isFinite(xpPerMember) || xpPerMember < 0) xpPerMember = 0;
             if (xpPerMember > 500) xpPerMember = 500;
 
@@ -1096,31 +1103,33 @@ exports.advanceRoom = async (req, res) => {
             const prevXpTotal = parseInt(prevXpRes.rows[0]?.total || 0);
             const maxRunXpPerMember = 3000;
             if (prevXpTotal > 0) {
-                const prevPerMember = Math.floor(prevXpTotal / Math.max(1, aliveMembers.length));
+                const prevPerMember = Math.floor(prevXpTotal / aliveMembers.length);
                 if (prevPerMember + xpPerMember > maxRunXpPerMember) {
                     xpPerMember = Math.max(0, maxRunXpPerMember - prevPerMember);
                 }
             }
 
-            const copperPerMember = Math.floor(rewards.copper_total / Math.max(1, aliveMembers.length));
+            const copperPerMember = Math.floor(rewards.copper_total / aliveMembers.length);
 
             for (const member of aliveMembers) {
                 if (!member.is_npc && member.player_id) {
-                    const pRes = await client.query('SELECT experience FROM players WHERE id = $1', [member.player_id]);
-                    const currentXp = (pRes.rows[0]?.experience || 0) + xpPerMember;
-                    await client.query(
-                        'UPDATE players SET experience = $1 WHERE id = $2',
-                        [currentXp, member.player_id]
-                    );
+                    await applyExperienceToPlayer(client, member.player_id, xpPerMember);
                 }
             }
 
             for (const member of aliveMembers) {
                 if (!member.is_npc && member.player_id) {
-                    const normalized = normalizeCurrency(0, 0, 0, copperPerMember);
+                    const cRes = await client.query(
+                        'SELECT gold, silver, copper FROM players WHERE id = $1',
+                        [member.player_id]
+                    );
+                    const cur = cRes.rows[0];
+                    const normalized = normalizeCurrency(
+                        cur.gold, cur.silver, cur.copper, copperPerMember
+                    );
                     await client.query(
-                        'UPDATE players SET copper = copper + $1, silver = silver + $2, gold = gold + $3 WHERE id = $4',
-                        [normalized.newCopper, normalized.newSilver, normalized.newGold, member.player_id]
+                        'UPDATE players SET gold = $1, silver = $2, copper = $3 WHERE id = $4',
+                        [normalized.newGold, normalized.newSilver, normalized.newCopper, member.player_id]
                     );
                 }
             }
