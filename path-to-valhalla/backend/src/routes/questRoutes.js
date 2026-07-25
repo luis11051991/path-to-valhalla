@@ -8,5 +8,6 @@ router.post('/accept', authMiddleware, questController.acceptQuest);
 router.post('/complete', authMiddleware, questController.completeQuest);
 router.post('/refresh', authMiddleware, questController.refreshBoard);
 router.post('/cancel', authMiddleware, questController.cancelQuest);
+router.post('/refresh-onix', authMiddleware, questController.refreshBoardOnix);
 
 module.exports = router;

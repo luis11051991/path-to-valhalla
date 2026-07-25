@@ -357,6 +357,57 @@ exports.refreshBoard = async (req, res) => {
     }
 };
 
+// 3b. REFRESCAR TABLÓN CON ÓNIX
+exports.refreshBoardOnix = async (req, res) => {
+    const userId = req.user.id;
+    const ONIX_COST = 10;
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const playerRes = await client.query(
+            'SELECT onix FROM players WHERE id = $1 FOR UPDATE',
+            [userId]
+        );
+        if (playerRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "Jugador no encontrado." });
+        }
+
+        const currentOnix = parseInt(playerRes.rows[0].onix || 0);
+        if (currentOnix < ONIX_COST) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "No tienes suficiente Ónix." });
+        }
+
+        await client.query(
+            'UPDATE players SET onix = onix - $1, last_hall_action_at = NOW() WHERE id = $2',
+            [ONIX_COST, userId]
+        );
+
+        await client.query('COMMIT');
+
+        const updatedRes = await pool.query(
+            'SELECT onix FROM players WHERE id = $1',
+            [userId]
+        );
+
+        res.json({
+            success: true,
+            message: "Tablón renovado con Ónix.",
+            onix: parseInt(updatedRes.rows[0].onix || 0)
+        });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ message: "Error al refrescar con Ónix." });
+    } finally {
+        client.release();
+    }
+};
+
 // 5. CANCELAR MISIÓN
 exports.cancelQuest = async (req, res) => {
     const userId = req.user.id;

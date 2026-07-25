@@ -17,6 +17,7 @@ const VALHALLA_ICONS = {
     rewardXp: '/icons/valhalla/reward_xp.png',
     tabDaily: '/icons/valhalla/tab_daily.png',
     tabWeekly: '/icons/valhalla/tab_weekly.png',
+    onix: '/icons/currency/onix.png',
 };
 
 const MAX_ACTIVE_CONTRACTS = 5;
@@ -92,6 +93,7 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     const [alertData, setAlertData] = useState(null);
     const [activeTab, setActiveTab] = useState('daily');
     const [cancelConfirm, setCancelConfirm] = useState({ open: false, playerQuestId: null });
+    const [onixConfirmOpen, setOnixConfirmOpen] = useState(false);
 
     const loadData = async () => {
         setLoading(true);
@@ -189,6 +191,25 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
         } catch (e) { console.error(e); }
     };
 
+    const handleRefreshOnix = async () => {
+        setOnixConfirmOpen(false);
+        try {
+            const res = await fetch(apiUrl('/api/quests/refresh-onix'), {
+                method: 'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setAlertData({ type: 'success', msg: data.message });
+                setGlobalCooldown(0);
+                const updated = { ...user, onix: data.onix };
+                onUpdateUser(updated);
+                loadData();
+            } else {
+                setAlertData({ type: 'error', msg: data.message });
+            }
+        } catch (e) { console.error(e); }
+    };
+
     const { dailyActive = [], dailyAvailable = [], weeklyActive = [], maxSlots } = hallData || {};
 
     if (!user) return null;
@@ -217,8 +238,9 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     return (
-        <div className="h-full flex flex-col bg-[url('/backgrounds/hall_bg.png')] bg-cover bg-center relative font-sans text-slate-100">
-            <div className="absolute inset-0 bg-gradient-to-b from-slate-950/85 via-slate-950/80 to-slate-950/90" />
+        <div className="h-full flex flex-col bg-[url('/backgrounds/city/salon_valhallus.png')] bg-cover bg-center relative font-sans text-slate-100">
+            <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/65 to-slate-950/85" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-transparent via-slate-950/30 to-slate-950/60 pointer-events-none" />
 
             <div className="relative z-10 flex flex-col h-full overflow-hidden">
 
@@ -317,18 +339,34 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                                             <img src={VALHALLA_ICONS.headerBoard} alt="" className="w-4 h-4 object-contain" />
                                             Tablón de Solicitudes
                                         </h3>
-                                        <button
-                                            onClick={handleRefresh}
-                                            disabled={globalCooldown > 0}
-                                            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase flex items-center gap-2 transition-all border ${
-                                                globalCooldown > 0
-                                                    ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
-                                                    : 'bg-slate-800 text-amber-500 border-amber-600 hover:bg-amber-700 hover:text-white active:scale-95'
-                                            }`}
-                                        >
-                                            <img src={VALHALLA_ICONS.refresh} alt="" className="w-3.5 h-3.5 object-contain" />
-                                            Refrescar
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={handleRefresh}
+                                                disabled={globalCooldown > 0}
+                                                className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase flex items-center gap-2 transition-all border ${
+                                                    globalCooldown > 0
+                                                        ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
+                                                        : 'bg-slate-800 text-amber-500 border-amber-600 hover:bg-amber-700 hover:text-white active:scale-95'
+                                                }`}
+                                            >
+                                                <img src={VALHALLA_ICONS.refresh} alt="" className="w-3.5 h-3.5 object-contain" />
+                                                {globalCooldown > 0 ? `Espera ${formatTime(globalCooldown)}` : 'Refrescar'}
+                                            </button>
+                                            {globalCooldown > 0 && (
+                                                <button
+                                                    onClick={() => setOnixConfirmOpen(true)}
+                                                    disabled={(user?.onix || 0) < 10}
+                                                    className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase flex items-center gap-1.5 transition-all border ${
+                                                        (user?.onix || 0) < 10
+                                                            ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
+                                                            : 'bg-purple-900/40 text-purple-300 border-purple-700/60 hover:bg-purple-800/50 hover:text-purple-200 active:scale-95'
+                                                    }`}
+                                                >
+                                                    <img src={VALHALLA_ICONS.onix} alt="" className="w-3.5 h-3.5 object-contain" />
+                                                    {(user?.onix || 0) < 10 ? 'Ónix insuficiente' : 'Refrescar 10'}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {dailyAvailable.length === 0 ? (
@@ -505,6 +543,17 @@ const ValhallaHall = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                open={onixConfirmOpen}
+                title="Refrescar con Ónix"
+                message="¿Gastar 10 Ónix para renovar el tablón inmediatamente?"
+                confirmText="Gastar 10"
+                cancelText="Volver"
+                variant="warning"
+                onConfirm={handleRefreshOnix}
+                onCancel={() => setOnixConfirmOpen(false)}
+            />
 
             <ConfirmModal
                 open={cancelConfirm.open}
