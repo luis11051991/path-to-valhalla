@@ -161,7 +161,7 @@ exports.getQuestStatus = async (req, res) => {
             if (weeklyCheck.rows.length === 0) {
                 const newWeeklies = await client.query(`
                     SELECT id FROM quests 
-                    WHERE type = 'weekly' AND min_level <= $1 
+                    WHERE type = 'weekly' AND min_level <= $1 AND (max_level IS NULL OR max_level >= $1)
                     ORDER BY RANDOM() LIMIT 3
                 `, [player.level]);
 
@@ -178,13 +178,13 @@ exports.getQuestStatus = async (req, res) => {
                 WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type != 'evolution'
             `, [userId]);
 
-            const dailyActive = allActiveRes.rows.filter(q => q.type === 'daily');
+            const dailyActive = allActiveRes.rows.filter(q => ['daily', 'side', 'zone'].includes(q.type));
             const weeklyActive = allActiveRes.rows.filter(q => q.type === 'weekly');
 
             // 3. RECUPERAR TABLÓN DISPONIBLE
             const dailyAvailable = await client.query(`
                 SELECT * FROM quests 
-                WHERE type = 'daily' 
+                WHERE type IN ('daily', 'side', 'zone')
                 AND min_level <= $1
                 AND (max_level IS NULL OR max_level >= $1)
                 AND id NOT IN (SELECT quest_id FROM player_quests WHERE player_id = $2 AND status = 'active')
@@ -282,6 +282,18 @@ exports.acceptQuest = async (req, res) => {
             const typeNames = { daily: 'diarias', side: 'secundarias', zone: 'de zona' };
             await client.query('ROLLBACK');
             return res.status(400).json({ message: `Límite de misiones ${typeNames[quest.type] || quest.type} alcanzado (${maxSlots}).` });
+        }
+
+        // Límite global de activas (daily + side + zone)
+        const globalCountRes = await client.query(`
+            SELECT COUNT(*) FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.player_id = $1 AND pq.status = 'active' AND q.type IN ('daily', 'side', 'zone')
+        `, [userId]);
+
+        if (parseInt(globalCountRes.rows[0].count) >= 5) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Ya tienes el máximo de contratos activos." });
         }
 
         // Re-aceptar si ya existe registro cancelado/completado
