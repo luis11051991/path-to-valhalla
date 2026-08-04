@@ -3,6 +3,8 @@ node_modules/
 
 # Environment & config
 .env
+.env.local
+.env.server
 .env.*
 !.env.example
 

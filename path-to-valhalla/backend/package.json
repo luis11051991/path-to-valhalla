@@ -4,8 +4,12 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node --env-file=.env.local server.js",
+    "dev": "nodemon --exec \"node --env-file=.env.local server.js\"",
+    "start:local": "node --env-file=.env.local server.js",
+    "start:server": "node --env-file=.env.server server.js",
+    "dev:local": "nodemon --exec \"node --env-file=.env.local server.js\"",
+    "dev:server": "nodemon --exec \"node --env-file=.env.server server.js\""
   },
   "keywords": [],
   "author": "",
