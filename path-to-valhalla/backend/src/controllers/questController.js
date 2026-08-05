@@ -45,7 +45,7 @@ exports.getQuestStatus = async (req, res) => {
         await client.query('BEGIN');
 
         // Obtener datos jugador
-        const playerRes = await client.query('SELECT level, last_hall_action_at, evolution_quest_status FROM players WHERE id = $1', [userId]);
+        const playerRes = await client.query('SELECT level, evolution_quest_status, EXTRACT(EPOCH FROM (NOW() - last_hall_action_at))::int AS last_hall_seconds_ago FROM players WHERE id = $1', [userId]);
         if (playerRes.rows.length === 0) return res.status(404).json({ message: "Jugador no encontrado" });
         const player = playerRes.rows[0];
 
@@ -195,9 +195,9 @@ exports.getQuestStatus = async (req, res) => {
 
             // 4. CALCULAR COOLDOWN
             let globalCooldown = 0;
-            if (player.last_hall_action_at) {
-                const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-                if (diff < 300) globalCooldown = Math.ceil(300 - diff);
+            if (player.last_hall_seconds_ago !== null && player.last_hall_seconds_ago !== undefined) {
+                const elapsed = Math.max(0, player.last_hall_seconds_ago);
+                if (elapsed < 300) globalCooldown = Math.ceil(300 - elapsed);
             }
 
             await client.query('COMMIT');
@@ -247,7 +247,7 @@ exports.acceptQuest = async (req, res) => {
 
         // Validar rango de nivel
         const playerRes = await client.query(
-            'SELECT level, last_hall_action_at FROM players WHERE id = $1',
+            'SELECT level, EXTRACT(EPOCH FROM (NOW() - last_hall_action_at))::int AS last_hall_seconds_ago FROM players WHERE id = $1',
             [userId]
         );
         const player = playerRes.rows[0];
@@ -262,11 +262,11 @@ exports.acceptQuest = async (req, res) => {
         }
 
         // Cooldown
-        if (player.last_hall_action_at) {
-            const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-            if (diff < 300) {
+        if (player.last_hall_seconds_ago !== null && player.last_hall_seconds_ago !== undefined) {
+            const elapsed = Math.max(0, player.last_hall_seconds_ago);
+            if (elapsed < 300) {
                 await client.query('ROLLBACK');
-                return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s para realizar otra acción.` });
+                return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - elapsed)}s para realizar otra acción.` });
             }
         }
 
@@ -341,12 +341,12 @@ exports.refreshBoard = async (req, res) => {
     const userId = req.user.id;
     
     try {
-        const playerRes = await pool.query('SELECT last_hall_action_at FROM players WHERE id = $1', [userId]);
+        const playerRes = await pool.query('SELECT EXTRACT(EPOCH FROM (NOW() - last_hall_action_at))::int AS last_hall_seconds_ago FROM players WHERE id = $1', [userId]);
         const player = playerRes.rows[0];
 
-        if (player.last_hall_action_at) {
-            const diff = (new Date() - new Date(player.last_hall_action_at)) / 1000;
-            if (diff < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - diff)}s.` });
+        if (player.last_hall_seconds_ago !== null && player.last_hall_seconds_ago !== undefined) {
+            const elapsed = Math.max(0, player.last_hall_seconds_ago);
+            if (elapsed < 300) return res.status(400).json({ message: `Debes esperar ${Math.ceil(300 - elapsed)}s.` });
         }
 
         await pool.query("UPDATE players SET last_hall_action_at = NOW() WHERE id = $1", [userId]);
