@@ -48,16 +48,14 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
     };
 
     useEffect(() => {
-        if (!user || !user.last_expedition_at) return;
+        if (!user) return;
+        const secondsAgo = user.last_expedition_seconds_ago;
+        if (typeof secondsAgo !== 'number') { setCooldownSeconds(0); return; }
+
+        const base = Date.now() - secondsAgo * 1000;
 
         const checkCooldown = () => {
-            const now = Date.now();
-            let dateString = user.last_expedition_at;
-            if (typeof dateString === 'string' && !dateString.endsWith('Z')) {
-                dateString += 'Z'; 
-            }
-            const lastExpedition = new Date(dateString).getTime();
-            const diffSeconds = (now - lastExpedition) / 1000;
+            const elapsed = Math.max(0, (Date.now() - base) / 1000);
 
             let needed = 10;
             if (user.level >= 40) needed = 90;
@@ -65,11 +63,8 @@ const Expeditions = ({ user: propUser, onUpdateUser: propOnUpdateUser }) => {
             else if (user.level >= 20) needed = 50;
             else if (user.level >= 10) needed = 30;
 
-            if (diffSeconds < needed) {
-                setCooldownSeconds(Math.ceil(needed - diffSeconds));
-            } else {
-                setCooldownSeconds(0);
-            }
+            const remaining = Math.max(0, needed - elapsed);
+            setCooldownSeconds(remaining > 0 ? Math.ceil(remaining) : 0);
         };
 
         checkCooldown();

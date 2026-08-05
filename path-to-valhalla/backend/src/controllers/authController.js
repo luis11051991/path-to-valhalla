@@ -144,7 +144,8 @@ exports.getProfile = async (req, res) => {
     const userId = req.user.id; 
 
     const result = await pool.query(`
-      SELECT p.*, c.image_url as class_image, c.name as class_name 
+      SELECT p.*, c.image_url as class_image, c.name as class_name,
+             EXTRACT(EPOCH FROM (NOW() - p.last_expedition_at))::int AS last_expedition_seconds_ago
       FROM players p 
       LEFT JOIN classes c ON p.class_id = c.id 
       WHERE p.id = $1
