@@ -44,7 +44,9 @@ exports.sendMessage = async (req, res) => {
         const insertQuery = `
       INSERT INTO messages (sender_id, recipient_id, content, is_system, created_at)
       VALUES ($1, $2, $3, $4, NOW())
-      RETURNING *
+      RETURNING *,
+        EXTRACT(EPOCH FROM (NOW() - created_at))::int AS created_seconds_ago,
+        (created_at AT TIME ZONE current_setting('TIMEZONE')) AS created_at_instant
     `;
 
         const result = await pool.query(insertQuery, [finalSenderId, recipientId, content, isSystem || false]);
@@ -85,6 +87,8 @@ exports.getMyMessages = async (req, res) => {
         const query = `
       SELECT 
         m.*,
+        EXTRACT(EPOCH FROM (NOW() - m.created_at))::int AS created_seconds_ago,
+        (m.created_at AT TIME ZONE current_setting('TIMEZONE')) AS created_at_instant,
         sender.username as sender_name,
         recipient.username as recipient_name
       FROM messages m

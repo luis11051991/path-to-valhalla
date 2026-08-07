@@ -2,9 +2,42 @@ import React, { useState, useEffect, useRef } from 'react';
 import { messageService } from '../services/messageService';
 import { Send, User, Shield, Info } from 'lucide-react';
 
+// Formato de tiempo del mensaje:
+// - Etiqueta relativa ("ahora", "hace 5 min", ...) desde created_seconds_ago (backend, sin ambigüedad de zona)
+// - Fecha/hora exacta desde created_at_instant (timestamptz inequívoco de la sesión)
+// Nunca se interpreta created_at crudo (timestamp without time zone ambiguo).
+const formatMessageTime = (msg) => {
+    if (msg.created_seconds_ago != null) {
+        const s = Math.max(0, Math.floor(Number(msg.created_seconds_ago)));
+        if (s < 60) return 'ahora';
+        if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
+        if (s < 86400) return `hace ${Math.floor(s / 3600)} h`;
+        return `hace ${Math.floor(s / 86400)} d`;
+    }
+    if (msg.created_at_instant) {
+        const d = new Date(msg.created_at_instant);
+        if (!Number.isNaN(d.getTime())) {
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+    }
+    return '';
+};
+
+// Clave estable para ordenar mensajes: created_at_instant (fallback created_seconds_ago)
+const messageSortKey = (m) => {
+    if (m.created_at_instant) {
+        const t = new Date(m.created_at_instant).getTime();
+        if (!Number.isNaN(t)) return t;
+    }
+    if (m.created_seconds_ago != null) {
+        return Date.now() - Number(m.created_seconds_ago) * 1000;
+    }
+    return 0;
+};
+
 // Componente para una burbuja de mensaje
 const MessageBubble = ({ message, isMe }) => {
-    const time = new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = formatMessageTime(message);
 
     return (
         <div className={`flex w-full mb-4 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -94,7 +127,7 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
 
         // Ordenar mensajes
         Object.keys(convos).forEach(key => {
-            convos[key].messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            convos[key].messages.sort((a, b) => messageSortKey(a) - messageSortKey(b));
         });
 
         // Ordenar conversaciones por fecha del último mensaje
@@ -103,7 +136,7 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
             .sort((a, b) => {
                 const lastA = convos[a].messages[convos[a].messages.length - 1];
                 const lastB = convos[b].messages[convos[b].messages.length - 1];
-                return new Date(lastB.created_at) - new Date(lastA.created_at);
+                return messageSortKey(lastB) - messageSortKey(lastA);
             })
             .forEach(key => {
                 orderedConvos[key] = convos[key];
@@ -244,7 +277,7 @@ const MessagingPage = ({ user, socket, onMessageRead }) => {
                             >
                                 <div className="flex justify-between items-center mb-1">
                                     <span className={`font-bold text-sm ${isSystem ? 'text-amber-400' : 'text-slate-200'}`}>{convo.username}</span>
-                                    <span className="text-[10px] text-slate-500">{new Date(lastMsg.created_at).toLocaleDateString()}</span>
+                                    <span className="text-[10px] text-slate-500">{lastMsg.created_at_instant ? new Date(lastMsg.created_at_instant).toLocaleDateString() : ''}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <p className={`text-xs truncate max-w-[80%] ${hasUnread ? 'text-slate-100 font-semibold' : 'text-slate-400 opacity-70'}`}>{lastMsg.content}</p>
